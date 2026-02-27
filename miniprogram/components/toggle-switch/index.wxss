@@ -1,0 +1,34 @@
+.toggle {
+  width: 112rpx;
+  height: 64rpx;
+}
+
+.track {
+  width: 112rpx;
+  height: 64rpx;
+  border-radius: 999rpx;
+  background: #D1D5DB;
+  position: relative;
+  transition: background 300ms ease;
+}
+
+.track--on {
+  background: #FFC857;
+}
+
+.thumb {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 999rpx;
+  background: #FFFFFF;
+  position: absolute;
+  top: 8rpx;
+  left: 8rpx;
+  box-shadow: 0 6rpx 18rpx rgba(93, 64, 55, 0.18);
+  transition: left 300ms ease;
+}
+
+.thumb--on {
+  left: 56rpx;
+}
+

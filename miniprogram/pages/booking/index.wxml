@@ -1,0 +1,328 @@
+<view class="page">
+  <app-header
+    title="{{activeBooking ? '我的预约' : '约拍邀请'}}"
+    subtitle="📝 写下你的约拍便利贴 📝"
+    safeTop="{{safeTop}}"
+  />
+
+  <view class="content">
+    <!-- 配置提示 -->
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService</text>
+    </view>
+
+    <!-- 加载状态 -->
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">加载中...</text>
+        <text class="loading-desc">正在准备约拍信息</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!loading}}">
+      <!-- 场景 A: 有活跃订单 - 显示票据 -->
+      <view class="ticket-wrap motion-fade-up motion-delay-2" wx:if="{{activeBooking}}">
+        <view class="ticket-card">
+          <view class="ticket-stripe"></view>
+
+          <view class="ticket-body">
+            <view class="ticket-head">
+              <view class="ticket-head-icon">
+                <image class="ticket-camera" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+              </view>
+              <text class="ticket-title">约拍确认票</text>
+              <text class="ticket-status">{{activeBooking.status_text}}</text>
+            </view>
+
+            <view class="ticket-divider"></view>
+
+            <view class="ticket-info">
+              <view class="ticket-row">
+                <image class="ticket-row-icon" src="/images/icons/calendar-yellow.svg" mode="aspectFit" />
+                <view class="ticket-row-texts">
+                  <text class="ticket-label">约拍日期</text>
+                  <text class="ticket-value">{{activeBooking.date_text}}</text>
+                </view>
+              </view>
+
+              <view class="ticket-row">
+                <image class="ticket-row-icon" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+                <view class="ticket-row-texts">
+                  <text class="ticket-label">约拍类型</text>
+                  <text class="ticket-value">{{activeBooking.type}}</text>
+                </view>
+              </view>
+
+              <view class="ticket-row">
+                <image class="ticket-row-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+                <view class="ticket-row-texts">
+                  <text class="ticket-label">约拍地点</text>
+                  <text class="ticket-value">{{activeBooking.location}}</text>
+                </view>
+              </view>
+
+              <view class="ticket-row">
+                <image class="ticket-row-icon" src="/images/icons/message-square-yellow.svg" mode="aspectFit" />
+                <view class="ticket-row-texts">
+                  <text class="ticket-label">备注信息</text>
+                  <text class="ticket-value">{{activeBooking.notes || '无'}}</text>
+                </view>
+              </view>
+            </view>
+
+            <view class="ticket-divider"></view>
+
+            <view class="sticky">
+              <view class="sticky-row">
+                <image class="sticky-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
+                <view class="sticky-texts">
+                  <text class="sticky-title">✨ 收到你的邀请啦！</text>
+                  <text class="sticky-desc">摄影师正在赶来的路上，会尽快微信联系你：<text class="sticky-contact">{{activeBooking.contact_text}}</text>，沟通细节哦~ 💬</text>
+                </view>
+              </view>
+            </view>
+
+            <button
+              class="ticket-cancel {{isCanceling ? 'ticket-cancel--disabled' : ''}}"
+              wx:if="{{activeBooking.can_cancel}}"
+              bindtap="openCancelConfirm"
+              disabled="{{isCanceling}}"
+            >
+              <view class="ticket-cancel-row">
+                <image class="ticket-cancel-icon" src="/images/icons/x-brown.svg" mode="aspectFit" />
+                <text>{{isCanceling ? '取消中...' : '取消预约'}}</text>
+              </view>
+            </button>
+
+            <view class="ticket-cancel-disabled" wx:else>
+              <image class="ticket-cancel-icon" src="/images/icons/x-brown.svg" mode="aspectFit" />
+              <text>预约当天不可取消</text>
+            </view>
+          </view>
+
+          <view class="ticket-tear">
+            <view class="ticket-tear-row">
+              <view class="tear-dot" wx:for="{{tearDots}}" wx:key="*this"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 场景 B: 无活跃订单 - 显示表单 -->
+      <view class="booking-form motion-fade-up motion-delay-2" wx:else>
+        <!-- 成功提示 -->
+        <view class="success-card motion-pop-in" wx:if="{{showSuccess}}">
+          <view class="success-icon">
+            <image class="success-icon-image" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+          </view>
+          <text class="success-title">收到你的邀请啦！</text>
+          <text class="success-desc">我们会尽快添加你的微信 {{formData.wechat}} 与您联系确认约拍时间 ✨</text>
+        </view>
+
+        <!-- 格纹信纸卡片 -->
+        <view class="paper-wrap motion-fade-up motion-delay-3" wx:else>
+          <view class="paper-tape"></view>
+
+          <view class="paper-card">
+            <view class="doodle">
+              <image class="doodle-icon" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+            </view>
+
+            <view class="form">
+              <!-- 约拍类型 -->
+              <view class="form-item">
+                <view class="label">
+                  <image class="label-icon" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                  <text class="label-text">约拍类型</text>
+                </view>
+                <type-selector
+                  value="{{formData.typeId}}"
+                  options="{{bookingTypes}}"
+                  bindchange="onTypeChange"
+                />
+              </view>
+
+              <!-- 约拍日期 -->
+              <view class="form-item">
+                <view class="label">
+                  <image class="label-icon" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                  <text class="label-text">约拍日期 *</text>
+                </view>
+                <date-picker
+                  value="{{selectedDate}}"
+                  minDate="{{minDate}}"
+                  maxDate="{{maxDate}}"
+                  blockedDates="{{blockedDates}}"
+                  placeholder="请选择约拍日期"
+                  bindchange="onDateChange"
+                />
+              </view>
+
+              <!-- 约拍地点 -->
+              <view class="form-item">
+                <view class="label">
+                  <image class="label-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+                  <text class="label-text">约拍地点</text>
+                  <text class="label-hint" wx:if="{{allowedCitiesText}}">(限{{allowedCitiesText}})</text>
+                </view>
+                <view class="location-btn" bindtap="showMapPicker" hover-class="location-btn--active" hover-stay-time="80">
+                  <view class="location-left">
+                    <view wx:if="{{formData.location}}">
+                      <text class="location-main">{{formData.location}}</text>
+                      <text class="location-sub" wx:if="{{formData.cityName}}">📍 {{formData.cityName}}</text>
+                    </view>
+                    <text class="location-placeholder" wx:else>点击选择约拍地点...</text>
+                  </view>
+                  <image class="location-right-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+                </view>
+                <view class="location-entry" wx:if="{{formData.location}}">
+                  <button class="location-entry-btn location-entry-btn--clear" bindtap="clearSelectedLocation">
+                    <image class="location-entry-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+                    <text class="location-entry-text">删除地址</text>
+                  </button>
+                </view>
+              </view>
+
+              <!-- 联系方式 -->
+              <view class="form-grid2">
+                <view class="form-half">
+                  <view class="label">
+                    <image class="label-icon" src="/images/icons/phone-brown.svg" mode="aspectFit" />
+                    <text class="label-text">手机号 *</text>
+                  </view>
+                  <input
+                    class="line-input {{focusField === 'phone' ? 'line-input--focus' : ''}}"
+                    type="number"
+                    placeholder="手机号"
+                    placeholder-style="color: rgba(93, 64, 55, 0.4);"
+                    value="{{formData.phone}}"
+                    data-field="phone"
+                    bindinput="onInputChange"
+                    bindfocus="onFieldFocus"
+                    bindblur="onFieldBlur"
+                    maxlength="11"
+                  />
+                </view>
+                <view class="form-half">
+                  <view class="label">
+                    <image class="label-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
+                    <text class="label-text">微信号 *</text>
+                  </view>
+                  <input
+                    class="line-input {{focusField === 'wechat' ? 'line-input--focus' : ''}}"
+                    type="text"
+                    placeholder="微信号"
+                    placeholder-style="color: rgba(93, 64, 55, 0.4);"
+                    value="{{formData.wechat}}"
+                    data-field="wechat"
+                    bindinput="onInputChange"
+                    bindfocus="onFieldFocus"
+                    bindblur="onFieldBlur"
+                    maxlength="32"
+                  />
+                </view>
+              </view>
+
+              <!-- 备注 -->
+              <view class="form-item">
+                <text class="label-text label-text--block">备注说明（选填）</text>
+                <textarea
+                  class="line-textarea {{focusField === 'notes' ? 'line-textarea--focus' : ''}}"
+                  placeholder="有什么要求或想法，都可以告诉我..."
+                  placeholder-style="color: rgba(93, 64, 55, 0.4);"
+                  value="{{formData.notes}}"
+                  data-field="notes"
+                  bindinput="onInputChange"
+                  bindfocus="onFieldFocus"
+                  bindblur="onFieldBlur"
+                  maxlength="500"
+                />
+              </view>
+
+              <!-- 错误提示 -->
+              <view class="error motion-pop-in" wx:if="{{error}}">
+                <text class="error-text">{{error}}</text>
+              </view>
+
+              <!-- 提交按钮 -->
+              <button
+                class="btn-submit {{isSubmitting ? 'btn-submit--disabled' : ''}}"
+                bindtap="onSubmit"
+                disabled="{{isSubmitting}}"
+              >
+                {{isSubmitting ? '发送中...' : '✨ 发送约拍邀请 ✨'}}
+              </button>
+
+              <!-- 提示信息 -->
+              <view class="form-tips">
+                <text class="tip">💡 每个用户同时只能有一个进行中的预约</text>
+                <text class="tip">📅 约拍时间将通过微信与摄影师沟通确定</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 地图选择器 -->
+  <map-picker
+    show="{{showMapPicker}}"
+    initialLocation="{{mapPickerInitialLocation}}"
+    initialLatitude="{{mapPickerInitialLatitude}}"
+    initialLongitude="{{mapPickerInitialLongitude}}"
+    centerLatitude="{{mapPickerCenterLatitude}}"
+    centerLongitude="{{mapPickerCenterLongitude}}"
+    cityName="{{mapPickerCityName}}"
+    initialProvince="{{mapPickerInitialProvince}}"
+    bindselect="onMapSelect"
+    bindclose="onMapClose"
+  />
+
+  <!-- 取消预约确认弹窗（对标定格弹窗样式） -->
+  <view class="modal-mask modal-mask--confirm motion-fade-in" wx:if="{{showCancelConfirm}}" bindtap="closeCancelConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{showCancelConfirm}}">
+    <view class="confirm-card motion-pop-in" catchtap="noop">
+      <view class="confirm-icon-wrap">
+        <image class="confirm-icon" src="/images/icons/x-brown.svg" mode="aspectFit" />
+      </view>
+      <text class="confirm-title">确定取消这次预约吗？</text>
+      <text class="confirm-text">
+        取消后，<text class="confirm-highlight">{{activeBooking.date_text || activeBooking.date}}</text> 会重新开放预约，你可以稍后重新选择日期。
+      </text>
+      <text class="confirm-tip">💡 Tips：取消后将失去当前排期，确认后立即生效。</text>
+
+      <view class="confirm-actions">
+        <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closeCancelConfirm">再想想</button>
+        <button class="confirm-btn confirm-btn--primary" hover-class="confirm-btn--primary-active" bindtap="onCancelBooking" disabled="{{isCanceling}}">
+          {{isCanceling ? '取消中...' : '确认取消'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 登录提示弹窗（对齐 Web 端） -->
+  <view class="modal-mask motion-fade-in" wx:if="{{showLoginPrompt}}" bindtap="closeLoginPrompt"></view>
+  <view class="login-modal motion-fade-in" wx:if="{{showLoginPrompt}}">
+    <view class="login-card motion-pop-in" catchtap="noop">
+      <view class="login-icon">
+        <image class="login-icon-img" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="login-title">✨ 需要登录才能预约哦</text>
+      <text class="login-desc">登录后即可提交约拍邀请，我们会通过微信与您联系确认时间~</text>
+
+      <view class="login-actions">
+        <button class="login-btn-ghost" hover-class="login-btn-ghost--active" hover-stay-time="80" bindtap="closeLoginPrompt">随便看看</button>
+        <button class="login-btn-primary" hover-class="login-btn-primary--active" hover-stay-time="80" bindtap="goLogin">💛 去登录</button>
+      </view>
+    </view>
+  </view>
+</view>

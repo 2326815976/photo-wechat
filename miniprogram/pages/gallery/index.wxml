@@ -1,0 +1,129 @@
+<view class="page">
+  <app-header
+    title="照片墙"
+    subtitle="📸 贩卖人间路过的温柔 📸"
+    safeTop="{{safeTop}}"
+  />
+
+  <view class="content">
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading && left.length === 0 && right.length === 0}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/camera-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">加载中...</text>
+        <text class="loading-desc">正在加载照片墙</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!loading}}">
+      <view class="masonry motion-fade-up motion-delay-2" wx:if="{{left.length > 0 || right.length > 0}}">
+        <view class="col">
+          <view class="card motion-fade-up" wx:for="{{left}}" wx:key="id" style="animation-delay: {{100 + (index % 8) * 30}}ms;">
+            <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
+              <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+              <view class="views">
+                <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
+                <text class="views-num">{{item.view_count}}</text>
+              </view>
+            </view>
+            <view class="meta">
+              <text class="date">{{item.created_at_text}}</text>
+              <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+                <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
+                <text class="like-count">{{item.like_count}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+        <view class="col">
+          <view class="card motion-fade-up" wx:for="{{right}}" wx:key="id" style="animation-delay: {{120 + (index % 8) * 30}}ms;">
+            <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
+              <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+              <view class="views">
+                <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
+                <text class="views-num">{{item.view_count}}</text>
+              </view>
+            </view>
+            <view class="meta">
+              <text class="date">{{item.created_at_text}}</text>
+              <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+                <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
+                <text class="like-count">{{item.like_count}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="empty motion-fade-up motion-delay-3" wx:if="{{left.length === 0 && right.length === 0}}">
+        <text class="empty-text">暂无照片</text>
+      </view>
+
+      <view class="more" wx:if="{{loadingMore}}">
+        <view class="small-spinner"></view>
+        <text class="more-text">拾光中...</text>
+      </view>
+      <view class="end" wx:if="{{!hasMore && (left.length + right.length) > 0}}">
+        <text class="end-text">✨ 已经到底啦 ✨</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 便利贴风格预览弹窗 -->
+  <view class="modal-mask motion-fade-in" wx:if="{{previewPhoto}}" bindtap="closePreview"></view>
+  <view class="preview-modal motion-fade-in" wx:if="{{previewPhoto}}">
+    <view class="preview-card motion-pop-in" catchtap="noop">
+      <view class="preview-tape"></view>
+
+      <view class="preview-image-wrap" bindtap="openFullscreen">
+        <image class="preview-image" src="{{previewPhoto.preview_url_resolved}}" mode="widthFix" />
+      </view>
+
+      <view class="preview-meta">
+        <view class="preview-stats">
+          <view class="preview-stat">
+            <image class="preview-stat-icon" src="/images/icons/eye-brown.svg" mode="aspectFit" />
+            <text class="preview-stat-text">{{previewPhoto.view_count}} 次浏览</text>
+          </view>
+          <button class="preview-like" hover-class="preview-like--active" data-id="{{previewPhoto.id}}" bindtap="toggleLike">
+            <image class="preview-stat-icon" src="{{previewPhoto.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
+            <text class="preview-stat-text">{{previewPhoto.like_count}} 次点赞</text>
+          </button>
+        </view>
+        <button class="preview-close" hover-class="preview-close--active" bindtap="closePreview">关闭</button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 登录提示弹窗 -->
+  <view class="modal-mask motion-fade-in" wx:if="{{showLoginPrompt}}" bindtap="closeLoginPrompt"></view>
+  <view class="login-modal motion-fade-in" wx:if="{{showLoginPrompt}}">
+    <view class="login-card motion-pop-in" catchtap="noop">
+      <view class="login-icon">
+        <image class="login-icon-img" src="/images/icons/heart-fill-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="login-title">✨ 想施展赞美魔法？</text>
+      <text class="login-desc">
+        登录后，你就能成为 <text class="login-highlight">【魔法使】</text>，为喜欢的照片施展 <text class="login-highlight">【赞美魔法】</text>
+        啦！每一个赞都是一道温暖的光，让美好的瞬间更加闪耀~ ✨
+      </text>
+      <text class="login-sub">💡 Tips：魔法使还可以在【返图空间】施展【定格魔法】，让照片永久保存哦！✨</text>
+
+      <view class="login-actions">
+        <button class="login-btn-ghost" hover-class="login-btn-ghost--active" hover-stay-time="80" bindtap="closeLoginPrompt">随便看看</button>
+        <button class="login-btn-primary" hover-class="login-btn-primary--active" hover-stay-time="80" bindtap="goLogin">💛 去登录</button>
+      </view>
+    </view>
+  </view>
+
+</view>

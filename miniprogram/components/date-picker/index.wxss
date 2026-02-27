@@ -1,0 +1,274 @@
+.date-picker {
+  width: 100%;
+  position: relative;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.picker-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* Web: px-4 py-3 */
+  padding: 24rpx 32rpx;
+  background: #FFFFFF;
+  border: 4rpx solid rgba(93, 64, 55, 0.20);
+  border-radius: 32rpx;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease,
+    transform 0.12s ease;
+}
+
+.picker-display--open {
+  border-color: #FFC857;
+  box-shadow: 0 0 0 6rpx rgba(255, 200, 87, 0.20);
+}
+
+.picker-display--pressed {
+  background: #FFFEFA;
+  transform: scale(0.998);
+}
+
+.selected {
+  color: #5D4037;
+  font-weight: 600;
+  font-size: 28rpx;
+}
+
+.placeholder {
+  color: rgba(93, 64, 55, 0.40);
+  font-size: 28rpx;
+}
+
+.icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Web 无暗色遮罩；保持透明即可 */
+  background: transparent;
+  z-index: 998;
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 16rpx); /* mt-2 */
+  z-index: 999;
+  width: 100%;
+  max-width: 640rpx; /* 320px */
+  margin: 0 auto;
+  transform-origin: top center;
+  animation: date-panel-in 0.2s ease-out;
+}
+
+@keyframes date-panel-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-20rpx);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.panel-card {
+  width: 100%;
+  background: #fffdf5;
+  border: 4rpx solid rgba(93, 64, 55, 0.20);
+  border-radius: 32rpx;
+  box-shadow: 0 16rpx 50rpx rgba(93, 64, 55, 0.18);
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 200, 87, 0.10);
+  border-bottom: 2rpx solid rgba(93, 64, 55, 0.10);
+}
+
+.month-btn {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 16rpx;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.16s ease, transform 0.12s ease;
+}
+
+.month-btn::after {
+  border: none;
+}
+
+.month-btn--hover {
+  background: rgba(93, 64, 55, 0.10);
+}
+
+.month-btn:active {
+  background: rgba(93, 64, 55, 0.10);
+  transform: scale(0.94);
+}
+
+.month-icon {
+  width: 28rpx;
+  height: 28rpx;
+}
+
+.month-icon--left {
+  transform: rotate(0deg);
+}
+
+.month-icon--right {
+  transform: rotate(180deg);
+}
+
+.month-title {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #5D4037;
+}
+
+.week-row {
+  padding: 12rpx 12rpx;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  /* Web: gap-0.5（2px） */
+  gap: 4rpx;
+  background: rgba(255, 200, 87, 0.05);
+}
+
+.week-day {
+  text-align: center;
+  font-size: 20rpx; /* 10px */
+  color: rgba(93, 64, 55, 0.60);
+  padding: 4rpx 0;
+}
+
+.days-grid {
+  padding: 12rpx;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4rpx;
+}
+
+.day-btn {
+  position: relative;
+  width: 100%;
+  height: 66rpx;
+  border-radius: 12rpx; /* rounded-md */
+  background: #FFFFFF;
+  color: #5D4037;
+  border: 2rpx solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.16s ease, transform 0.12s ease, box-shadow 0.16s ease;
+}
+
+.day-btn::after {
+  border: none;
+}
+
+.day-btn--out {
+  color: rgba(93, 64, 55, 0.20);
+  background: rgba(255, 255, 255, 0.50);
+}
+
+.day-btn--disabled {
+  color: rgba(93, 64, 55, 0.20);
+  pointer-events: none;
+}
+
+.day-btn--selected {
+  background: #FFC857;
+  color: #FFFFFF;
+  border-color: #FFC857;
+  box-shadow: 0 4rpx 12rpx rgba(255, 200, 87, 0.35);
+}
+
+.day-btn--blocked {
+  background: rgba(93, 64, 55, 0.06);
+  color: rgba(93, 64, 55, 0.35);
+}
+
+.day-btn--hover:not(.day-btn--selected):not(.day-btn--blocked):not(.day-btn--disabled) {
+  background: rgba(255, 200, 87, 0.20);
+}
+
+.day-btn--press:not(.day-btn--selected):not(.day-btn--blocked):not(.day-btn--disabled) {
+  transform: scale(0.95);
+}
+
+.day-num {
+  position: static;
+  font-size: 24rpx; /* text-xs */
+  font-weight: 600;
+}
+
+.day-strike {
+  position: absolute;
+  left: 8rpx;
+  right: 8rpx;
+  top: 50%;
+  height: 2rpx;
+  background: rgba(93, 64, 55, 0.20);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* Web 同款图例 */
+.legend {
+  padding: 16rpx 24rpx;
+  background: rgba(255, 200, 87, 0.05);
+  border-top: 2rpx solid rgba(93, 64, 55, 0.10);
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.legend-box {
+  width: 24rpx;
+  height: 24rpx;
+  border-radius: 6rpx;
+  position: relative;
+  flex: none;
+}
+
+.legend-box--selected {
+  background: #FFC857;
+}
+
+.legend-box--blocked {
+  background: rgba(93, 64, 55, 0.06);
+}
+
+.legend-strike {
+  position: absolute;
+  left: 2rpx;
+  right: 2rpx;
+  top: 50%;
+  height: 2rpx;
+  background: rgba(93, 64, 55, 0.20);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.legend-text {
+  font-size: 20rpx;
+  color: rgba(93, 64, 55, 0.60);
+}

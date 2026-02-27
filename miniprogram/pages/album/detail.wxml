@@ -1,0 +1,290 @@
+<view class="page">
+  <app-header
+    title="{{headerTitle}}"
+    subtitle="✨ 趁魔法消失前，把美好定格 ✨"
+    safeTop="{{safeTop}}"
+    showBack="{{true}}"
+    fallbackTab="pages/album/index"
+  />
+
+  <view class="content">
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">时光中...</text>
+        <text class="loading-desc">正在为你打开专属回忆</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!loading && album}}">
+      <view class="notice motion-fade-up motion-delay-2" wx:if="{{showNotice && expiryNotice}}">
+        <view class="notice-marquee">
+          <view class="notice-track">
+            <text class="notice-text">{{expiryNotice}}</text>
+            <text class="notice-text notice-text--gap">{{expiryNotice}}</text>
+          </view>
+        </view>
+        <view class="notice-close" hover-class="notice-close--active" bindtap="hideNotice">
+          <text class="notice-close-char">×</text>
+        </view>
+      </view>
+
+      <view class="toolbar motion-fade-up motion-delay-3">
+        <view class="toolbar-folders-wrap">
+          <view class="folder-guide-tip motion-pop-in" wx:if="{{showFolderGuide}}" bindtap="dismissFolderGuide">
+            <text class="folder-guide-tip__text">左右滑动 / 点击标签可切换</text>
+            <view class="folder-guide-tip__arrow"></view>
+          </view>
+
+          <scroll-view class="toolbar-folders" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
+            <view class="folders-row">
+              <button
+                class="folder-btn {{selectedFolder === item.id ? 'folder-btn--active' : ''}} {{folderWaveActiveIndex === index ? (folderWaveTick === 1 ? 'folder-btn--wave-a' : 'folder-btn--wave-b') : ''}}"
+                hover-class="folder-btn--touch"
+                hover-stay-time="80"
+                wx:for="{{folders}}"
+                wx:key="id"
+                data-id="{{item.id}}"
+                bindtap="selectFolder"
+              >
+                {{item.name}}
+              </button>
+            </view>
+          </scroll-view>
+        </view>
+
+        <view class="toolbar-tools" wx:if="{{photos.length > 0}}">
+          <button class="tool-btn tool-btn--select {{isSelectAll ? 'tool-btn--active' : ''}}" hover-class="tool-btn--touch" bindtap="toggleSelectAll">
+            <image
+              class="tool-icon"
+              src="{{isSelectAll ? '/images/icons/check-square-brown.svg' : '/images/icons/square-muted.svg'}}"
+              mode="aspectFit"
+            />
+            <text>全选</text>
+          </button>
+
+          <button
+            class="tool-btn tool-btn--primary {{selectedCount > 0 ? 'tool-btn--primary-selected' : ''}}"
+            hover-class="tool-btn--touch"
+            bindtap="handleBatchDownload"
+            disabled="{{batchLoading}}"
+          >
+            <image class="tool-icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
+            <text wx:if="{{selectedCount > 0}}">下载</text>
+            <text wx:else>全部下载</text>
+            <text class="tool-badge" wx:if="{{selectedCount > 0}}">{{selectedCount > 99 ? '99+' : selectedCount}}</text>
+          </button>
+
+          <button
+            class="tool-btn tool-btn--danger"
+            hover-class="tool-btn--touch"
+            wx:if="{{selectedCount > 0}}"
+            bindtap="handleBatchDelete"
+            disabled="{{batchLoading}}"
+          >
+            <image class="tool-icon tool-icon--danger" src="/images/icons/trash-red.svg" mode="aspectFit" />
+          </button>
+        </view>
+      </view>
+
+      <view class="grid motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
+        <view class="grid-col">
+          <view class="photo-card motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
+            <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
+              <image
+                wx:if="{{item.card_url_resolved}}"
+                class="photo-img"
+                src="{{item.card_url_resolved}}"
+                mode="widthFix"
+                lazy-load="{{true}}"
+              />
+              <view wx:else class="photo-img photo-img--empty"></view>
+
+              <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
+                <image
+                  class="select-badge-icon"
+                  src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
+                  mode="aspectFit"
+                />
+              </view>
+            </view>
+
+            <view class="photo-actions">
+              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
+                <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                <text>{{item.is_public ? '已定格' : '定格'}}</text>
+              </button>
+            </view>
+          </view>
+        </view>
+
+        <view class="grid-col">
+          <view class="photo-card motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
+            <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
+              <image
+                wx:if="{{item.card_url_resolved}}"
+                class="photo-img"
+                src="{{item.card_url_resolved}}"
+                mode="widthFix"
+                lazy-load="{{true}}"
+              />
+              <view wx:else class="photo-img photo-img--empty"></view>
+
+              <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
+                <image
+                  class="select-badge-icon"
+                  src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
+                  mode="aspectFit"
+                />
+              </view>
+            </view>
+
+            <view class="photo-actions">
+              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
+                <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                <text>{{item.is_public ? '已定格' : '定格'}}</text>
+              </button>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="empty motion-fade-up motion-delay-5" wx:if="{{photos.length === 0}}">
+        <text class="empty-text">暂无照片</text>
+      </view>
+
+      <view class="donation-entry motion-fade-up motion-delay-6" wx:if="{{album.enable_tipping && album.donation_qr_code_url}}">
+        <button class="donation-btn" hover-class="donation-btn--active" bindtap="openDonationModal">
+          <image class="donation-icon" src="/images/icons/heart-orange.svg" mode="aspectFit" />
+          <text>留下一份心意</text>
+        </button>
+      </view>
+
+      <view class="more" wx:if="{{loadingMore}}">
+        <view class="small-spinner"></view>
+        <text class="more-text">拾光中...</text>
+      </view>
+      <view class="end" wx:if="{{!hasMore && photos.length > 0}}">
+        <text class="end-text">✨ 已经到底啦 ✨</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{confirmPhotoId}}" bindtap="closePinConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{confirmPhotoId}}">
+    <view class="confirm-card motion-pop-in" catchtap="noop">
+      <view class="confirm-icon-wrap">
+        <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="confirm-title">✨ 施展定格魔法？</text>
+      <text class="confirm-text">
+        魔法生效后，这张照片就会飞到 <text class="confirm-highlight">【照片墙】</text> 上，和更多人分享这份美好！📸
+        这样它就有了 <text class="confirm-highlight">【永恒】</text> 的魔法加持，打破 {{expiryDays}} 天消失的魔咒，永远在这里闪闪发光啦~ ✨
+      </text>
+      <text class="confirm-tip">💡 Tips：如果改变主意，可以随时再次点击让魔法失效，照片会回到专属空间继续 {{expiryDays}} 天倒计时哦~</text>
+
+      <view class="confirm-actions">
+      <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closePinConfirm">再想想</button>
+      <button class="confirm-btn confirm-btn--primary" hover-class="confirm-btn--primary-active" bindtap="confirmPin">✨ 确认定格</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{showDeleteConfirm}}" bindtap="closeDeleteConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{showDeleteConfirm}}">
+    <view class="confirm-card motion-pop-in" catchtap="noop">
+      <view class="confirm-icon-wrap confirm-icon-wrap--danger">
+        <image class="confirm-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+      </view>
+      <text class="confirm-title">确定要删除吗？</text>
+      <text class="confirm-text">你即将删除 {{selectedCount}} 张照片，此操作不可撤销。</text>
+
+      <view class="confirm-actions">
+        <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closeDeleteConfirm">取消</button>
+        <button class="confirm-btn confirm-btn--danger" hover-class="confirm-btn--danger-active" bindtap="confirmBatchDelete">确认删除</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="toast toast--{{toast.type}} motion-pop-in" wx:if="{{toast}}">
+    <text class="toast-text">{{toast.message}}</text>
+  </view>
+
+  <!-- Web 同款：拆信交互（信封 -> 信纸） -->
+  <view class="letter-mask motion-fade-in" wx:if="{{showWelcomeLetter}}" bindtap="onLetterMaskTap"></view>
+  <view class="letter-modal motion-fade-in" wx:if="{{showWelcomeLetter}}">
+    <!-- 信封阶段 -->
+    <view class="envelope-wrap" wx:if="{{letterStage === 'envelope'}}" catchtap="noop">
+      <view class="envelope-float">
+        <view class="envelope-card">
+          <view class="envelope-stitch"></view>
+          <view class="envelope-noise"></view>
+
+          <view class="envelope-flap"></view>
+
+          <view class="envelope-stamp">
+            <text class="envelope-stamp-emoji">📷</text>
+          </view>
+          <view class="envelope-postmark"></view>
+
+          <view class="envelope-to">
+            <text class="envelope-to-text">To: {{album.recipient_name || '拾光者'}}</text>
+            <view class="envelope-to-line"></view>
+          </view>
+
+          <text class="envelope-sticker">✨</text>
+        </view>
+
+      <view class="seal" hover-class="seal--active" bindtap="onOpenLetter">
+        <view class="seal-inner">
+          <image class="seal-icon" src="/images/icons/sparkles-white.svg" mode="aspectFit" />
+        </view>
+      </view>
+
+        <text class="envelope-hint">轻触拆封开启回忆</text>
+      </view>
+    </view>
+
+    <!-- 打开过渡 -->
+    <view class="opening-wrap" wx:if="{{letterStage === 'opening'}}" catchtap="noop">
+      <view class="opening-card"></view>
+    </view>
+
+    <!-- 信纸阶段（含关闭动画） -->
+    <view
+      class="paper-card {{letterStage === 'closing' ? 'paper-card--closing' : 'paper-card--open'}}"
+      wx:if="{{letterStage === 'letter' || letterStage === 'closing'}}"
+      catchtap="noop"
+    >
+      <view class="paper-close" hover-class="paper-close--active" bindtap="closeWelcomeLetterAnimated">
+        <image class="paper-close-icon" src="/images/icons/x-brown.svg" mode="aspectFit" />
+      </view>
+
+      <scroll-view class="paper-scroll" scroll-y>
+        <text class="paper-text">{{welcomeText}}</text>
+      </scroll-view>
+    </view>
+  </view>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{showDonationModal}}" bindtap="closeDonationModal"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{showDonationModal}}">
+    <view class="donation-card motion-pop-in" catchtap="noop">
+      <text class="donation-title">感谢你的心意</text>
+      <text class="donation-desc">长按二维码保存后，可在微信扫码赞赏</text>
+      <image class="donation-qr" src="{{album.donation_qr_code_url}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
+      <button class="letter-btn" hover-class="letter-btn--active" bindtap="closeDonationModal">我知道了</button>
+    </view>
+  </view>
+
+</view>

@@ -1,0 +1,428 @@
+<view class="album-detail-page" style="padding-top: {{contentTopPx}}px;">
+  <view wx:if="{{loading}}" class="loading-container">
+    <view class="loading-spinner"></view>
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <view wx:else class="main-content">
+    <view class="header-section">
+      <view class="header-main">
+        <view class="back-button" bindtap="onBack">
+          <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+        </view>
+        <view class="header-info">
+          <text class="album-title">{{album.title || '未命名空间'}}</text>
+          <text class="album-key">密钥: {{album.access_key}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{!isSelectionMode}}" class="toolbar-actions toolbar-actions--normal">
+        <button class="toolbar-btn toolbar-btn--soft" bindtap="onShowNewFolderModal">
+          <image class="toolbar-btn__icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
+          <text class="toolbar-btn__text">新建文件夹</text>
+        </button>
+        <button class="toolbar-btn toolbar-btn--ghost" bindtap="onEnterSelectionMode">
+          <image class="toolbar-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+          <text class="toolbar-btn__text">批量删除</text>
+        </button>
+        <button class="toolbar-btn toolbar-btn--primary" bindtap="onShowUploadModal">
+          <image class="toolbar-btn__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
+          <text class="toolbar-btn__text">上传照片</text>
+        </button>
+      </view>
+
+      <view wx:else class="toolbar-actions toolbar-actions--selection">
+        <button class="toolbar-btn toolbar-btn--ghost toolbar-btn--select-toggle" bindtap="onSelectAll">
+          {{selectedPhotoIds.length === filteredPhotos.length && filteredPhotos.length > 0 ? '取消全选' : ('全选(' + selectedPhotoIds.length + '/' + filteredPhotos.length + ')')}}
+        </button>
+        <button class="toolbar-btn toolbar-btn--primary" bindtap="onShowMoveModal" disabled="{{selectedPhotoIds.length === 0}}">
+          <image class="toolbar-btn__icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
+          <text class="toolbar-btn__text">迁移({{selectedPhotoIds.length}})</text>
+        </button>
+        <button class="toolbar-btn toolbar-btn--danger" bindtap="onBatchDelete" disabled="{{selectedPhotoIds.length === 0}}">
+          <image class="toolbar-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+          <text class="toolbar-btn__text">删除({{selectedPhotoIds.length}})</text>
+        </button>
+        <button class="toolbar-btn toolbar-btn--ghost" bindtap="onExitSelectionMode">取消</button>
+      </view>
+    </view>
+
+    <scroll-view class="folder-tabs" scroll-x="{{true}}" scroll-with-animation="{{true}}">
+      <view class="folder-tab-wrap">
+        <view
+          class="folder-tab {{selectedFolder === null ? 'folder-tab--active' : ''}}"
+          bindtap="onSelectFolder"
+          data-folder-id="__ROOT__"
+        >
+          <text class="folder-tab__text">{{rootFolderName}} ({{rootPhotoCount}})</text>
+        </view>
+      </view>
+
+      <view wx:for="{{folders}}" wx:key="id" class="folder-tab-wrap">
+        <view
+          class="folder-tab {{selectedFolder == item.id ? 'folder-tab--active' : ''}}"
+          bindtap="onSelectFolder"
+          data-folder-id="{{item.id}}"
+        >
+          <image class="folder-tab__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
+          <text class="folder-tab__text">{{item.name}} ({{item.photoCount}})</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="folder-current-actions" wx:if="{{!isSelectionMode}}">
+      <button
+        wx:if="{{selectedFolder === null}}"
+        class="folder-current-action-btn folder-current-action-btn--edit folder-current-action-btn--single"
+        bindtap="onShowEditRootModal"
+      >
+        编辑根目录
+      </button>
+      <block wx:elif="{{selectedFolderName}}">
+        <button
+          class="folder-current-action-btn folder-current-action-btn--edit"
+          bindtap="onShowEditFolderModal"
+          data-folder-id="{{selectedFolder}}"
+          data-folder-name="{{selectedFolderName}}"
+        >
+          编辑文件夹
+        </button>
+        <button
+          class="folder-current-action-btn folder-current-action-btn--danger"
+          bindtap="onDeleteFolder"
+          data-folder-id="{{selectedFolder}}"
+        >
+          删除文件夹
+        </button>
+      </block>
+    </view>
+
+    <view wx:if="{{filteredPhotos.length === 0}}" class="empty-state">
+      <text class="empty-icon">🖼️</text>
+      <text class="empty-text">暂无照片</text>
+    </view>
+
+    <view wx:else class="photos-grid">
+      <view
+        wx:for="{{filteredPhotos}}"
+        wx:key="id"
+        class="photo-card {{isSelectionMode && item.selected ? 'photo-card--selected' : ''}}"
+        bindtap="onPhotoCardTap"
+        data-photo-id="{{item.id}}"
+      >
+        <view class="photo-card__image-wrap">
+          <image
+            class="photo-card__image"
+            src="{{item.thumbnail_url || item.preview_url || item.original_url}}"
+            mode="aspectFill"
+            lazy-load="{{true}}"
+          />
+
+          <view wx:if="{{isSelectionMode}}" class="photo-card__check {{item.selected ? 'photo-card__check--active' : ''}}">
+            <text wx:if="{{item.selected}}">✓</text>
+          </view>
+
+          <view wx:if="{{!isSelectionMode}}" class="photo-card__actions">
+            <view class="photo-card__action photo-card__action--move" catchtap="onMovePhoto" data-photo-id="{{item.id}}">
+              <image class="photo-card__action-icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
+            </view>
+            <view class="photo-card__action photo-card__action--danger" catchtap="onDeletePhoto" data-photo-id="{{item.id}}">
+              <image class="photo-card__action-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+            </view>
+          </view>
+        </view>
+
+        <view class="photo-card__meta">
+          <view class="photo-card__folder">
+            <image class="photo-card__folder-icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
+            <text class="photo-card__folder-name">{{item.folderName}}</text>
+          </view>
+          <text class="photo-card__date">{{item.dateText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="pagination">
+      <button class="pagination__btn" bindtap="onPrevPage" disabled="{{currentPage === 1}}">
+        上一页
+      </button>
+      <text class="pagination__info">第 {{currentPage}} 页 / 共 {{totalPages}} 页</text>
+      <button class="pagination__btn" bindtap="onNextPage" disabled="{{currentPage >= totalPages}}">
+        下一页
+      </button>
+    </view>
+  </view>
+
+  <view wx:if="{{showNewFolderModal}}" class="modal-mask" bindtap="onCloseNewFolderModal">
+    <view class="modal-container" catchtap="onStopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">新建文件夹</text>
+      </view>
+      <view class="modal-body">
+        <input
+          class="modal-input"
+          value="{{newFolderName}}"
+          bindinput="onNewFolderNameInput"
+          placeholder="输入文件夹名称"
+          maxlength="50"
+          focus="{{showNewFolderModal}}"
+        />
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseNewFolderModal">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onCreateFolder" disabled="{{actionLoading}}">
+          {{actionLoading ? '创建中...' : '创建'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showEditRootModal}}" class="modal-mask" bindtap="onCloseEditRootModal">
+    <view class="modal-container" catchtap="onStopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">修改根目录名称</text>
+      </view>
+      <view class="modal-body">
+        <input
+          class="modal-input"
+          value="{{newRootFolderName}}"
+          bindinput="onNewRootFolderNameInput"
+          placeholder="输入根目录名称"
+          maxlength="30"
+          focus="{{showEditRootModal}}"
+        />
+        <text class="modal-hint">建议 2-12 个字，最多 30 个字符</text>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseEditRootModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onUpdateRootFolderName" disabled="{{actionLoading}}">
+          {{actionLoading ? '保存中...' : '保存'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showEditFolderModal}}" class="modal-mask" bindtap="onCloseEditFolderModal">
+    <view class="modal-container" catchtap="onStopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">修改文件夹名称</text>
+      </view>
+      <view class="modal-body">
+        <input
+          class="modal-input"
+          value="{{editingFolderName}}"
+          bindinput="onEditFolderNameInput"
+          placeholder="输入文件夹名称"
+          maxlength="50"
+          focus="{{showEditFolderModal}}"
+        />
+        <text class="modal-hint">建议 2-12 个字，最多 50 个字符</text>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseEditFolderModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onUpdateFolderName" disabled="{{actionLoading}}">
+          {{actionLoading ? '保存中...' : '保存'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showUploadModal}}" class="booking-modal-mask" bindtap="onCloseUploadModal">
+    <view class="booking-modal booking-modal--form gallery-upload-modal" catchtap="onStopPropagation">
+      <view class="booking-modal__head">
+        <text class="booking-modal__title">批量上传照片</text>
+        <view class="booking-modal__close" bindtap="onCloseUploadModal">
+          <text>✕</text>
+        </view>
+      </view>
+      <view class="booking-modal__body">
+        <view class="gallery-upload-picker" catchtap="onChooseImages">
+          <text class="gallery-upload-picker__icon">📤</text>
+          <text class="gallery-upload-picker__text" wx:if="{{batchImages.length}}">
+            已选择 {{batchImages.length}} 张图片
+          </text>
+          <text class="gallery-upload-picker__text" wx:else>点击选择多张图片</text>
+        </view>
+
+        <view class="gallery-upload-list-wrap" wx:if="{{batchImages.length}}">
+          <view class="gallery-upload-list-head">
+            <text class="gallery-upload-list-title">已选择 {{batchImages.length}} 张</text>
+            <view class="gallery-upload-list-clear" bindtap="onClearImages">
+              <text>清空</text>
+            </view>
+          </view>
+          <scroll-view class="gallery-upload-list" scroll-y="true">
+            <view class="gallery-upload-item" wx:for="{{batchImages}}" wx:key="path">
+              <view class="gallery-upload-item__main">
+                <text class="gallery-upload-item__name">{{index + 1}}. {{item.name}}</text>
+                <text class="gallery-upload-item__meta">{{item.sizeText || '待上传'}}</text>
+              </view>
+              <view class="gallery-upload-item__remove" data-index="{{index}}" bindtap="onRemoveUploadImage" wx:if="{{!uploading}}">
+                <text>✕</text>
+              </view>
+            </view>
+          </scroll-view>
+        </view>
+
+        <view class="gallery-upload-progress" wx:if="{{uploading && uploadProgress.total > 0}}">
+          <view class="gallery-upload-progress__head">
+            <text class="gallery-upload-progress__title">上传进度</text>
+            <text class="gallery-upload-progress__text">{{uploadProgress.current}} / {{uploadProgress.total}}</text>
+          </view>
+          <view class="gallery-upload-progress__bar">
+            <view class="gallery-upload-progress__bar-fill" style="width: {{(uploadProgress.current * 100 / uploadProgress.total)}}%;"></view>
+          </view>
+        </view>
+
+        <button
+          class="booking-modal__submit"
+          catchtap="onUploadPhotos"
+          hover-class="booking-modal__submit--active"
+          loading="{{uploading}}"
+          disabled="{{uploading || !batchImages.length}}"
+        >
+          <text wx:if="{{uploading}}">上传中 ({{uploadProgress.current}}/{{uploadProgress.total}})...</text>
+          <text wx:else>批量上传 ({{batchImages.length}} 张)</text>
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showMoveModal}}" class="modal-mask" bindtap="onCloseMoveModal">
+    <view class="modal-container modal-container--move" catchtap="onStopPropagation">
+      <view class="modal-header-center">
+        <view class="modal-icon-wrap">
+          <image class="modal-icon-wrap__icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
+        </view>
+        <text class="modal-title">迁移照片</text>
+        <text class="modal-subtitle">选择目标文件夹，将 {{movingPhotoIds.length}} 张照片迁移过去</text>
+      </view>
+
+      <view class="modal-body">
+        <scroll-view class="move-folder-list" scroll-y="{{true}}">
+          <view
+            class="move-folder-item {{moveTargetFolder === '__ROOT__' ? 'move-folder-item--active' : ''}}"
+            bindtap="onSelectMoveTarget"
+            data-folder-id="__ROOT__"
+          >
+            <view class="move-folder-item__left">
+              <image class="move-folder-item__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
+              <text class="move-folder-item__name">{{rootFolderName}}</text>
+            </view>
+            <text class="move-folder-item__count">{{rootPhotoCount}}</text>
+          </view>
+
+          <view
+            wx:for="{{folders}}"
+            wx:key="id"
+            class="move-folder-item {{moveTargetFolder == item.id ? 'move-folder-item--active' : ''}}"
+            bindtap="onSelectMoveTarget"
+            data-folder-id="{{item.id}}"
+          >
+            <view class="move-folder-item__left">
+              <image class="move-folder-item__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
+              <text class="move-folder-item__name">{{item.name}}</text>
+            </view>
+            <text class="move-folder-item__count">{{item.photoCount}}</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseMoveModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onConfirmMove" disabled="{{actionLoading || movingPhotoIds.length === 0}}">
+          {{actionLoading ? '迁移中...' : '确认迁移'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{deletingFolder}}" class="modal-mask" bindtap="onCancelDeleteFolder">
+    <view class="modal-container modal-container--confirm" catchtap="onStopPropagation">
+      <view class="modal-header-center">
+        <view class="modal-icon-wrap modal-icon-wrap--warn">
+          <image class="modal-icon-wrap__icon" src="/images/icons/alert-triangle-red.svg" mode="aspectFit" />
+        </view>
+        <text class="modal-title">删除文件夹</text>
+        <text class="modal-subtitle">确定要删除文件夹 <text class="text-strong">{{deletingFolder.name}}</text> 吗？</text>
+      </view>
+      <view class="modal-body">
+        <view class="warning-box">
+          <text class="warning-box__text">文件夹内的照片将移至根目录</text>
+        </view>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCancelDeleteFolder" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--danger" bindtap="onConfirmDeleteFolder" disabled="{{actionLoading}}">
+          {{actionLoading ? '删除中...' : '确认删除'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{deletingPhoto}}" class="modal-mask" bindtap="onCancelDeletePhoto">
+    <view class="modal-container modal-container--confirm" catchtap="onStopPropagation">
+      <view class="modal-header-center">
+        <view class="modal-icon-wrap modal-icon-wrap--danger">
+          <image class="modal-icon-wrap__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+        </view>
+        <text class="modal-title">删除照片</text>
+        <text class="modal-subtitle">确定要删除这张照片吗？此操作不可撤销。</text>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCancelDeletePhoto" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--danger" bindtap="onConfirmDeletePhoto" disabled="{{actionLoading}}">
+          {{actionLoading ? '删除中...' : '确认删除'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showBatchDeleteConfirm}}" class="modal-mask" bindtap="onCancelBatchDelete">
+    <view class="modal-container modal-container--confirm" catchtap="onStopPropagation">
+      <view class="modal-header-center">
+        <view class="modal-icon-wrap modal-icon-wrap--danger">
+          <image class="modal-icon-wrap__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+        </view>
+        <text class="modal-title">批量删除照片</text>
+        <text class="modal-subtitle">确定要删除选中的 <text class="text-strong text-danger">{{selectedPhotoIds.length}}</text> 张照片吗？</text>
+      </view>
+      <view class="modal-body">
+        <view class="warning-box warning-box--danger">
+          <text class="warning-box__text warning-box__text--danger">此操作不可撤销</text>
+        </view>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCancelBatchDelete">取消</button>
+        <button class="modal-btn modal-btn--danger" bindtap="onConfirmBatchDelete">确认删除</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{previewPhoto}}" class="preview-mask" bindtap="onClosePreview">
+    <view class="preview-container" catchtap="onStopPropagation">
+      <view class="preview-tape"></view>
+      <view class="preview-close" bindtap="onClosePreview">
+        <image class="preview-close__icon" src="/images/icons/x-white.svg" mode="aspectFit" />
+      </view>
+
+      <view class="preview-image-wrap">
+        <image
+          class="preview-image"
+          src="{{previewPhoto.original_url || previewPhoto.preview_url || previewPhoto.thumbnail_url}}"
+          mode="aspectFit"
+        />
+      </view>
+
+      <view class="preview-info">
+        <image class="preview-info__icon" src="/images/icons/eye-brown.svg" mode="aspectFit" />
+        <text class="preview-info__text">照片预览</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showToast}}" class="toast toast--{{toastType}}">
+    <text class="toast__icon">{{toastType === 'success' ? '✓' : (toastType === 'warning' ? '!' : '✕')}}</text>
+    <text class="toast__text">{{toastMessage}}</text>
+  </view>
+</view>

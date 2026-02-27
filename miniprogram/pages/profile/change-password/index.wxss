@@ -1,0 +1,244 @@
+.page {
+  min-height: 100vh;
+  background: #FFFBF0;
+  /* Web: px-8 pb-20 */
+  padding: 0 64rpx 160rpx;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.content {
+  /* Web: pt-12 */
+  padding-top: 96rpx;
+}
+
+.back {
+  position: fixed;
+  /* Web: left-6 */
+  left: 48rpx;
+  z-index: 1200;
+  pointer-events: auto;
+}
+
+.back-btn {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 200, 87, 0.20);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8rpx;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease;
+}
+
+.back-btn--active {
+  background: rgba(255, 200, 87, 0.30);
+}
+
+.back-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.title-wrap {
+  text-align: center;
+  /* Web: mt-8 mb-12 */
+  margin-top: 64rpx;
+  margin-bottom: 96rpx;
+}
+
+.title {
+  display: block;
+  /* Web: text-3xl font-bold */
+  font-size: 60rpx;
+  font-weight: 700;
+  color: #5D4037;
+  margin-bottom: 10rpx;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.sub {
+  display: block;
+  font-size: 28rpx; /* text-sm */
+  color: rgba(93, 64, 55, 0.60);
+}
+
+.config-tip {
+  background: rgba(255, 255, 255, 0.75);
+  border: 4rpx dashed rgba(93, 64, 55, 0.15);
+  border-radius: 28rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 18rpx;
+}
+
+.config-tip__title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 800;
+  color: #5D4037;
+  margin-bottom: 6rpx;
+}
+
+.config-tip__desc {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(93, 64, 55, 0.60);
+}
+
+.success-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 64rpx;
+  box-sizing: border-box;
+}
+
+.success-wrap {
+  text-align: center;
+}
+
+.success-icon-wrap {
+  width: 192rpx;
+  height: 192rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 200, 87, 0.20);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24rpx;
+}
+
+.success-icon {
+  width: 96rpx;
+  height: 96rpx;
+}
+
+.success-title {
+  display: block;
+  font-size: 48rpx; /* text-2xl */
+  font-weight: 700;
+  color: #5D4037;
+  margin-bottom: 12rpx;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.success-desc {
+  display: block;
+  font-size: 28rpx;
+  color: rgba(93, 64, 55, 0.70);
+}
+
+.form {
+  max-width: 896rpx; /* max-w-md */
+  margin: 0 auto;
+}
+
+.field {
+  position: relative;
+  height: 112rpx;
+  border-radius: 999rpx;
+  background: #FFFFFF;
+  border: 4rpx solid rgba(93, 64, 55, 0.20);
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+  box-sizing: border-box;
+  margin-bottom: 32rpx;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.field--focus {
+  border-color: #FFC857;
+  box-shadow: 0 0 0 6rpx rgba(255, 200, 87, 0.10);
+}
+
+.field-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.input {
+  flex: 1;
+  padding-left: 16rpx;
+  padding-right: 96rpx;
+  font-size: 32rpx;
+  color: #5D4037;
+  box-sizing: border-box;
+}
+
+.toggle {
+  position: absolute;
+  right: 32rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 72rpx;
+  min-width: 0;
+  height: 72rpx;
+  border-radius: 999rpx;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  flex: none;
+  z-index: 2;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.toggle--active {
+  background: rgba(93, 64, 55, 0.08);
+  transform: translateY(-50%) scale(0.95);
+}
+
+.toggle-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.error {
+  margin-top: -8rpx;
+  margin-bottom: 24rpx;
+  background: #FEF2F2;
+  border: 2rpx solid #FECACA;
+  border-radius: 32rpx;
+  padding: 24rpx;
+}
+
+.error-text {
+  color: #DC2626;
+  text-align: center;
+  font-size: 28rpx;
+  display: block;
+}
+
+.submit {
+  width: 100%;
+  height: 128rpx;
+  border-radius: 999rpx;
+  background: #FFC857;
+  color: #5D4037;
+  border: 4rpx solid #5D4037;
+  box-shadow: 8rpx 8rpx 0 #5D4037;
+  font-weight: 700;
+  font-size: 36rpx;
+  margin-top: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submit--active {
+  transform: translate(4rpx, 4rpx);
+  box-shadow: 4rpx 4rpx 0 #5D4037;
+}
+
+.submit[disabled] {
+  opacity: 0.55;
+}

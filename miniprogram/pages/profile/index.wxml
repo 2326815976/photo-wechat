@@ -1,0 +1,129 @@
+<view class="page">
+  <view class="profile-header motion-fade-in" style="padding-top: {{safeTop}}px;">
+    <view class="profile-header-inner">
+      <text class="profile-title">我的小天地</text>
+      <view class="profile-tag">
+        <text class="profile-tag-text">📒 管理你的拾光小秘密 📒</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">时光中...</text>
+        <text class="loading-desc">正在加载您的个人信息</text>
+      </view>
+    </view>
+
+    <!-- 未登录 -->
+    <view wx:if="{{!loading && !isLoggedIn}}" class="guest motion-fade-up motion-delay-2">
+      <view class="guest-icon">
+        <image class="guest-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="guest-title">开启你的专属空间 ✨</text>
+      <text class="guest-desc">登录后解锁更多功能</text>
+
+      <view class="guest-actions">
+        <button class="btn-primary" hover-class="btn-primary--active" bindtap="goLogin">立即登录</button>
+        <button class="btn-outline" hover-class="btn-outline--active" bindtap="goRegister">注册账号</button>
+      </view>
+    </view>
+
+    <!-- 已登录 -->
+    <view wx:if="{{!loading && isLoggedIn}}">
+      <view class="id-card motion-fade-up motion-delay-2">
+        <!-- Web 端固定展示：光 -->
+        <view class="avatar">光</view>
+        <view class="id-info">
+          <text class="id-name">{{userName}}</text>
+          <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
+        </view>
+      </view>
+
+      <view class="menu">
+        <view class="menu-item motion-fade-up motion-delay-3" hover-class="menu-item--active" bindtap="goEditProfile">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/user-yellow.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">编辑个人资料</text>
+            <text class="menu-desc">修改用户名、手机号、微信号</text>
+          </view>
+        </view>
+
+        <view class="menu-item motion-fade-up motion-delay-4" hover-class="menu-item--active" bindtap="goBookings" wx:if="{{!hideAudit}}">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/calendar-yellow.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">我的预约记录</text>
+            <text class="menu-desc">查看所有约拍记录</text>
+          </view>
+        </view>
+
+        <view class="menu-item motion-fade-up motion-delay-5" hover-class="menu-item--active" bindtap="goChangePassword">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">修改密码</text>
+            <text class="menu-desc">更新账户安全信息</text>
+          </view>
+        </view>
+
+        <view class="menu-item motion-fade-up motion-delay-6" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/setting.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">后台管理</text>
+            <text class="menu-desc">查看统计、维护系统、管理预约与锁档</text>
+          </view>
+        </view>
+
+        <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAbout">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/question.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">关于</text>
+            <text class="menu-desc">查看作者联系方式与留言</text>
+          </view>
+        </view>
+
+        <view class="menu-item menu-item--plain menu-item--danger motion-fade-up motion-delay-8" hover-class="menu-item--danger-active" bindtap="goDeleteAccount">
+          <view class="menu-icon menu-icon--danger">
+            <image class="menu-icon-img" src="/images/icons/log-out-red.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title menu-title--danger">删除账户</text>
+            <text class="menu-desc">永久删除账户和所有数据</text>
+          </view>
+        </view>
+
+        <view class="menu-item menu-item--plain motion-fade-up motion-delay-9" hover-class="menu-item--plain-active" bindtap="logout">
+          <view class="menu-icon menu-icon--logout">
+            <image class="menu-icon-img" src="/images/icons/log-out-brown.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">退出登录</text>
+            <text class="menu-desc">安全退出当前账户</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

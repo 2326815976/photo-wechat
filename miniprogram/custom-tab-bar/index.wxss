@@ -1,0 +1,119 @@
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+  height: 136rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(255, 251, 240, 0.95);
+  border-top: 4rpx dashed rgba(93, 64, 55, 0.15);
+  box-shadow: 0 -4rpx 24rpx rgba(93, 64, 55, 0.08);
+  z-index: 999;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.tab-bar--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(120%);
+}
+
+.tab-inner {
+  height: 136rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 24rpx 16rpx;
+  box-sizing: border-box;
+}
+
+.tab-item {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.tab-item--selected {
+  transform: scale(1.05);
+}
+
+.tab-item--active {
+  transform: scale(0.9);
+  opacity: 1;
+}
+
+.tab-glow {
+  position: absolute;
+  /* Web: -top-1（-4px） */
+  top: -4px;
+  width: 112rpx;
+  height: 112rpx;
+  background: rgba(255, 200, 87, 0.30);
+  border-radius: 999rpx;
+  /* Web: blur-lg（16px） */
+  filter: blur(16px);
+  opacity: 0;
+  transform: scale(0.8);
+  animation: tab-glow-in 0.3s ease-out both;
+}
+
+.tab-icon-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.tab-icon-wrap--active {
+  animation: tab-icon-rise 0.5s ease-out;
+}
+
+.tab-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.tab-icon--active {
+  filter: drop-shadow(0 4rpx 8rpx rgba(255, 200, 87, 0.30));
+}
+
+.tab-text {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: rgba(93, 64, 55, 0.60);
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s ease;
+}
+
+.tab-text--active {
+  color: #FFC857;
+  font-weight: 700;
+}
+
+@keyframes tab-glow-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tab-icon-rise {
+  0% {
+    transform: translateY(0);
+  }
+  60% {
+    transform: translateY(-6rpx);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

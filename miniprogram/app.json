@@ -1,0 +1,69 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/album/index",
+    "pages/gallery/index",
+    "pages/booking/index",
+    "pages/profile/index",
+    "pages/admin/index",
+    "pages/admin/album-detail/index",
+    "pages/album/detail",
+    "pages/login/index",
+    "pages/register/index",
+    "pages/profile/edit/index",
+    "pages/profile/about/index",
+    "pages/profile/bookings/index",
+    "pages/profile/change-password/index",
+    "pages/profile/delete-account/index"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "backgroundColor": "#FFFBF0",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#FFFBF0",
+    "navigationBarTitleText": "拾光谣",
+    "navigationBarTextStyle": "black"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#5D4037",
+    "selectedColor": "#FFC857",
+    "backgroundColor": "#FFFBF0",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "images/tab/house.png",
+        "selectedIconPath": "images/tab/house-active.png"
+      },
+      {
+        "pagePath": "pages/album/index",
+        "text": "返图",
+        "iconPath": "images/tab/lock.png",
+        "selectedIconPath": "images/tab/lock-active.png"
+      },
+      {
+        "pagePath": "pages/gallery/index",
+        "text": "照片墙",
+        "iconPath": "images/tab/image.png",
+        "selectedIconPath": "images/tab/image-active.png"
+      },
+      {
+        "pagePath": "pages/booking/index",
+        "text": "约拍",
+        "iconPath": "images/tab/calendar.png",
+        "selectedIconPath": "images/tab/calendar-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "images/tab/user.png",
+        "selectedIconPath": "images/tab/user-active.png"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

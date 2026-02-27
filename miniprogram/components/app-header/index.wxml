@@ -1,0 +1,17 @@
+<view class="header" style="padding-top: {{safeTop}}px;">
+  <view class="header-inner {{isHomePage ? 'header-inner--home' : ''}} {{showBack && !subtitle ? 'header-inner--simple' : ''}} {{showBack && subtitle ? 'header-inner--back-sub' : ''}} {{isHomePage && animateIn ? 'header-inner--home-enter' : ''}}">
+    <view class="back-wrap" wx:if="{{showBack}}" bindtap="onBack">
+      <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80">
+        <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="title-wrap {{isHomePage ? 'title-wrap--home' : ''}}">
+      <text class="title {{isHomePage ? 'title--home' : ''}}">{{title}}</text>
+    </view>
+
+    <view class="tag {{isHomePage ? 'tag--home' : ''}}" wx:if="{{subtitle}}">
+      <text class="tag-text">{{subtitle}}</text>
+    </view>
+  </view>
+</view>

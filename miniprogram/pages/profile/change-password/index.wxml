@@ -1,0 +1,96 @@
+<view class="page">
+  <view wx:if="{{!showSuccess}}" style="height: {{safeTop}}px;"></view>
+
+  <!-- Web: top-6 -->
+  <view class="back motion-fade-up motion-delay-1" wx:if="{{!showSuccess}}" style="top: {{safeTop + 24}}px;">
+    <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80" bindtap="goBack">
+      <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="content motion-fade-up motion-delay-2" wx:if="{{!showSuccess}}">
+    <view class="title-wrap motion-fade-up motion-delay-2">
+      <text class="title">修改密码 🔐</text>
+      <text class="sub">请输入当前密码和新密码</text>
+    </view>
+
+    <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="form motion-fade-up motion-delay-3">
+      <view class="field {{focusField === 'currentPassword' ? 'field--focus' : ''}}">
+        <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+        <input
+          class="input"
+          password="{{!showCurrentPassword}}"
+          placeholder="当前密码"
+          placeholder-style="color: rgba(93, 64, 55, 0.4);"
+          value="{{formData.currentPassword}}"
+          data-field="currentPassword"
+          bindinput="onInput"
+          bindfocus="onFieldFocus"
+          bindblur="onFieldBlur"
+        />
+        <view class="toggle" hover-class="toggle--active" data-key="showCurrentPassword" bindtap="togglePassword">
+          <image class="toggle-icon" src="{{showCurrentPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="field {{focusField === 'newPassword' ? 'field--focus' : ''}}">
+        <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+        <input
+          class="input"
+          password="{{!showNewPassword}}"
+          placeholder="新密码（至少6位）"
+          placeholder-style="color: rgba(93, 64, 55, 0.4);"
+          value="{{formData.newPassword}}"
+          data-field="newPassword"
+          bindinput="onInput"
+          bindfocus="onFieldFocus"
+          bindblur="onFieldBlur"
+        />
+        <view class="toggle" hover-class="toggle--active" data-key="showNewPassword" bindtap="togglePassword">
+          <image class="toggle-icon" src="{{showNewPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="field {{focusField === 'confirmPassword' ? 'field--focus' : ''}}">
+        <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+        <input
+          class="input"
+          password="{{!showConfirmPassword}}"
+          placeholder="确认新密码"
+          placeholder-style="color: rgba(93, 64, 55, 0.4);"
+          value="{{formData.confirmPassword}}"
+          data-field="confirmPassword"
+          bindinput="onInput"
+          bindfocus="onFieldFocus"
+          bindblur="onFieldBlur"
+        />
+        <view class="toggle" hover-class="toggle--active" data-key="showConfirmPassword" bindtap="togglePassword">
+          <image class="toggle-icon" src="{{showConfirmPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="error motion-pop-in" wx:if="{{error}}">
+        <text class="error-text">{{error}}</text>
+      </view>
+
+      <button class="submit" hover-class="submit--active" bindtap="submit" disabled="{{isLoading || serviceMissing}}">
+        {{isLoading ? '修改中...' : '🔐 确认修改'}}
+      </button>
+    </view>
+  </view>
+
+  <view class="success-page motion-fade-in" wx:if="{{showSuccess}}">
+    <view class="success-wrap motion-pop-in">
+      <view class="success-icon-wrap">
+        <image class="success-icon" src="/images/icons/circle-check-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="success-title">密码修改成功！✨</text>
+      <text class="success-desc">已强制全部设备下线，正在前往登录...</text>
+    </view>
+  </view>
+</view>

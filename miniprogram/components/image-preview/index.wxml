@@ -1,0 +1,80 @@
+<view class="ip" wx:if="{{show}}" bindtap="onOverlayTap">
+  <view class="ip-bg"></view>
+
+  <!-- 关闭按钮 -->
+  <button
+    class="ip-close"
+    catchtap="onCloseTap"
+    style="top: {{safeTop + 16}}px;"
+    hover-class="ip-close--hover"
+    hover-stay-time="80"
+  >
+    <image class="ip-close-icon" src="/images/icons/x-white.svg" mode="aspectFit" />
+  </button>
+
+  <!-- 操作提示 -->
+  <view class="ip-tip" style="top: {{safeTop + 16}}px;">
+    <text class="ip-tip-text">{{tipText}}</text>
+  </view>
+
+  <!-- 图片序号 -->
+  <view
+    class="ip-counter"
+    wx:if="{{showCounter && images.length > 1}}"
+    style="top: {{safeTop + 64}}px;"
+  >
+    <text class="ip-counter-text">{{index + 1}} / {{images.length}}</text>
+  </view>
+
+  <!-- 缩放比例 -->
+  <view class="ip-scale" wx:if="{{showScale}}">
+    <text class="ip-scale-text">{{displayScale}}%</text>
+  </view>
+
+  <!-- 下载按钮（仅在需要时显示） -->
+  <button class="ip-download" wx:if="{{showDownload}}" catchtap="onDownloadTap" hover-class="ip-download--hover" hover-stay-time="80">
+    <image class="ip-download-icon" src="/images/icons/download-white.svg" mode="aspectFit" />
+    <text class="ip-download-text">{{downloadText}}</text>
+  </button>
+
+  <!-- 图片容器 -->
+  <swiper
+    class="ip-swiper"
+    current="{{index}}"
+    bindchange="onSwiperChange"
+    circular="{{false}}"
+    disable-touch="{{swiperDisabled}}"
+  >
+    <swiper-item wx:for="{{images}}" wx:key="*this" wx:for-item="src" wx:for-index="slideIndex">
+      <movable-area class="ip-area">
+        <movable-view
+          class="ip-view"
+          scale="true"
+          scale-min="1"
+          scale-max="6"
+          scale-value="{{slideIndex === index ? currentScale : 1}}"
+          direction="{{slideIndex === index && isZoomed ? 'all' : 'none'}}"
+          out-of-bounds="{{false}}"
+          data-slide="{{slideIndex}}"
+          bindscale="onScaleChange"
+          bindtap="onImageTap"
+          bindtouchstart="onImageTouchStart"
+          bindtouchmove="onImageTouchMove"
+          bindtouchend="onImageTouchEnd"
+          bindtouchcancel="onImageTouchCancel"
+        >
+          <image class="ip-image" src="{{src}}" mode="aspectFit" />
+        </movable-view>
+      </movable-area>
+    </swiper-item>
+  </swiper>
+
+  <!-- 长按下载进度环（对齐 Web 端 ImagePreview） -->
+  <view class="ip-longpress" wx:if="{{longPressProgress > 0}}">
+    <canvas
+      class="ip-longpress-canvas"
+      canvas-id="ip-longpress-ring"
+      style="width: 128rpx; height: 128rpx;"
+    ></canvas>
+  </view>
+</view>

@@ -1,0 +1,66 @@
+<view class="date-picker">
+  <view
+    class="picker-display {{isOpen ? 'picker-display--open' : ''}} {{displayPressed ? 'picker-display--pressed' : ''}}"
+    bindtap="openPanel"
+    bindtouchstart="onDisplayTouchStart"
+    bindtouchend="onDisplayTouchEnd"
+    bindtouchcancel="onDisplayTouchEnd"
+  >
+    <text class="{{value ? 'selected' : 'placeholder'}}">{{displayText || placeholder}}</text>
+    <image class="icon" src="/images/icons/calendar-brown.svg" mode="aspectFit" />
+  </view>
+
+  <!-- Web 无暗色遮罩；这里用透明遮罩捕获外部点击以关闭面板 -->
+  <view class="mask" wx:if="{{isOpen}}" bindtap="closePanel"></view>
+
+  <!-- Web 同款：下拉面板（定位在输入框下方） -->
+  <view class="panel" wx:if="{{isOpen}}" catchtap="noop">
+    <view class="panel-card">
+      <view class="panel-header">
+        <view class="month-btn" bindtap="prevMonth" hover-class="month-btn--hover" hover-stay-time="80">
+          <image class="month-icon month-icon--left" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+        </view>
+        <text class="month-title">{{currentYear}}年{{currentMonth}}月</text>
+        <view class="month-btn" bindtap="nextMonth" hover-class="month-btn--hover" hover-stay-time="80">
+          <image class="month-icon month-icon--right" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="week-row">
+        <text class="week-day" wx:for="{{weekDays}}" wx:key="*this">{{item}}</text>
+      </view>
+
+      <view class="days-grid">
+        <view
+          class="day-btn {{item.inMonth ? '' : 'day-btn--out'}} {{item.blocked ? 'day-btn--blocked' : ''}} {{item.selected ? 'day-btn--selected' : ''}} {{(!item.selectable && !item.blocked) ? 'day-btn--disabled' : ''}} {{pressedDayIndex === index ? 'day-btn--press' : ''}}"
+          wx:for="{{days}}"
+          wx:key="index"
+          data-index="{{index}}"
+          bindtap="onSelectDay"
+          bindtouchstart="onDayTouchStart"
+          bindtouchend="onDayTouchEnd"
+          bindtouchcancel="onDayTouchEnd"
+          hover-class="day-btn--hover"
+          hover-stay-time="80"
+        >
+          <text class="day-num">{{item.day}}</text>
+          <view class="day-strike" wx:if="{{item.blocked}}"></view>
+        </view>
+      </view>
+
+      <!-- Web 同款图例 -->
+      <view class="legend">
+        <view class="legend-row">
+          <view class="legend-box legend-box--selected"></view>
+          <text class="legend-text">已选中</text>
+        </view>
+        <view class="legend-row">
+          <view class="legend-box legend-box--blocked">
+            <view class="legend-strike"></view>
+          </view>
+          <text class="legend-text">已锁定</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

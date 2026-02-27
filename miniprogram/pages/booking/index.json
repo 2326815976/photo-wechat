@@ -1,0 +1,8 @@
+{
+  "usingComponents": {
+    "app-header": "/components/app-header/index",
+    "date-picker": "/components/date-picker/index",
+    "map-picker": "/components/map-picker/index",
+    "type-selector": "/components/type-selector/index"
+  }
+}

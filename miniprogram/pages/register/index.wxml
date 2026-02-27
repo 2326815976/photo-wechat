@@ -1,0 +1,196 @@
+<view class="page" bindtouchmove="onSliderMove" bindtouchend="onSliderEnd" bindtouchcancel="onSliderEnd">
+  <view style="height: {{safeTop}}px;"></view>
+
+  <view class="back motion-fade-up motion-delay-1" style="top: {{safeTop + 24}}px;" bindtap="goBack">
+    <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80">
+      <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="title-wrap motion-fade-up motion-delay-2">
+      <text class="title">✨ 欢迎注册</text>
+      <text class="sub">创建账号，开启美好瞬间记录之旅</text>
+    </view>
+
+    <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="form motion-fade-up motion-delay-3">
+      <view class="field {{focusField === 'phone' ? 'field--focus' : ''}}">
+        <image class="field-icon" src="/images/icons/phone-muted.svg" mode="aspectFit" />
+        <input
+          class="input"
+          type="number"
+          placeholder="手机号"
+          placeholder-style="color: rgba(93, 64, 55, 0.4);"
+          maxlength="11"
+          value="{{phone}}"
+          data-field="phone"
+          bindinput="onPhoneInput"
+          bindfocus="onFieldFocus"
+          bindblur="onFieldBlur"
+        />
+      </view>
+
+      <view class="field {{focusField === 'password' ? 'field--focus' : ''}}">
+        <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+        <input
+          class="input"
+          password="{{!showPassword}}"
+          placeholder="密码"
+          placeholder-style="color: rgba(93, 64, 55, 0.4);"
+          value="{{password}}"
+          data-field="password"
+          bindinput="onPasswordInput"
+          bindfocus="onFieldFocus"
+          bindblur="onFieldBlur"
+        />
+        <view class="toggle" hover-class="toggle--active" hover-stay-time="80" bindtap="togglePassword">
+          <image class="toggle-icon" src="{{showPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+        </view>
+      </view>
+
+      <view class="captcha-box">
+        <view class="captcha-head">
+          <text class="captcha-title">安全验证</text>
+          <view
+            class="refresh-btn {{(submitting || isCaptchaVerifying || isDragging || serviceMissing) ? 'refresh-btn--disabled' : ''}}"
+            hover-class="refresh-btn--active"
+            hover-stay-time="80"
+            bindtap="onRefreshCaptcha"
+          >
+            <image class="refresh-icon" src="/images/icons/rotate-ccw-brown.svg" mode="aspectFit" />
+            <text>刷新</text>
+          </view>
+        </view>
+
+        <view
+          class="slider-track {{isVerified ? 'slider-track--ok' : ''}}"
+          catchtouchmove="onSliderMove"
+          catchtouchend="onSliderEnd"
+          catchtouchcancel="onSliderEnd"
+        >
+          <view
+            class="slider-fill"
+            style="width: {{sliderFillWidth}}px; transition: {{isDragging ? 'none' : 'width 0.2s'}};"
+          ></view>
+
+          <view
+            class="slider-thumb {{isVerified ? 'slider-thumb--ok' : ''}} {{isDragging ? 'slider-thumb--dragging' : ''}}"
+            style="transform: translateX({{sliderPixelPosition}}px); transition: {{isDragging ? 'none' : 'transform 0.2s'}};"
+            bindtouchstart="onSliderStart"
+            catchtouchmove="onSliderMove"
+            catchtouchend="onSliderEnd"
+            catchtouchcancel="onSliderEnd"
+          >
+            <image class="slider-arrow" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
+          </view>
+
+          <view class="slider-text-wrap">
+            <text class="slider-text" wx:if="{{isVerified}}">验证成功，继续注册</text>
+            <text class="slider-text" wx:elif="{{isCaptchaVerifying}}">正在验证轨迹...</text>
+            <text class="slider-text" wx:else>向右拖动滑块完成验证</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="legal-entry motion-fade-in motion-delay-4">
+        <view class="legal-agree" bindtap="onToggleLegalAgreement">
+          <image
+            class="legal-agree__icon"
+            src="{{agreedToLegal ? '/images/icons/check-square-brown.svg' : '/images/icons/square-muted.svg'}}"
+            mode="aspectFit"
+          />
+          <text class="legal-agree__text">我已阅读并同意以下协议</text>
+        </view>
+        <view class="legal-entry__links">
+          <text class="legal-link" hover-class="legal-link--active" data-doc-key="terms" bindtap="onOpenLegalDoc">《用户协议》</text>
+          <text class="legal-sep">、</text>
+          <text class="legal-link" hover-class="legal-link--active" data-doc-key="privacy" bindtap="onOpenLegalDoc">《隐私政策》</text>
+          <text class="legal-sep">、</text>
+          <text class="legal-link" hover-class="legal-link--active" data-doc-key="collection" bindtap="onOpenLegalDoc">《用户信息收集说明》</text>
+        </view>
+      </view>
+
+      <view class="error motion-pop-in" wx:if="{{error}}">{{error}}</view>
+
+      <button
+        class="submit"
+        hover-class="submit--active"
+        bindtap="submit"
+        disabled="{{submitting || isCaptchaVerifying || serviceMissing}}"
+      >
+        <text wx:if="{{submitting}}">注册中...</text>
+        <text wx:else>立即注册 →</text>
+      </button>
+
+      <view class="footer">
+        <text class="footer-text">已有账号？</text>
+        <text class="footer-link" hover-class="footer-link--active" bindtap="goLogin">立即登录</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showLegalModal}}" class="legal-modal-mask" bindtap="onCloseLegalModal" catchtouchmove="onStopPropagation">
+    <view class="legal-modal" catchtap="onStopPropagation" catchtouchmove="onStopPropagation">
+      <view class="legal-modal__head">
+        <text class="legal-modal__title">{{activeLegalTitle}}</text>
+        <view class="legal-modal__close" bindtap="onCloseLegalModal">
+          <image class="legal-modal__close-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+        </view>
+      </view>
+
+      <scroll-view class="legal-modal__tabs" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
+        <view class="legal-modal__tabs-inner">
+          <view
+            wx:for="{{legalDocTabs}}"
+            wx:for-item="tab"
+            wx:for-index="tabIndex"
+            wx:key="key"
+            class="legal-modal__tab {{activeLegalKey === tab.key ? 'legal-modal__tab--active' : ''}}"
+            data-doc-key="{{tab.key}}"
+            bindtap="onSwitchLegalDoc"
+          >
+            {{tab.shortTitle || tab.title}}
+          </view>
+        </view>
+      </scroll-view>
+
+      <scroll-view class="legal-modal__body" scroll-y="{{true}}" enable-flex="{{true}}">
+        <text class="legal-modal__version">{{activeLegalVersion}}</text>
+
+        <view wx:for="{{activeLegalSections}}" wx:for-item="section" wx:for-index="sectionIndex" wx:key="sectionIndex" class="legal-section">
+          <text class="legal-section__title">{{section.title}}</text>
+          <text
+            wx:for="{{section.paragraphs}}"
+            wx:for-item="line"
+            wx:for-index="lineIndex"
+            wx:key="lineIndex"
+            class="legal-section__paragraph"
+          >
+            {{line}}
+          </text>
+        </view>
+
+        <view class="legal-footer" wx:if="{{activeLegalFooter.length > 0}}">
+          <text
+            wx:for="{{activeLegalFooter}}"
+            wx:for-item="line"
+            wx:for-index="lineIndex"
+            wx:key="lineIndex"
+            class="legal-footer__line"
+          >
+            {{line}}
+          </text>
+        </view>
+      </scroll-view>
+
+      <view class="legal-modal__foot">
+        <button class="legal-modal__btn" hover-class="legal-modal__btn--active" bindtap="onAcknowledgeLegal">我已知悉</button>
+      </view>
+    </view>
+  </view>
+</view>

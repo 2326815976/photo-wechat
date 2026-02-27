@@ -1,0 +1,166 @@
+<view class="page">
+  <app-header
+    title="专属返图空间"
+    subtitle="🤫 嘘，这里藏着你的独家记忆 🤫"
+    safeTop="{{safeTop}}"
+  />
+
+  <view class="content">
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{pageLoading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">时光中...</text>
+        <text class="loading-desc">正在加载返图空间</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!pageLoading}}">
+      <view
+        class="list-notice list-notice--{{listNotice.type}} motion-pop-in"
+        wx:if="{{listNotice}}"
+      >
+        {{listNotice.message}}
+      </view>
+
+      <!-- 已登录且有绑定空间 -->
+      <view wx:if="{{isLoggedIn && boundAlbums.length > 0 && !showKeyInput}}">
+        <view class="album-list">
+          <view
+            class="album-card motion-fade-up"
+            hover-class="album-card--active"
+            hover-stay-time="80"
+            wx:for="{{boundAlbums}}"
+            wx:key="id"
+            style="animation-delay: {{120 + (index % 8) * 35}}ms;"
+            data-key="{{item.access_key}}"
+            data-root-folder-name="{{item.root_folder_name}}"
+            bindtap="openAlbum"
+          >
+            <view class="album-cover">
+              <image wx:if="{{item.cover_url}}" class="album-cover-img" src="{{item.cover_url}}" mode="widthFix" />
+              <view wx:else class="album-cover-placeholder">
+                <image class="album-cover-placeholder-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+              </view>
+            </view>
+
+            <view class="album-info">
+              <text class="album-title">{{item.title || '未命名空间'}}</text>
+              <view class="album-meta">
+                <image class="album-meta-icon" src="/images/icons/calendar-muted.svg" mode="aspectFit" />
+                <text class="album-meta-text">{{item.created_at_text}}</text>
+              </view>
+              <text class="album-expiry {{item.is_expired ? 'album-expiry--expired' : (item.days_remaining <= 3 ? 'album-expiry--soon' : '')}}">
+                {{item.expiry_text}}
+              </text>
+            </view>
+
+            <view class="album-actions">
+              <view class="album-arrow">→</view>
+              <button
+                class="unbind-btn {{unbindingAlbumId === item.id ? 'unbind-btn--disabled' : ''}}"
+                hover-class="unbind-btn--active"
+                catchtap="requestUnbindAlbum"
+                data-album-id="{{item.id}}"
+                disabled="{{unbindingAlbumId === item.id}}"
+              >
+                <image class="unbind-btn-icon" src="/images/icons/unlink-red.svg" mode="aspectFit" />
+                <text>{{unbindingAlbumId === item.id ? '解除中...' : '解除绑定'}}</text>
+              </button>
+            </view>
+          </view>
+        </view>
+
+        <button class="add-btn" hover-class="add-btn--active" bindtap="showKeyInput">
+          <view class="add-row">
+            <image class="add-icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
+            <text class="add-text">绑定/访问其他空间</text>
+          </view>
+        </button>
+      </view>
+
+      <!-- 密钥输入 -->
+      <view wx:else class="key-wrap motion-fade-up motion-delay-2">
+        <view class="key-icon">
+          <image class="key-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+        </view>
+        <view class="key-card">
+          <view class="key-bg"></view>
+          <!-- Web 同款：粘贴按钮内嵌（absolute），输入框右侧预留 padding -->
+          <view class="key-input-box">
+            <input
+              class="key-input"
+              placeholder="输入神秘密钥..."
+              value="{{accessKey}}"
+              bindinput="onAccessKeyInput"
+              maxlength="32"
+              confirm-type="done"
+            />
+            <view class="paste-btn" hover-class="paste-btn--active" hover-stay-time="80" bindtap="pasteAccessKey">
+              <image class="paste-icon" src="/images/icons/clipboard-brown.svg" mode="aspectFit" />
+            </view>
+          </view>
+
+          <text class="error" wx:if="{{error}}">{{error}}</text>
+
+          <button class="submit-btn" hover-class="submit-btn--active" bindtap="submit" disabled="{{submitting}}">
+            <view class="submit-row">
+              <image class="submit-icon {{submitting ? 'submit-icon--spin' : ''}}" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+              <text>{{submitting ? '验证中...' : '开启回忆'}}</text>
+            </view>
+          </button>
+
+          <view class="key-tips">
+            <text class="key-tip">💡 提示：{{isLoggedIn ? '输入密钥后将自动绑定并直接进入返图空间' : '登录后可绑定空间，下次无需输入密钥'}}</text>
+            <text class="key-tip">密钥由摄影师提供，请妥善保管</text>
+          </view>
+        </view>
+
+        <button class="back-btn" hover-class="back-btn--active" wx:if="{{isLoggedIn && boundAlbums.length > 0}}" bindtap="hideKeyInput">
+          ← 返回我的相册
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{unbindTargetAlbum}}" bindtap="cancelUnbindAlbum"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{unbindTargetAlbum}}">
+    <view class="confirm-card motion-pop-in" catchtap="noop">
+      <view class="confirm-icon-wrap">
+        <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="confirm-title">解除空间绑定？</text>
+      <text class="confirm-text">解除后不会删除空间内容，你仍可通过密钥重新进入并再次绑定。</text>
+      <text class="confirm-tip">当前空间：{{unbindTargetAlbum.title || '未命名空间'}}</text>
+
+      <view class="confirm-actions">
+        <button
+          class="confirm-btn confirm-btn--ghost"
+          hover-class="confirm-btn--ghost-active"
+          bindtap="cancelUnbindAlbum"
+          disabled="{{unbindingAlbumId !== ''}}"
+        >
+          再想想
+        </button>
+        <button
+          class="confirm-btn confirm-btn--primary"
+          hover-class="confirm-btn--primary-active"
+          bindtap="confirmUnbindAlbum"
+          disabled="{{unbindingAlbumId !== ''}}"
+        >
+          {{unbindingAlbumId ? '解除中...' : '确认解除'}}
+        </button>
+      </view>
+    </view>
+  </view>
+</view>

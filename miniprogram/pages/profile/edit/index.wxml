@@ -1,0 +1,117 @@
+<view class="page">
+  <app-header
+    title="编辑个人资料"
+    safeTop="{{safeTop}}"
+    showBack="{{true}}"
+    fallbackTab="pages/profile/index"
+  />
+
+  <view class="content">
+    <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+    </view>
+
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/user-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">加载中...</text>
+        <text class="loading-desc">正在加载个人资料</text>
+      </view>
+    </view>
+
+    <view wx:if="{{!loading}}">
+      <view class="success-card motion-pop-in" wx:if="{{success}}">
+        <view class="success-icon">
+          <image class="success-icon-img" src="/images/icons/save-yellow.svg" mode="aspectFit" />
+        </view>
+        <text class="success-title">保存成功！</text>
+        <text class="success-desc">个人资料已更新 ✨</text>
+      </view>
+
+      <view class="paper-card motion-fade-up motion-delay-2" wx:else>
+        <view class="doodle">
+          <image class="doodle-icon" src="/images/icons/user-brown.svg" mode="aspectFit" />
+        </view>
+
+        <view class="form">
+          <view class="form-item">
+            <view class="label">
+              <image class="label-icon" src="/images/icons/user-brown.svg" mode="aspectFit" />
+              <text class="label-text">用户名 *</text>
+            </view>
+            <input
+              class="input {{focusField === 'name' ? 'input--focus' : ''}}"
+              placeholder="请输入用户名"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
+              value="{{formData.name}}"
+              data-field="name"
+              bindinput="onInput"
+              bindfocus="onFieldFocus"
+              bindblur="onFieldBlur"
+              maxlength="20"
+            />
+          </view>
+
+          <view class="form-item">
+            <view class="label">
+              <image class="label-icon" src="/images/icons/phone-brown.svg" mode="aspectFit" />
+              <text class="label-text">手机号</text>
+            </view>
+            <input
+              class="input {{focusField === 'phone' ? 'input--focus' : ''}}"
+              type="number"
+              placeholder="请输入手机号（选填）"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
+              value="{{formData.phone}}"
+              data-field="phone"
+              bindinput="onInput"
+              bindfocus="onFieldFocus"
+              bindblur="onFieldBlur"
+              maxlength="11"
+            />
+          </view>
+
+          <view class="form-item">
+            <view class="label">
+              <image class="label-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
+              <text class="label-text">微信号</text>
+            </view>
+            <input
+              class="input {{focusField === 'wechat' ? 'input--focus' : ''}}"
+              placeholder="请输入微信号（选填）"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
+              value="{{formData.wechat}}"
+              data-field="wechat"
+              bindinput="onInput"
+              bindfocus="onFieldFocus"
+              bindblur="onFieldBlur"
+              maxlength="32"
+            />
+          </view>
+
+          <view class="tip-box">
+            <text class="tip-text">💡 填写手机号和微信后，预约时会自动填充</text>
+          </view>
+
+          <view class="error motion-pop-in" wx:if="{{error}}">
+            <text class="error-text">{{error}}</text>
+          </view>
+
+          <button class="btn-submit" bindtap="submit" disabled="{{saving || serviceMissing}}">
+            <view class="btn-row">
+              <image class="btn-icon" src="/images/icons/save-brown.svg" mode="aspectFit" wx:if="{{!saving}}" />
+              <text class="btn-text">{{saving ? '保存中...' : '保存修改'}}</text>
+            </view>
+          </button>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,133 @@
+<view class="map-picker" wx:if="{{show}}">
+  <view class="mask" bindtap="onCancel"></view>
+
+  <view class="panel" catchtap="noop">
+    <view class="panel-header">
+      <view class="panel-title-wrap">
+        <image class="panel-title-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+        <text class="panel-title">选择位置</text>
+      </view>
+      <view class="close-btn" bindtap="onCancel" hover-class="close-btn--hover" hover-stay-time="80">
+        <image class="close-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+      </view>
+    </view>
+
+    <view class="search-wrap">
+      <view class="search-input-wrap {{searchFocused ? 'search-input-wrap--focused' : ''}}">
+        <image class="search-icon" src="/images/icons/search-gray.svg" mode="aspectFit" />
+        <input
+          class="search-input"
+          type="text"
+          value="{{searchKeyword}}"
+          placeholder="搜索地点、地址..."
+          confirm-type="search"
+          bindinput="onKeywordInput"
+          bindfocus="onInputFocus"
+          bindblur="onInputBlur"
+          bindconfirm="onInputConfirm"
+        />
+        <view
+          class="search-clear-btn"
+          wx:if="{{searchKeyword}}"
+          bindtap="onClearKeyword"
+          hover-class="search-clear-btn--hover"
+          hover-stay-time="80"
+        >
+          <image class="search-clear-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+        </view>
+        <view class="search-spinner" wx:if="{{searching}}"></view>
+      </view>
+
+      <scroll-view
+        class="search-results"
+        scroll-y
+        show-scrollbar="false"
+        wx:if="{{showResults}}"
+      >
+        <view
+          class="result-item"
+          wx:for="{{searchResults}}"
+          wx:key="index"
+          data-index="{{index}}"
+          data-title="{{item.title}}"
+          data-address="{{item.address}}"
+          data-latitude="{{item.latitude}}"
+          data-longitude="{{item.longitude}}"
+          data-cityname="{{item.cityName}}"
+          data-province="{{item.province}}"
+          data-district="{{item.district}}"
+          data-adcode="{{item.adcode}}"
+          bindtap="onSelectResult"
+          hover-class="result-item--hover"
+          hover-stay-time="80"
+        >
+          <view class="result-title">
+            <view
+              class="result-title-line"
+              wx:for="{{item.titleLines}}"
+              wx:for-item="titleLine"
+              wx:key="index"
+            >
+              {{titleLine}}
+            </view>
+            <view class="result-title-line" wx:if="{{!item.titleLines || !item.titleLines.length}}">
+              {{item.title}}
+            </view>
+          </view>
+          <view class="result-address">
+            <view
+              class="result-address-line"
+              wx:for="{{item.addressLines}}"
+              wx:for-item="line"
+              wx:key="index"
+            >
+              {{line}}
+            </view>
+            <view class="result-address-line" wx:if="{{!item.addressLines || !item.addressLines.length}}">
+              {{item.address}}
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <view class="map-wrap">
+      <map
+        class="map"
+        latitude="{{latitude}}"
+        longitude="{{longitude}}"
+        scale="15"
+        markers="{{markers}}"
+        enable-scroll="{{!showResults}}"
+        enable-zoom="{{!showResults}}"
+        enable-rotate="{{!showResults}}"
+        enable-overlooking="{{!showResults}}"
+        bindtap="onMapTap"
+        bindpoitap="onPoiTap"
+        bindmarkerdragend="onMarkerDragEnd"
+      />
+      <view class="map-loading" wx:if="{{loading}}">
+        <text class="map-loading-text">加载地图中...</text>
+      </view>
+      <view
+        class="locate-btn {{locating ? 'locate-btn--loading' : ''}}"
+        catchtap="onLocateCurrent"
+        hover-class="locate-btn--hover"
+        hover-stay-time="80"
+      >
+        <image class="locate-btn-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+        <text class="locate-btn-text">{{locating ? '切换中...' : '回到城市中心'}}</text>
+      </view>
+    </view>
+
+    <view class="address-wrap">
+      <text class="address-label">选中位置：</text>
+      <text class="address-value">{{selectedAddress || '拖动标记或点击地图选择位置'}}</text>
+    </view>
+
+    <view class="actions">
+      <view class="btn-cancel" bindtap="onCancel" hover-class="btn-cancel--hover" hover-stay-time="80">取消</view>
+      <view class="btn-confirm {{!selectedAddress ? 'btn-confirm--disabled' : ''}}" bindtap="onConfirm" hover-class="btn-confirm--hover" hover-stay-time="80">确认选择</view>
+    </view>
+  </view>
+</view>

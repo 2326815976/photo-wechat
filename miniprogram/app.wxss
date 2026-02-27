@@ -1,0 +1,133 @@
+/** app.wxss **/
+@font-face {
+  font-family: "ZQKNNY";
+  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/ZQKNNY-Medium-2.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Letter Font";
+  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "LetterFont";
+  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf") format("truetype");
+}
+
+page {
+  --bg: #FFFBF0; /* 暖白/奶油色 */
+  --fg: #5D4037; /* 深咖色 */
+  --card: #FFFFFF;
+  --primary: #FFC857; /* 落日黄 */
+  --border-dashed: rgba(93, 64, 55, 0.15);
+  --muted: rgba(93, 64, 55, 0.6);
+  --muted-2: rgba(93, 64, 55, 0.4);
+  --font-default: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-default);
+}
+
+/* 对齐 Web：统一默认字体链，避免局部组件回退系统字体 */
+view,
+text,
+button,
+input,
+textarea,
+picker,
+label,
+navigator,
+scroll-view,
+swiper,
+swiper-item,
+rich-text {
+  font-family: var(--font-default);
+}
+
+/* 统一按钮基线，便于实现 Web 同款样式 */
+button {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+}
+
+button:focus {
+  outline: 0;
+}
+
+button::after {
+  border: none;
+}
+
+.container {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 统一入场动画（对齐 Web 端 framer-motion 的淡入/上浮/弹入） */
+.motion-fade-up {
+  opacity: 0;
+  transform: translate3d(0, 40rpx, 0);
+  animation: mp-fade-up 300ms ease-out forwards;
+}
+
+.motion-fade-in {
+  opacity: 0;
+  animation: mp-fade-in 300ms ease-out forwards;
+}
+
+.motion-pop-in {
+  opacity: 0;
+  transform: scale(0.9);
+  animation: mp-pop-in 300ms ease-out forwards;
+}
+
+.motion-delay-1 { animation-delay: 100ms; }
+.motion-delay-2 { animation-delay: 200ms; }
+.motion-delay-3 { animation-delay: 300ms; }
+.motion-delay-4 { animation-delay: 350ms; }
+.motion-delay-5 { animation-delay: 400ms; }
+.motion-delay-6 { animation-delay: 450ms; }
+.motion-delay-7 { animation-delay: 500ms; }
+.motion-delay-8 { animation-delay: 550ms; }
+.motion-delay-9 { animation-delay: 600ms; }
+.motion-delay-10 { animation-delay: 650ms; }
+
+@keyframes mp-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 40rpx, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes mp-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mp-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

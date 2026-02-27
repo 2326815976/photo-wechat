@@ -1,0 +1,31 @@
+<view class="type-selector">
+  <view
+    class="select-btn {{isOpen ? 'select-btn--open' : ''}} {{isBtnPressed ? 'select-btn--pressed' : ''}}"
+    bindtap="toggleOpen"
+    bindtouchstart="onBtnTouchStart"
+    bindtouchend="onBtnTouchEnd"
+    bindtouchcancel="onBtnTouchEnd"
+  >
+    <text class="select-text {{selectedLabel ? '' : 'select-placeholder'}}">{{selectedLabel || placeholder}}</text>
+    <image
+      class="select-arrow {{isOpen ? 'select-arrow--up' : ''}}"
+      src="/images/icons/chevron-down-brown.svg"
+      mode="aspectFit"
+    />
+  </view>
+
+  <view class="select-mask" wx:if="{{isOpen}}" bindtap="close"></view>
+  <view class="select-panel" wx:if="{{isOpen}}">
+    <view
+      class="select-option {{value === item.value ? 'select-option--active' : ''}}"
+      wx:for="{{options}}"
+      wx:key="value"
+      data-value="{{item.value}}"
+      bindtap="onSelect"
+      hover-class="select-option--hover"
+      hover-stay-time="80"
+    >
+      <text class="select-option-text">{{item.emoji ? item.emoji + ' ' : ''}}{{item.label}}</text>
+    </view>
+  </view>
+</view>
