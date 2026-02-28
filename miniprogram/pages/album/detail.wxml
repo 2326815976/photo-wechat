@@ -1,7 +1,7 @@
 <view class="page">
   <app-header
     title="{{headerTitle}}"
-    subtitle="✨ 趁魔法消失前，把美好定格 ✨"
+    subtitle="{{hideAudit ? '✨ 在有效期内查看并下载你的照片 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="pages/album/index"
@@ -28,7 +28,7 @@
     </view>
 
     <view wx:if="{{!loading && album}}">
-      <view class="notice motion-fade-up motion-delay-2" wx:if="{{showNotice && expiryNotice}}">
+      <view class="notice motion-fade-up motion-delay-2" wx:if="{{!hideAudit && showNotice && expiryNotice}}">
         <view class="notice-marquee">
           <view class="notice-track">
             <text class="notice-text">{{expiryNotice}}</text>
@@ -120,7 +120,7 @@
               </view>
             </view>
 
-            <view class="photo-actions">
+            <view class="photo-actions" wx:if="{{!hideAudit}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -150,7 +150,7 @@
               </view>
             </view>
 
-            <view class="photo-actions">
+            <view class="photo-actions" wx:if="{{!hideAudit}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -181,8 +181,8 @@
     </view>
   </view>
 
-  <view class="modal-mask motion-fade-in" wx:if="{{confirmPhotoId}}" bindtap="closePinConfirm"></view>
-  <view class="confirm-modal motion-fade-in" wx:if="{{confirmPhotoId}}">
+  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && confirmPhotoId}}" bindtap="closePinConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{!hideAudit && confirmPhotoId}}">
     <view class="confirm-card motion-pop-in" catchtap="noop">
       <view class="confirm-icon-wrap">
         <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />

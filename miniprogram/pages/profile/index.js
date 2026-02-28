@@ -1,6 +1,13 @@
 const { getSession, dbQuery, logout, extractSessionUser } = require("../../services/photo-api");
 const { clearStoredCookie } = require("../../utils/auth");
 
+const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
+
+function isWechatMiniProgramAccount(user) {
+  const email = String((user && user.email) || "").trim().toLowerCase();
+  return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
+}
+
 Page({
   data: {
     safeTop: 0,
@@ -14,6 +21,7 @@ Page({
 
     userName: "",
     userPhone: "",
+    canChangePassword: false,
   },
 
   onLoad() {
@@ -89,6 +97,7 @@ Page({
           userRole: "",
           userName: "",
           userPhone: "",
+          canChangePassword: false,
         });
         return;
       }
@@ -125,6 +134,7 @@ Page({
         isAdmin: userRole === "admin",
         userName,
         userPhone,
+        canChangePassword: !isWechatMiniProgramAccount(user),
       });
     } catch (e) {
       this.setData({
@@ -134,6 +144,7 @@ Page({
         userRole: "",
         userName: "",
         userPhone: "",
+        canChangePassword: false,
       });
     }
   },

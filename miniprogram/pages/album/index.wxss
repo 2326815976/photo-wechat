@@ -384,6 +384,10 @@
   box-sizing: border-box;
 }
 
+.key-input-placeholder {
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
 .paste-btn {
   position: absolute;
   right: 16rpx; /* right-2 */

@@ -657,12 +657,20 @@ Page({
       if (hasExplicitRpcFailure(payload)) return;
       const poses = extractPoseRows(payload);
       const normalized = poses.map((p) => this.normalizePose(p));
-      if (!normalized.length) return;
+      const uniqueById = [];
+      const seenIds = new Set();
+      normalized.forEach((pose) => {
+        const poseId = Number((pose && pose.id) || 0);
+        if (!poseId || seenIds.has(poseId)) return;
+        seenIds.add(poseId);
+        uniqueById.push(pose);
+      });
+      if (!uniqueById.length) return;
 
       if (reset) {
-        const firstIndex = Math.floor(Math.random() * normalized.length);
-        const first = normalized[firstIndex];
-        const rest = normalized.filter((_, index) => index !== firstIndex);
+        const firstIndex = Math.floor(Math.random() * uniqueById.length);
+        const first = uniqueById[firstIndex];
+        const rest = uniqueById.filter((_, index) => index !== firstIndex);
         this.setData({
           currentPose: first,
           posePool: rest,
@@ -673,9 +681,17 @@ Page({
         this.addRecentPoseId(first.id);
         this.recordPoseView(first.id);
       } else {
+        const currentPoseId = Number((this.data.currentPose && this.data.currentPose.id) || 0);
         const existing = this.data.posePool || [];
         const existingIds = new Set(existing.map((p) => Number(p.id || 0)));
-        const merged = existing.concat(normalized.filter((p) => !existingIds.has(Number(p.id || 0))));
+        const merged = existing.concat(
+          uniqueById.filter((p) => {
+            const poseId = Number((p && p.id) || 0);
+            if (!poseId) return false;
+            if (poseId === currentPoseId) return false;
+            return !existingIds.has(poseId);
+          })
+        );
         this.setData({ posePool: merged });
       }
     } catch (e) {
@@ -704,8 +720,16 @@ Page({
       if (!normalized.length) return;
 
       const existing = this.data.posePool || [];
+      const currentPoseId = Number((this.data.currentPose && this.data.currentPose.id) || 0);
       const existingIds = new Set(existing.map((p) => Number(p.id || 0)));
-      const merged = existing.concat(normalized.filter((p) => !existingIds.has(Number(p.id || 0))));
+      const merged = existing.concat(
+        normalized.filter((p) => {
+          const poseId = Number((p && p.id) || 0);
+          if (!poseId) return false;
+          if (poseId === currentPoseId) return false;
+          return !existingIds.has(poseId);
+        })
+      );
       this.setData({ posePool: merged });
     } catch (e) {
       // ignore

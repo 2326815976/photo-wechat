@@ -101,6 +101,8 @@
             <input
               class="key-input"
               placeholder="输入神秘密钥..."
+              placeholder-class="key-input-placeholder"
+              placeholder-style="color: rgba(93, 64, 55, 0.45);"
               value="{{accessKey}}"
               bindinput="onAccessKeyInput"
               maxlength="32"
@@ -121,8 +123,8 @@
           </button>
 
           <view class="key-tips">
-            <text class="key-tip">💡 提示：{{isLoggedIn ? '输入密钥后将自动绑定并直接进入返图空间' : '登录后可绑定空间，下次无需输入密钥'}}</text>
-            <text class="key-tip">密钥由摄影师提供，请妥善保管</text>
+            <text class="key-tip">💡 提示：输入密钥后即可直接进入临时专属返图空间</text>
+            <text class="key-tip">密钥由管理员提供，到期后空间将自动销毁</text>
           </view>
         </view>
 

@@ -13,6 +13,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
 
     loading: true,
     saving: false,
@@ -32,13 +33,30 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
+    this.setData({
+      safeTop,
+      serviceMissing,
+      hideAudit: Boolean(globalData.hideAudit),
+    });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
+        this.setData({ hideAudit: Boolean(hideAudit) });
+      });
+    }
 
     if (!serviceMissing) {
       this.loadProfile();
     } else {
       this.setData({ loading: false });
     }
+  },
+
+  onUnload() {
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   async loadProfile() {

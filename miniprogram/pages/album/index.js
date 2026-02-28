@@ -165,6 +165,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
 
     pageLoading: true,
     isLoggedIn: false,
@@ -184,10 +185,32 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
+    this.setData({
+      safeTop,
+      serviceMissing,
+      hideAudit: Boolean(globalData.hideAudit),
+    });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
+        this.setData({ hideAudit: Boolean(hideAudit) });
+      });
+    }
   },
 
-  onShow() {
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+    this.setData({
+      hideAudit: Boolean(app && app.globalData && app.globalData.hideAudit),
+    });
+
     this.syncTabBar("pages/album/index");
     if (!this.data.serviceMissing) {
       this.loadUserData();
@@ -201,6 +224,10 @@ Page({
       clearTimeout(this._listNoticeTimer);
       this._listNoticeTimer = null;
     }
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   syncTabBar(selectedPath) {

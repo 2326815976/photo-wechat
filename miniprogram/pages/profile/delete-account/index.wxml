@@ -34,7 +34,8 @@
         <text class="warn-p">这意味着：</text>
         <view class="warn-list">
           <text class="warn-li">📸 所有珍藏的照片会消失不见</text>
-          <text class="warn-li">📅 所有预约记录会烟消云散</text>
+          <text class="warn-li" wx:if="{{!hideAudit}}">📅 所有预约记录会烟消云散</text>
+          <text class="warn-li" wx:else>🗂️ 已绑定空间记录会被清空</text>
           <text class="warn-li">👤 你的账户信息会彻底清空</text>
           <text class="warn-li">⏰ 这个操作 <text class="warn-danger">无法撤销</text></text>
         </view>

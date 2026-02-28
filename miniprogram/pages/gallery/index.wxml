@@ -31,14 +31,14 @@
           <view class="card motion-fade-up" wx:for="{{left}}" wx:key="id" style="animation-delay: {{100 + (index % 8) * 30}}ms;">
             <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
               <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
-              <view class="views">
+              <view class="views" wx:if="{{!hideAudit}}">
                 <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
                 <text class="views-num">{{item.view_count}}</text>
               </view>
             </view>
             <view class="meta">
               <text class="date">{{item.created_at_text}}</text>
-              <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+              <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
                 <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
                 <text class="like-count">{{item.like_count}}</text>
               </view>
@@ -49,14 +49,14 @@
           <view class="card motion-fade-up" wx:for="{{right}}" wx:key="id" style="animation-delay: {{120 + (index % 8) * 30}}ms;">
             <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
               <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
-              <view class="views">
+              <view class="views" wx:if="{{!hideAudit}}">
                 <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
                 <text class="views-num">{{item.view_count}}</text>
               </view>
             </view>
             <view class="meta">
               <text class="date">{{item.created_at_text}}</text>
-              <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+              <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
                 <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
                 <text class="like-count">{{item.like_count}}</text>
               </view>
@@ -80,8 +80,8 @@
   </view>
 
   <!-- 便利贴风格预览弹窗 -->
-  <view class="modal-mask motion-fade-in" wx:if="{{previewPhoto}}" bindtap="closePreview"></view>
-  <view class="preview-modal motion-fade-in" wx:if="{{previewPhoto}}">
+  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && previewPhoto}}" bindtap="closePreview"></view>
+  <view class="preview-modal motion-fade-in" wx:if="{{!hideAudit && previewPhoto}}">
     <view class="preview-card motion-pop-in" catchtap="noop">
       <view class="preview-tape"></view>
 
@@ -106,8 +106,8 @@
   </view>
 
   <!-- 登录提示弹窗 -->
-  <view class="modal-mask motion-fade-in" wx:if="{{showLoginPrompt}}" bindtap="closeLoginPrompt"></view>
-  <view class="login-modal motion-fade-in" wx:if="{{showLoginPrompt}}">
+  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && showLoginPrompt}}" bindtap="closeLoginPrompt"></view>
+  <view class="login-modal motion-fade-in" wx:if="{{!hideAudit && showLoginPrompt}}">
     <view class="login-card motion-pop-in" catchtap="noop">
       <view class="login-icon">
         <image class="login-icon-img" src="/images/icons/heart-fill-yellow.svg" mode="aspectFit" />

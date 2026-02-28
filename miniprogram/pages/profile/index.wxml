@@ -74,7 +74,7 @@
           </view>
         </view>
 
-        <view class="menu-item motion-fade-up motion-delay-5" hover-class="menu-item--active" bindtap="goChangePassword">
+        <view class="menu-item motion-fade-up motion-delay-5" hover-class="menu-item--active" bindtap="goChangePassword" wx:if="{{canChangePassword}}">
           <view class="menu-icon">
             <image class="menu-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
           </view>
@@ -90,7 +90,8 @@
           </view>
           <view class="menu-texts">
             <text class="menu-title">后台管理</text>
-            <text class="menu-desc">查看统计、维护系统、管理预约与锁档</text>
+            <text class="menu-desc" wx:if="{{hideAudit}}">查看统计、维护系统、管理锁档</text>
+            <text class="menu-desc" wx:else>查看统计、维护系统、管理预约与锁档</text>
           </view>
         </view>
 

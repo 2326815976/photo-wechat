@@ -55,6 +55,7 @@ Page({
     activeLegalSections: [],
     activeLegalFooter: [],
     agreedToLegal: false,
+    hideAudit: false,
   },
 
   onLoad() {
@@ -62,12 +63,31 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
-    this.initLegalDocuments();
+    const hideAudit = Boolean(globalData.hideAudit);
+    this.setData({ safeTop, serviceMissing, hideAudit });
+    this.initLegalDocuments(hideAudit);
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((enabled) => {
+        const nextHideAudit = Boolean(enabled);
+        if (nextHideAudit === this.data.hideAudit) return;
+        this.setData({ hideAudit: nextHideAudit });
+        this.initLegalDocuments(nextHideAudit);
+      });
+    }
   },
 
-  initLegalDocuments() {
-    const docs = getLegalDocuments();
+  onUnload() {
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+      this._unsubscribeAuditConfig = null;
+    }
+  },
+
+  initLegalDocuments(hideAudit) {
+    const nextHideAudit =
+      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
+    const docs = getLegalDocuments({ hideAudit: nextHideAudit });
     this.legalDocMap = {};
     docs.forEach((doc) => {
       const key = String((doc && doc.key) || "").trim();
@@ -80,20 +100,24 @@ Page({
       title: String((doc && doc.title) || ""),
       shortTitle: String((doc && doc.shortTitle) || (doc && doc.title) || ""),
     }));
-    const defaultKey = tabs.length > 0 ? String(tabs[0].key || "") : "";
+    const activeKey = String(this.data.activeLegalKey || "").trim();
+    const hasActiveKey = tabs.some((tab) => String((tab && tab.key) || "") === activeKey);
+    const defaultKey = hasActiveKey ? activeKey : (tabs.length > 0 ? String(tabs[0].key || "") : "");
     this.setData({ legalDocTabs: tabs });
     if (defaultKey) {
-      this.applyLegalDocument(defaultKey);
+      this.applyLegalDocument(defaultKey, nextHideAudit);
     }
   },
 
-  applyLegalDocument(key) {
+  applyLegalDocument(key, hideAudit) {
     const normalizedKey = String(key || "").trim();
     if (!normalizedKey) return false;
+    const nextHideAudit =
+      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
 
     const doc =
       (this.legalDocMap && this.legalDocMap[normalizedKey]) ||
-      getLegalDocumentByKey(normalizedKey);
+      getLegalDocumentByKey(normalizedKey, { hideAudit: nextHideAudit });
     if (!doc) return false;
 
     this.setData({

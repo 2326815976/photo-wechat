@@ -254,6 +254,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
 
     loading: true,
     loadingMore: false,
@@ -285,11 +286,23 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const hideAudit = Boolean(globalData.hideAudit);
 
     this.preloadedPreviewUrls = new Set();
     this.photoRatioMap = Object.create(null);
     this.relayoutTimer = null;
-    this.setData({ safeTop, serviceMissing });
+    this.setData({ safeTop, serviceMissing, hideAudit });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
+        const enabled = Boolean(nextHideAudit);
+        this.setData({
+          hideAudit: enabled,
+          previewPhoto: enabled ? null : this.data.previewPhoto,
+          showLoginPrompt: enabled ? false : this.data.showLoginPrompt,
+        });
+      });
+    }
     this.refreshNetworkType();
 
     this.loadCachedGallery();
@@ -301,7 +314,22 @@ Page({
     }
   },
 
-  onShow() {
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
+    this.setData({
+      hideAudit,
+      previewPhoto: hideAudit ? null : this.data.previewPhoto,
+      showLoginPrompt: hideAudit ? false : this.data.showLoginPrompt,
+    });
+
     this.syncTabBar("pages/gallery/index");
     if (this.data.serviceMissing) return;
     this.refreshNetworkType();
@@ -320,6 +348,10 @@ Page({
 
   onUnload() {
     this.clearRelayoutTimer();
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   syncTabBar(selectedPath) {
@@ -645,6 +677,42 @@ Page({
     return photos.find((p) => String(p.id) === String(id)) || null;
   },
 
+  openPhotoFullscreenById(id) {
+    const photos = this.data.photos || [];
+    const previewable = photos.filter(
+      (p) => Boolean(p && (p.preview_url_resolved || p.thumbnail_url_resolved || p.original_url_resolved))
+    );
+    if (!previewable.length) {
+      wx.showToast({ title: "图片暂不可用", icon: "none" });
+      return;
+    }
+
+    const target =
+      previewable.find((p) => String(p.id) === String(id)) || previewable[0];
+    const currentUrl =
+      target.preview_url_resolved ||
+      target.thumbnail_url_resolved ||
+      target.original_url_resolved;
+    if (!currentUrl) {
+      wx.showToast({ title: "图片暂不可用", icon: "none" });
+      return;
+    }
+
+    const urls = previewable
+      .map((p) => p.preview_url_resolved || p.thumbnail_url_resolved || p.original_url_resolved)
+      .filter(Boolean);
+    if (!urls.length) {
+      wx.showToast({ title: "图片暂不可用", icon: "none" });
+      return;
+    }
+
+    this.markTransientForegroundReturn();
+    wx.previewImage({
+      current: currentUrl,
+      urls,
+    });
+  },
+
   updatePhoto(id, updater) {
     const updateOne = (p) => (String(p.id) === String(id) ? updater(p) : p);
 
@@ -659,19 +727,10 @@ Page({
     this.persistGalleryCache({ writeStorage: Number(this.data.pageNo || 1) === 1 });
   },
 
-  async previewPhoto(e) {
-    const id =
-      e && e.currentTarget && e.currentTarget.dataset
-        ? String(e.currentTarget.dataset.id || "")
-        : "";
+  async incrementPhotoViewCount(photoId, fallbackPhoto) {
+    const id = String(photoId || "").trim();
     if (!id) return;
 
-    const current = this.findPhotoById(id);
-    if (!current || !current.preview_url_resolved) return;
-
-    this.setData({ previewPhoto: current });
-
-    // 增加浏览量（匿名使用 session_id 去重）
     try {
       const sessionId = getSessionId();
       const r = await dbRpc("increment_photo_view", {
@@ -680,21 +739,60 @@ Page({
       });
 
       const rawPayload = r ? r.data : null;
+      if (typeof rawPayload !== "boolean" && hasExplicitRpcFailure(rawPayload)) {
+        return;
+      }
+
       const counted =
         typeof rawPayload === "boolean"
           ? rawPayload
           : Boolean(readFieldFromPayloadChain(rawPayload, "counted"));
-      if ((typeof rawPayload === "boolean" || !hasExplicitRpcFailure(rawPayload)) && counted) {
-        const viewCountValue = readFieldFromPayloadChain(rawPayload, "view_count");
-        const viewCount = Number((viewCountValue || current.view_count) || 0);
-        this.updatePhoto(id, (p) => Object.assign({}, p, { view_count: viewCount }));
+      if (!counted) {
+        return;
       }
+
+      const viewCountValue = readFieldFromPayloadChain(rawPayload, "view_count");
+      const viewCount = Number(
+        (viewCountValue ||
+          (fallbackPhoto && fallbackPhoto.view_count) ||
+          0)
+      );
+      this.updatePhoto(id, (p) => Object.assign({}, p, { view_count: viewCount }));
     } catch (e2) {
       // ignore
     }
   },
 
+  async previewPhoto(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!id) return;
+
+    const current = this.findPhotoById(id);
+    if (!current) return;
+
+    // 审核模式下直接全屏查看，但仍记录浏览量。
+    if (this.data.hideAudit) {
+      this.incrementPhotoViewCount(id, current);
+      this.openPhotoFullscreenById(id);
+      return;
+    }
+
+    // 兼容缺少预览图的历史数据：直接走全屏查看并计数。
+    if (!current.preview_url_resolved) {
+      this.incrementPhotoViewCount(id, current);
+      this.openPhotoFullscreenById(id);
+      return;
+    }
+
+    this.setData({ previewPhoto: current });
+    await this.incrementPhotoViewCount(id, current);
+  },
+
   async toggleLike(e) {
+    if (this.data.hideAudit) return;
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")

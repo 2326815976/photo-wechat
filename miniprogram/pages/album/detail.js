@@ -284,6 +284,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
 
     key: "",
     loading: true,
@@ -368,11 +369,23 @@ Page({
     this.setData({
       safeTop,
       serviceMissing,
+      hideAudit: Boolean(globalData.hideAudit),
       key,
       welcomeStorageKey: `album_welcome_seen_${key}`,
       rootFolderName: cachedRootFolderName || initialRootFolderName || "根目录",
       initialRootFolderName: cachedRootFolderName || initialRootFolderName || "",
     });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
+        const nextHideAudit = Boolean(hideAudit);
+        if (nextHideAudit && this.data.confirmPhotoId) {
+          this.setData({ hideAudit: nextHideAudit, confirmPhotoId: "" });
+          return;
+        }
+        this.setData({ hideAudit: nextHideAudit });
+      });
+    }
     if (!serviceMissing) {
       this.loadAlbum();
     } else {
@@ -385,6 +398,10 @@ Page({
     this.clearFolderGuideTimer();
     this.clearFolderWaveTimer();
     this.photoLoadTicket += 1;
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   noop() {},
@@ -1436,6 +1453,7 @@ Page({
   },
 
   async confirmPin() {
+    if (this.data.hideAudit) return;
     const id = String(this.data.confirmPhotoId || "");
     if (!id) return;
 
@@ -1444,6 +1462,7 @@ Page({
   },
 
   async togglePin(e) {
+    if (this.data.hideAudit) return;
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
@@ -1462,6 +1481,7 @@ Page({
   },
 
   async performTogglePin(id) {
+    if (this.data.hideAudit) return;
     try {
       const r = await dbRpc("pin_photo_to_wall", {
         p_access_key: this.data.key,

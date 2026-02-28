@@ -508,20 +508,28 @@
 .tag-selector-body {
   flex: 1;
   padding: 32rpx;
+  box-sizing: border-box;
 }
 
 .tag-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 24rpx; /* gap-3 */
+  justify-content: space-between;
+  align-content: flex-start;
+  row-gap: 16rpx;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .grid-btn {
-  width: calc((100% - 48rpx) / 3);
+  flex: 0 0 31.5%;
+  max-width: 31.5%;
+  min-width: 31.5%;
+  box-sizing: border-box;
   margin-bottom: 0;
-  padding: 24rpx 16rpx; /* px-4 py-3 */
-  border-radius: 32rpx; /* rounded-2xl */
-  font-size: 28rpx; /* text-sm */
+  padding: 14rpx 10rpx;
+  border-radius: 28rpx;
+  font-size: 24rpx;
   font-weight: 700;
   background: #FFFFFF;
   color: rgba(93, 64, 55, 0.60);

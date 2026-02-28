@@ -212,6 +212,65 @@ const DOCUMENTS = [
   },
 ];
 
+const HIDE_AUDIT_SECTION_PARAGRAPHS = {
+  terms: {
+    "一、协议适用范围": [
+      `本协议适用于“${APP_NAME}”微信小程序（以下简称“本服务”）提供的账号注册、登录、临时返图空间访问、相册浏览及管理后台功能。`,
+      "你在使用本服务前，应当完整阅读并理解本协议。你继续使用即视为已阅读并同意本协议全部条款。",
+    ],
+    "五、用户内容与授权": [
+      "你在本服务中上传或提交的内容（如图片、文字、联系方式）应确保拥有合法权利或授权。",
+      "为实现服务功能，你同意本服务在必要范围内对你提交的内容进行存储、展示、压缩、传输与备份处理。",
+    ],
+  },
+  privacy: {
+    "一、我们如何收集信息": [
+      "为实现基础功能，我们会按最小必要原则收集你主动填写、系统生成或在你授权后获取的信息。",
+      "收集场景包括：账号登录与注册、临时返图空间访问、相册访问、后台图片管理、系统安全审计。",
+    ],
+    "二、我们收集的信息类型": [
+      "账号信息：手机号、登录凭证、密码密文（服务端加密处理）。",
+      "业务信息：密钥关联的返图空间标识、联系方式、反馈备注信息。",
+      "内容信息：你上传的图片文件及必要的图片元数据（尺寸、时间等）。",
+      "设备与日志信息：基础设备信息、错误日志、接口访问日志，用于安全与故障排查。",
+    ],
+    "三、我们如何使用信息": [
+      "用于身份验证、返图空间访问控制、图片上传下载、消息提示、异常排查与安全风控。",
+      "用于统计分析以优化产品体验，但不会将你的个人信息用于超出本政策描述范围的用途。",
+    ],
+    "五、第三方服务说明": [
+      "本服务可能使用微信小程序基础能力、腾讯云云开发实现对应功能。",
+      "第三方服务将按照其自身隐私政策处理必要信息，请你同时关注相关第三方政策。",
+    ],
+    "七、你的权利": [
+      "你有权查询、更正、删除你的相关信息，并可申请注销账号。",
+      "你可在设备层面管理授权权限（如相册、相机），部分权限关闭后对应功能可能无法使用。",
+    ],
+  },
+  collection: {
+    "一、收集清单（按功能场景）": [
+      "1) 注册/登录：手机号、密码、微信登录凭证 code；用途为身份认证与账号安全。",
+      "2) 返图空间访问：密钥、返图空间标识、联系方式、反馈备注；用途为返图空间访问控制与服务沟通。",
+      "3) 相册与内容管理（管理员）：上传图片文件、图片尺寸与路径信息；用途为图片展示、管理和存储。",
+      "4) 运行日志：错误信息、接口状态、必要设备信息；用途为故障排查与安全防护。",
+    ],
+    "二、权限调用说明": [
+      "相册/相机权限：用于选择或拍摄图片并上传。",
+      "网络权限：用于与后端接口通信、上传下载文件。",
+      "你可随时在微信系统设置中关闭上述权限，关闭后可能影响对应功能使用。",
+    ],
+  },
+};
+
+function normalizeLegalOptions(options) {
+  if (!options || typeof options !== "object") {
+    return { hideAudit: false };
+  }
+  return {
+    hideAudit: Boolean(options.hideAudit),
+  };
+}
+
 function cloneDocument(doc) {
   return {
     key: String(doc.key || ""),
@@ -228,14 +287,43 @@ function cloneDocument(doc) {
   };
 }
 
-function getLegalDocuments() {
-  return DOCUMENTS.map((doc) => cloneDocument(doc));
+function applyHideAuditOverrides(doc) {
+  const key = String((doc && doc.key) || "").trim();
+  const overrides = HIDE_AUDIT_SECTION_PARAGRAPHS[key];
+  if (!overrides || typeof overrides !== "object") {
+    return cloneDocument(doc);
+  }
+
+  const nextDoc = cloneDocument(doc);
+  nextDoc.sections = nextDoc.sections.map((section) => {
+    const sectionTitle = String((section && section.title) || "");
+    const paragraphs = overrides[sectionTitle];
+    if (!Array.isArray(paragraphs)) {
+      return section;
+    }
+    return {
+      title: sectionTitle,
+      paragraphs: paragraphs.map((line) => String(line || "")),
+    };
+  });
+  return nextDoc;
 }
 
-function getLegalDocumentByKey(key) {
+function buildLegalDocument(doc, options) {
+  if (!doc) return null;
+  return options.hideAudit ? applyHideAuditOverrides(doc) : cloneDocument(doc);
+}
+
+function getLegalDocuments(options) {
+  const normalizedOptions = normalizeLegalOptions(options);
+  return DOCUMENTS.map((doc) => buildLegalDocument(doc, normalizedOptions));
+}
+
+function getLegalDocumentByKey(key, options) {
+  const normalizedOptions = normalizeLegalOptions(options);
   const normalized = String(key || "").trim();
   const matched = DOCUMENTS.find((doc) => String(doc.key || "") === normalized) || DOCUMENTS[0];
-  return matched ? cloneDocument(matched) : null;
+  return matched ? buildLegalDocument(matched, normalizedOptions) : null;
 }
 
 module.exports = {
