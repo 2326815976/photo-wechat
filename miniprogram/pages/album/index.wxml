@@ -102,7 +102,8 @@
               class="key-input"
               placeholder="输入神秘密钥..."
               placeholder-class="key-input-placeholder"
-              placeholder-style="color: rgba(93, 64, 55, 0.45);"
+              style="font-family: 'ZQKNNY','YouYuan','幼圆','Microsoft YaHei',sans-serif; font-weight: 900;"
+              placeholder-style="font-family: 'ZQKNNY','YouYuan','幼圆','Microsoft YaHei',sans-serif; color: rgba(93, 64, 55, 0.45);"
               value="{{accessKey}}"
               bindinput="onAccessKeyInput"
               maxlength="32"
@@ -113,7 +114,9 @@
             </view>
           </view>
 
-          <text class="error" wx:if="{{error}}">{{error}}</text>
+          <view class="error-slot">
+            <text class="error" wx:if="{{error}}">{{error}}</text>
+          </view>
 
           <button class="submit-btn" hover-class="submit-btn--active" bindtap="submit" disabled="{{submitting}}">
             <view class="submit-row">

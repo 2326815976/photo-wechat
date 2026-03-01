@@ -149,19 +149,19 @@ function readRootFolderNameFromPayload(payload) {
 function buildExpiryNotice(album) {
   const expiresAt = album && album.expires_at;
   if (!expiresAt) {
-    return "✨ 这里的照片只有 7 天的魔法时效，不被【定格】的瞬间会像泡沫一样悄悄飞走哦......";
+    return "✨ 当前空间内照片默认保留 7 天，请及时下载保存。";
   }
 
   const expiryDate = parseDateTimeUTC8(expiresAt);
   if (!expiryDate) {
-    return "✨ 这里的照片只有 7 天的魔法时效，不被【定格】的瞬间会像泡沫一样悄悄飞走哦......";
+    return "✨ 当前空间内照片默认保留 7 天，请及时下载保存。";
   }
 
   const daysLeft = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
   if (daysLeft > 0) {
-    return `✨ 这里的照片只有 ${daysLeft} 天的魔法时效，不被【定格】的瞬间会像泡沫一样悄悄飞走哦......`;
+    return `✨ 当前空间还可查看 ${daysLeft} 天，请及时下载保存。`;
   }
-  return "✨ 这里的照片魔法时效已过期，未被【定格】的照片已经消失......";
+  return "✨ 当前空间有效期已结束，照片已不可查看。";
 }
 
 function getExpiryDays(album) {
@@ -191,6 +191,27 @@ const ROOT_FOLDER_ID = "__ROOT__";
 const FOLDER_GUIDE_SEEN_KEY = "album_folder_tabs_guide_seen_v1";
 const PHOTO_PAGE_SIZE = 20;
 const PHOTO_BULK_PAGE_SIZE = 100;
+
+function computeToolbarStickyTop(safeTop) {
+  let windowWidth = 375;
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    } else if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  const unit = Math.max(windowWidth, 320) / 750;
+  const headerInnerHeight = 96 * unit; // app-header back-sub 高度
+  const headerBorder = 4 * unit; // app-header 下边框
+  const top = Number(safeTop || 0) + headerInnerHeight + headerBorder;
+  return Math.max(0, Math.round(top));
+}
 
 function splitWaterfallColumns(list) {
   const left = [];
@@ -283,6 +304,7 @@ function filterPhotosByFolder(list, folderId) {
 Page({
   data: {
     safeTop: 0,
+    toolbarStickyTop: 0,
     serviceMissing: false,
     hideAudit: false,
 
@@ -368,6 +390,7 @@ Page({
 
     this.setData({
       safeTop,
+      toolbarStickyTop: computeToolbarStickyTop(safeTop),
       serviceMissing,
       hideAudit: Boolean(globalData.hideAudit),
       key,

@@ -1,7 +1,7 @@
 <view class="page">
   <app-header
     title="{{headerTitle}}"
-    subtitle="{{hideAudit ? '✨ 在有效期内查看并下载你的照片 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
+    subtitle="{{hideAudit ? '✨ 趁图片消失前，把美好保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="pages/album/index"
@@ -28,7 +28,7 @@
     </view>
 
     <view wx:if="{{!loading && album}}">
-      <view class="notice motion-fade-up motion-delay-2" wx:if="{{!hideAudit && showNotice && expiryNotice}}">
+      <view class="notice motion-fade-up motion-delay-2" wx:if="{{showNotice && expiryNotice}}">
         <view class="notice-marquee">
           <view class="notice-track">
             <text class="notice-text">{{expiryNotice}}</text>
@@ -40,7 +40,7 @@
         </view>
       </view>
 
-      <view class="toolbar motion-fade-up motion-delay-3">
+      <view class="toolbar motion-fade-up motion-delay-3" style="top: {{toolbarStickyTop}}px;">
         <view class="toolbar-folders-wrap">
           <view class="folder-guide-tip motion-pop-in" wx:if="{{showFolderGuide}}" bindtap="dismissFolderGuide">
             <text class="folder-guide-tip__text">左右滑动 / 点击标签可切换</text>

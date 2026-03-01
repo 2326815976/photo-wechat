@@ -326,15 +326,18 @@
   height: 160rpx;
   border-radius: 999rpx;
   background: rgba(255, 200, 87, 0.20);
+  box-shadow: 0 10rpx 22rpx rgba(255, 200, 87, 0.20);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 24rpx;
+  animation: key-icon-float 3.2s ease-in-out infinite;
 }
 
 .key-icon-img {
   width: 80rpx;
   height: 80rpx;
+  animation: key-lock-breathe 2.6s ease-in-out infinite;
 }
 
 .key-card {
@@ -365,22 +368,28 @@
 .key-input-box {
   position: relative;
   z-index: 1;
+  padding: 6rpx;
+  border-radius: 36rpx;
+  background: linear-gradient(180deg, rgba(255, 200, 87, 0.2), rgba(255, 200, 87, 0.1));
+  border: 2rpx solid rgba(255, 200, 87, 0.34);
+  box-shadow: inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
 }
 
 .key-input {
   width: 100%;
   /* Web 输入框视觉高度约 52px（py-3 + text-lg + border）；小程序用固定高度对齐 */
-  height: 104rpx;
+  height: 100rpx;
   /* Web: px-4 + pr-12（右侧为粘贴按钮预留） */
-  padding-left: 32rpx;
-  padding-right: 112rpx;
+  padding-left: 30rpx;
+  padding-right: 108rpx;
   border-radius: 32rpx; /* rounded-2xl */
-  background: #FFFBF0;
-  border: 4rpx solid rgba(93, 64, 55, 0.20);
+  background: #FFFCF4;
+  border: 3rpx solid rgba(93, 64, 55, 0.20);
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
   font-size: 30rpx;
   font-weight: 700;
   text-align: center;
-  letter-spacing: 2rpx;
+  letter-spacing: 1.6rpx;
   box-sizing: border-box;
 }
 
@@ -390,14 +399,16 @@
 
 .paste-btn {
   position: absolute;
-  right: 16rpx; /* right-2 */
+  right: 18rpx; /* right-2 */
   top: 50%;
   transform: translateY(-50%);
-  width: 64rpx; /* w-8 */
+  width: 62rpx; /* w-8 */
   min-width: 0;
-  height: 64rpx; /* h-8 */
+  height: 62rpx; /* h-8 */
   border-radius: 999rpx;
-  background: rgba(255, 200, 87, 0.20);
+  background: #FFE8B0;
+  border: 2rpx solid rgba(93, 64, 55, 0.14);
+  box-shadow: 0 6rpx 12rpx rgba(93, 64, 55, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -409,7 +420,7 @@
 }
 
 .paste-btn--active {
-  background: rgba(255, 200, 87, 0.32);
+  background: #FFD989;
 }
 
 .paste-icon {
@@ -422,29 +433,38 @@
   border: none;
 }
 
-.error {
+.error-slot {
   position: relative;
   z-index: 1;
-  display: block;
+  min-height: 44rpx;
   margin-top: 12rpx;
+}
+
+.error {
+  width: 100%;
+  display: block;
+  margin-top: 0;
   text-align: center;
   color: #EF4444;
-  font-size: 24rpx;
+  font-size: 22rpx;
+  line-height: 1.45;
 }
 
 .submit-btn {
   position: relative;
   z-index: 1;
-  width: 100%;
-  height: 96rpx;
-  margin-top: 22rpx;
+  width: 74%;
+  min-width: 360rpx;
+  max-width: 500rpx;
+  height: 102rpx;
+  margin: 8rpx auto 0;
   border-radius: 32rpx;
-  background: #FFC857;
+  background: linear-gradient(180deg, #FFD86A 0%, #FFC857 100%);
   color: #5D4037;
   border: 4rpx solid #5D4037;
-  box-shadow: 8rpx 8rpx 0 #5D4037;
+  box-shadow: 0 10rpx 0 #704D3B;
   font-weight: 900;
-  font-size: 28rpx;
+  font-size: 30rpx;
   /* 小程序 button 在固定高度下默认不做垂直居中：对齐 Web 端 flex 居中按钮 */
   display: flex;
   align-items: center;
@@ -454,13 +474,13 @@
 }
 
 .submit-btn:active {
-  transform: translate(4rpx, 4rpx);
-  box-shadow: 4rpx 4rpx 0 #5D4037;
+  transform: translateY(6rpx);
+  box-shadow: 0 4rpx 0 #704D3B;
 }
 
 .submit-btn--active {
-  transform: translate(4rpx, 4rpx);
-  box-shadow: 4rpx 4rpx 0 #5D4037;
+  transform: translateY(6rpx);
+  box-shadow: 0 4rpx 0 #704D3B;
 }
 
 .submit-row {
@@ -616,4 +636,26 @@
 
 .confirm-btn--primary-active {
   transform: scale(0.98);
+}
+
+@keyframes key-icon-float {
+  0%, 100% {
+    transform: translateY(0);
+    box-shadow: 0 10rpx 22rpx rgba(255, 200, 87, 0.20);
+  }
+  50% {
+    transform: translateY(-6rpx);
+    box-shadow: 0 16rpx 28rpx rgba(255, 200, 87, 0.30);
+  }
+}
+
+@keyframes key-lock-breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.96;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
 }
