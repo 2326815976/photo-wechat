@@ -118,8 +118,8 @@ const ADMIN_SECTION_META = {
     desc: "管理不可预约日期，支持批量锁定",
   },
   gallery: {
-    title: "照片墙管理 🖼️",
-    desc: "管理公开展示照片",
+    title: "照片墙管理",
+    desc: "",
   },
   albums: {
     title: "专属空间管理 💝",
@@ -140,7 +140,7 @@ const ADMIN_NAV_ITEMS = [
   { key: "poses", label: "摆姿管理", desc: "姿势与标签", icon: "📸" },
   { key: "bookings", label: "预约管理", desc: "预约与城市", icon: "📅" },
   { key: "schedule", label: "档期管理", desc: "锁档日期", icon: "🗓️" },
-  { key: "gallery", label: "照片墙管理", desc: "公开照片", icon: "🖼️" },
+  { key: "gallery", label: "照片墙管理", desc: "完整功能", icon: "🖼️" },
   { key: "albums", label: "专属空间管理", desc: "返图空间", icon: "💝" },
   { key: "about", label: "关于设置", desc: "作者信息", icon: "ℹ️" },
   { key: "releases", label: "发布版本", desc: "安装包发布", icon: "📦" },
@@ -1433,6 +1433,7 @@ Page({
     if (!ADMIN_SECTION_META[key]) {
       return;
     }
+
     const patch = {};
     patch.releaseMode = "list";
     patch.releaseDeleteModalOpen = false;
@@ -1549,9 +1550,6 @@ Page({
     this.closeMobileMenu();
     if (Object.keys(patch).length) {
       this.setData(patch, () => {
-        if (key === "gallery") {
-          this.refreshGalleryModuleView();
-        }
         if (key === "about") {
           void this.loadAboutSettings().catch((error) => {
             this.showNotice("error", readErrorMessage(error, "加载关于信息失败"));
@@ -3016,7 +3014,7 @@ Page({
             viewCount: Number((row && row.view_count) || 0),
             likeCount: Number((row && row.like_count) || 0),
             createdAtText: formatDateTime(row && row.created_at),
-            createdDateText: formatDateOnly(row && row.created_at),
+            createdDateText: formatDateOnly((row && row.shot_date) || (row && row.created_at)),
             assets: assets.filter(Boolean),
           };
         })
@@ -7303,7 +7301,7 @@ Page({
 
   onOpenGalleryWallAlbumDetail() {
     if (this.data.albumActionLoading || this.data.albumBatchDeleting) return;
-    const title = encodeURIComponent("照片墙空间");
+    const title = encodeURIComponent("照片墙管理");
     wx.navigateTo({
       url: `/pages/admin/album-detail/index?id=${SYSTEM_GALLERY_ALBUM_ID}&title=${title}&key=PUBLIC_GALLERY`,
     });

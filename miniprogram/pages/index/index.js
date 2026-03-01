@@ -68,6 +68,7 @@ Page({
     safeTop: 0,
 
     serviceMissing: false,
+    hideAudit: false,
 
     tags: [],
     displayTags: [],
@@ -111,8 +112,26 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const hideAudit = Boolean(globalData.hideAudit);
 
-    this.setData({ safeTop, serviceMissing });
+    this.setData({ safeTop, serviceMissing, hideAudit });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
+        const enabled = Boolean(nextHideAudit);
+        if (!enabled) {
+          this.setData({ hideAudit: false });
+          return;
+        }
+        this.setData({ hideAudit: true });
+        this.redirectToGallery();
+      });
+    }
+
+    if (hideAudit) {
+      this.redirectToGallery();
+      return;
+    }
 
     this.loadCachedTags();
     this.loadCachedPose();
@@ -121,6 +140,31 @@ Page({
   },
 
   onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      app.ensureAuditConfig()
+        .then((hideAudit) => {
+          const enabled = Boolean(hideAudit);
+          this.setData({ hideAudit: enabled });
+          if (enabled) {
+            this.redirectToGallery();
+          }
+        })
+        .catch(() => {});
+    } else {
+      const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
+      this.setData({ hideAudit: enabled });
+      if (enabled) {
+        this.redirectToGallery();
+        return;
+      }
+    }
+
+    if (this.data.hideAudit) {
+      this.redirectToGallery();
+      return;
+    }
+
     this.syncTabBar("pages/index/index");
     if (!this.data.pageReady) {
       this.markPageReady();
@@ -155,6 +199,10 @@ Page({
     this.stopTagsRefreshTimer();
     this.stopViewFlushTimer();
     this.flushViewCounts();
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   syncTabBar(selectedPath) {
@@ -168,6 +216,17 @@ Page({
   },
 
   noop() {},
+
+  redirectToGallery() {
+    if (this._redirectingToGallery) return;
+    this._redirectingToGallery = true;
+    wx.switchTab({
+      url: "/pages/gallery/index",
+      complete: () => {
+        this._redirectingToGallery = false;
+      },
+    });
+  },
 
   markTransientForegroundReturn() {
     this._suppressRefreshOnNextShow = true;

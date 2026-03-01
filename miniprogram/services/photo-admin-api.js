@@ -105,6 +105,14 @@ function isColumnMissingError(error, columnName) {
   );
 }
 
+function getTodayDateUTC8() {
+  const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function assertDbSuccess(result, fallback) {
   if (result && result.error) {
     throw new Error(toErrorMessage(result.error, fallback));
@@ -1635,14 +1643,24 @@ async function deleteAdminRelease(releaseId) {
 async function listAdminGalleryPhotos(limit) {
   await requireAdminSession();
   const pageLimit = Math.max(1, Math.min(2000, Number(limit || 500)));
-  const result = await dbQuery({
+  let result = await dbQuery({
     table: "album_photos",
     action: "select",
     columns:
-      "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height",
-    orders: [{ column: "created_at", ascending: false }],
+      "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,shot_date,created_at,width,height",
+    orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
     limit: pageLimit,
   });
+  if (result && result.error && isColumnMissingError(result.error, "shot_date")) {
+    result = await dbQuery({
+      table: "album_photos",
+      action: "select",
+      columns:
+        "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height",
+      orders: [{ column: "created_at", ascending: false }],
+      limit: pageLimit,
+    });
+  }
   const data = assertDbSuccess(result, "获取照片墙列表失败");
   const rows = Array.isArray(data) ? data : [];
 
@@ -1676,6 +1694,7 @@ async function createAdminGalleryPhoto(input) {
       preview_url: uploadResult.url,
       original_url: uploadResult.url,
       is_public: true,
+      shot_date: getTodayDateUTC8(),
     };
     if (Number.isFinite(width) && width > 0) {
       values.width = Math.round(width);

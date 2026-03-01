@@ -1,7 +1,7 @@
 <view class="page">
   <app-header
-    title="专属返图空间"
-    subtitle="🤫 嘘，这里藏着你的独家记忆 🤫"
+    title="{{hideAudit ? '相册提取' : '专属返图空间'}}"
+    subtitle="{{hideAudit ? '✨ 解锁加密相册 ✨' : '🤫 嘘，这里藏着你的独家记忆 🤫'}}"
     safeTop="{{safeTop}}"
   />
 
@@ -126,7 +126,7 @@
           </button>
 
           <view class="key-tips">
-            <text class="key-tip">💡 提示：输入密钥后即可直接进入临时专属返图空间</text>
+            <text class="key-tip">💡 提示：输入密钥后即可进入临时相册空间</text>
             <text class="key-tip">密钥由管理员提供，到期后空间将自动销毁</text>
           </view>
         </view>

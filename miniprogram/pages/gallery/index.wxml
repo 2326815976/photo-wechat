@@ -1,7 +1,7 @@
 <view class="page">
   <app-header
-    title="照片墙"
-    subtitle="📸 贩卖人间路过的温柔 📸"
+    title="{{hideAudit ? '拾光谣' : '照片墙'}}"
+    subtitle="{{hideAudit ? '✨ 定格美好瞬间 ✨' : '📸 贩卖人间路过的温柔 📸'}}"
     safeTop="{{safeTop}}"
   />
 
@@ -46,7 +46,10 @@
             <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="story-panel" data-id="{{item.id}}" bindtap="toggleStory">
-                  <text class="story-panel__text">{{item.story_text}}</text>
+                  <view class="story-panel__paper">
+                    <text class="story-panel__title">关于此刻</text>
+                    <text class="story-panel__text">{{item.story_text}}</text>
+                  </view>
                 </view>
               </block>
               <block wx:else>
@@ -64,9 +67,6 @@
                 <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
-              <view class="highlight-badge" wx:if="{{item.has_story && !item.story_open}}">
-                <text class="highlight-badge__text">有故事</text>
-              </view>
             </view>
             <view class="meta">
               <text class="date">{{item.created_at_text}}</text>
@@ -82,7 +82,10 @@
             <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="story-panel" data-id="{{item.id}}" bindtap="toggleStory">
-                  <text class="story-panel__text">{{item.story_text}}</text>
+                  <view class="story-panel__paper">
+                    <text class="story-panel__title">关于此刻</text>
+                    <text class="story-panel__text">{{item.story_text}}</text>
+                  </view>
                 </view>
               </block>
               <block wx:else>
@@ -100,9 +103,6 @@
                 <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
-              <view class="highlight-badge" wx:if="{{item.has_story && !item.story_open}}">
-                <text class="highlight-badge__text">有故事</text>
-              </view>
             </view>
             <view class="meta">
               <text class="date">{{item.created_at_text}}</text>

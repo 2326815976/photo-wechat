@@ -1,5 +1,5 @@
 const BOOKING_PAGE_PATH = "pages/booking/index";
-const BASE_TAB_LIST = [
+const DEFAULT_TAB_LIST = [
   {
     pagePath: "pages/index/index",
     text: "首页",
@@ -31,6 +31,26 @@ const BASE_TAB_LIST = [
     selectedIconPath: "/images/tab/user-active.svg",
   },
 ];
+const HIDE_AUDIT_TAB_LIST = [
+  {
+    pagePath: "pages/gallery/index",
+    text: "照片墙",
+    iconPath: "/images/tab/image.svg",
+    selectedIconPath: "/images/tab/image-active.svg",
+  },
+  {
+    pagePath: "pages/album/index",
+    text: "提取",
+    iconPath: "/images/tab/lock.svg",
+    selectedIconPath: "/images/tab/lock-active.svg",
+  },
+  {
+    pagePath: "pages/profile/index",
+    text: "关于",
+    iconPath: "/images/tab/user.svg",
+    selectedIconPath: "/images/tab/user-active.svg",
+  },
+];
 
 Component({
   data: {
@@ -38,7 +58,7 @@ Component({
     selectedPath: "pages/index/index",
     visible: true,
     hideAudit: false,
-    list: BASE_TAB_LIST.slice(),
+    list: DEFAULT_TAB_LIST.slice(),
   },
   lifetimes: {
     attached() {
@@ -63,9 +83,9 @@ Component({
   methods: {
     applyAuditConfig(hideAudit) {
       const nextHideAudit = Boolean(hideAudit);
-      const nextList = BASE_TAB_LIST.filter(
-        (item) => !(nextHideAudit && item.pagePath === BOOKING_PAGE_PATH)
-      );
+      const nextList = nextHideAudit
+        ? HIDE_AUDIT_TAB_LIST.slice()
+        : DEFAULT_TAB_LIST.slice();
 
       const selectedPath = String(this.data.selectedPath || "")
         .trim()

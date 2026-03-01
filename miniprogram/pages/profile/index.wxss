@@ -418,3 +418,235 @@
 .menu-title--danger {
   color: #EF4444;
 }
+
+.error {
+  background: #fef2f2;
+  border: 2rpx solid #fecaca;
+  border-radius: 28rpx;
+  padding: 18rpx 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.error-text {
+  color: #dc2626;
+  text-align: center;
+  font-size: 24rpx;
+  display: block;
+}
+
+.paper-card {
+  background: #fffdf5;
+  border-radius: 32rpx;
+  padding: 40rpx;
+  box-shadow: 0 12rpx 36rpx rgba(93, 64, 55, 0.12);
+  margin-bottom: 24rpx;
+}
+
+.author-head {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.author-avatar {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #ffc857 0%, #ffb347 60%, #ff9a3c 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  font-weight: 700;
+  flex: none;
+}
+
+.author-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.author-name {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #5d4037;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.author-sub {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: rgba(93, 64, 55, 0.56);
+}
+
+.message-box {
+  border-radius: 22rpx;
+  background: rgba(255, 200, 87, 0.12);
+  border: 2rpx solid rgba(255, 200, 87, 0.28);
+  padding: 18rpx 20rpx;
+}
+
+.message-title {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #5d4037;
+  margin-bottom: 8rpx;
+}
+
+.message-text {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: rgba(93, 64, 55, 0.85);
+  word-break: break-all;
+}
+
+.section-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #5d4037;
+  margin-bottom: 16rpx;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  padding: 16rpx 0;
+  border-bottom: 2rpx dashed rgba(93, 64, 55, 0.14);
+}
+
+.contact-item:last-child {
+  border-bottom: none;
+}
+
+.contact-icon {
+  width: 34rpx;
+  height: 34rpx;
+  flex: none;
+}
+
+.contact-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-label {
+  display: block;
+  font-size: 22rpx;
+  color: rgba(93, 64, 55, 0.6);
+}
+
+.contact-value {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 25rpx;
+  color: #5d4037;
+  line-height: 1.45;
+}
+
+.contact-value--break {
+  word-break: break-all;
+}
+
+.contact-copy {
+  flex: none;
+  min-width: 76rpx;
+  height: 42rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 200, 87, 0.22);
+  color: #5d4037;
+  font-size: 20rpx;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-wrap {
+  border-radius: 24rpx;
+  overflow: hidden;
+  border: 2rpx solid rgba(93, 64, 55, 0.12);
+  background: #ffffff;
+}
+
+.qr-image {
+  width: 100%;
+  display: block;
+}
+
+.qr-tip {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: rgba(93, 64, 55, 0.55);
+  text-align: center;
+}
+
+.qr-save-btn {
+  margin-top: 16rpx;
+  width: 100%;
+  height: 80rpx;
+  border-radius: 999rpx;
+  border: none;
+  background: #ffc857;
+  color: #5d4037;
+  font-size: 26rpx;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 6rpx 16rpx rgba(93, 64, 55, 0.16);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.qr-save-btn--active {
+  transform: scale(0.985);
+  box-shadow: 0 4rpx 10rpx rgba(93, 64, 55, 0.16);
+}
+
+.qr-save-btn--disabled {
+  opacity: 0.65;
+}
+
+.audit-entry-card {
+  background: #ffffff;
+  border-radius: 28rpx;
+  border: 2rpx solid rgba(255, 200, 87, 0.36);
+  box-shadow: 0 10rpx 30rpx rgba(93, 64, 55, 0.08);
+  padding: 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.audit-entry-card__title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #5d4037;
+}
+
+.audit-entry-card__desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  color: rgba(93, 64, 55, 0.64);
+}
+
+.audit-entry-card__actions {
+  margin-top: 20rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.audit-entry-card__btn {
+  width: 100%;
+}

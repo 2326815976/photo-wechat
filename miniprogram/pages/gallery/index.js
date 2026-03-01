@@ -8,8 +8,6 @@ const {
 } = require("../../utils/gallery-cache");
 
 const PAGE_SIZE = 20;
-const PRELOAD_LIMIT_WIFI = 1;
-const PRELOAD_LIMIT_FALLBACK = 0;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
 const GALLERY_CACHE_TTL = 30 * 60 * 1000;
 const ROOT_FOLDER_ID = "__ROOT__";
@@ -303,15 +301,17 @@ Page({
 
     previewPhoto: null,
     showLoginPrompt: false,
-    networkType: "",
 
   },
 
   leftHeight: 0,
   rightHeight: 0,
-  preloadedPreviewUrls: null,
   photoRatioMap: null,
   relayoutTimer: null,
+  scrollMetricsTimer: null,
+  viewportHeight: 0,
+  pageHeight: 0,
+  loadingNextPage: false,
 
   onLoad() {
     const app = getApp();
@@ -320,10 +320,23 @@ Page({
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const hideAudit = Boolean(globalData.hideAudit);
 
-    this.preloadedPreviewUrls = new Set();
     this.photoRatioMap = Object.create(null);
     this.relayoutTimer = null;
+    this.scrollMetricsTimer = null;
+    this.viewportHeight = 0;
+    this.pageHeight = 0;
+    this.loadingNextPage = false;
     this.setData({ safeTop, serviceMissing, hideAudit });
+
+    try {
+      const systemInfo = wx.getSystemInfoSync();
+      const windowHeight = Number(systemInfo && systemInfo.windowHeight);
+      if (Number.isFinite(windowHeight) && windowHeight > 0) {
+        this.viewportHeight = windowHeight;
+      }
+    } catch (error) {
+      this.viewportHeight = 0;
+    }
 
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
@@ -335,9 +348,9 @@ Page({
         });
       });
     }
-    this.refreshNetworkType();
 
     this.loadCachedGallery();
+    this.scheduleScrollMetricsRefresh();
 
     if (!serviceMissing) {
       this.bootstrap();
@@ -364,8 +377,11 @@ Page({
 
     this.syncTabBar("pages/gallery/index");
     if (this.data.serviceMissing) return;
-    this.refreshNetworkType();
     if (this.consumeSuppressRefreshOnShow()) return;
+    if (this.data.loading || this.data.loadingMore) {
+      void this.refreshLoginState();
+      return;
+    }
 
     const shouldForceRefresh = consumeGalleryCacheDirty();
     if (shouldForceRefresh) {
@@ -376,10 +392,13 @@ Page({
     }
 
     void this.refreshLoginState();
+    void this.loadPage(1, { silent: true });
   },
 
   onUnload() {
     this.clearRelayoutTimer();
+    this.clearScrollMetricsTimer();
+    this.loadingNextPage = false;
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
     }
@@ -411,7 +430,8 @@ Page({
     this.clearRelayoutTimer();
     this.leftHeight = 0;
     this.rightHeight = 0;
-    this.preloadedPreviewUrls = new Set();
+    this.pageHeight = 0;
+    this.loadingNextPage = false;
     this.photoRatioMap = Object.create(null);
 
     this.setData({
@@ -463,7 +483,8 @@ Page({
     this.clearRelayoutTimer();
     this.leftHeight = 0;
     this.rightHeight = 0;
-    this.preloadedPreviewUrls = new Set();
+    this.pageHeight = 0;
+    this.loadingNextPage = false;
     this.photoRatioMap = Object.create(null);
 
     this.setData({
@@ -510,7 +531,6 @@ Page({
     });
 
     this.persistGalleryCache({ writeStorage: Boolean(storage) });
-    this.preloadPreviewImages();
   },
 
   buildColumnsFromPhotos(photos) {
@@ -542,23 +562,78 @@ Page({
     this.relayoutTimer = null;
   },
 
-  refreshNetworkType() {
-    wx.getNetworkType({
-      success: (res) => {
-        const type = String((res && res.networkType) || "").trim().toLowerCase();
-        this.setData({ networkType: type });
-      },
-      fail: () => {
-        this.setData({ networkType: "" });
-      },
+  clearScrollMetricsTimer() {
+    if (!this.scrollMetricsTimer) return;
+    clearTimeout(this.scrollMetricsTimer);
+    this.scrollMetricsTimer = null;
+  },
+
+  scheduleScrollMetricsRefresh(delay = 80) {
+    this.clearScrollMetricsTimer();
+    this.scrollMetricsTimer = setTimeout(() => {
+      this.scrollMetricsTimer = null;
+      this.refreshScrollMetrics();
+    }, Math.max(0, Number(delay || 0)));
+  },
+
+  refreshScrollMetrics() {
+    const query = wx.createSelectorQuery();
+    query
+      .select(".page")
+      .boundingClientRect();
+    query.exec((result) => {
+      const rect = Array.isArray(result) ? result[0] : null;
+      const nextPageHeight = Number(rect && rect.height);
+      if (Number.isFinite(nextPageHeight) && nextPageHeight > 0) {
+        this.pageHeight = nextPageHeight;
+      }
+      if (!(this.viewportHeight > 0)) {
+        try {
+          const systemInfo = wx.getSystemInfoSync();
+          const windowHeight = Number(systemInfo && systemInfo.windowHeight);
+          if (Number.isFinite(windowHeight) && windowHeight > 0) {
+            this.viewportHeight = windowHeight;
+          }
+        } catch (error) {
+          // ignore
+        }
+      }
     });
   },
 
-  getPreviewPreloadLimit() {
-    const networkType = String(this.data.networkType || "").trim().toLowerCase();
-    if (networkType === "wifi") return PRELOAD_LIMIT_WIFI;
-    if (!networkType || networkType === "unknown") return PRELOAD_LIMIT_FALLBACK;
-    return 0;
+  loadNextPage(reason) {
+    if (this.data.serviceMissing) return false;
+    if (this.data.loading) return false;
+    if (this.data.loadingMore) return false;
+    if (!this.data.hasMore) return false;
+    if (this.loadingNextPage) return false;
+
+    this.loadingNextPage = true;
+    const nextPage = Number(this.data.pageNo || 1) + 1;
+    Promise.resolve(this.loadPage(nextPage))
+      .finally(() => {
+        this.loadingNextPage = false;
+        this.scheduleScrollMetricsRefresh(120);
+      });
+    return true;
+  },
+
+  onPageScroll(e) {
+    if (this.data.serviceMissing) return;
+    if (this.data.loading) return;
+    if (this.data.loadingMore) return;
+    if (!this.data.hasMore) return;
+
+    const scrollTop = Number(e && e.scrollTop);
+    const viewportHeight = Number(this.viewportHeight || 0);
+    const pageHeight = Number(this.pageHeight || 0);
+    if (!Number.isFinite(scrollTop) || scrollTop < 0) return;
+    if (!(viewportHeight > 0) || !(pageHeight > viewportHeight)) return;
+
+    const scrollProgress = (scrollTop + viewportHeight) / pageHeight;
+    if (scrollProgress >= 0.8) {
+      this.loadNextPage("scroll-80");
+    }
   },
 
   scheduleRelayout() {
@@ -602,6 +677,7 @@ Page({
       left: columns.left,
       right: columns.right,
     });
+    this.scheduleScrollMetricsRefresh();
   },
 
   appendPhotos(photos) {
@@ -656,27 +732,6 @@ Page({
     if (opts && opts.writeStorage) {
       writeGalleryStorageCache(photos, total);
     }
-  },
-
-  preloadPreviewImages() {
-    const rows = this.data.photos || [];
-    const limit = this.getPreviewPreloadLimit();
-    if (limit <= 0) return;
-
-    rows.slice(0, limit).forEach((photo) => {
-      const url = String(photo && photo.preview_url_resolved ? photo.preview_url_resolved : "").trim();
-      if (!url) return;
-      if (this.preloadedPreviewUrls && this.preloadedPreviewUrls.has(url)) return;
-
-      if (this.preloadedPreviewUrls) {
-        this.preloadedPreviewUrls.add(url);
-      }
-
-      wx.getImageInfo({
-        src: url,
-        fail: () => {},
-      });
-    });
   },
 
   async loadPage(pageNo, opts) {
@@ -746,7 +801,6 @@ Page({
       });
 
       this.persistGalleryCache({ writeStorage: pageNo === 1 });
-      this.preloadPreviewImages();
     } catch (e) {
       if (!(pageNo === 1 && silent)) {
         wx.showToast({ title: "加载失败", icon: "none" });
@@ -757,10 +811,7 @@ Page({
   },
 
   onReachBottom() {
-    if (this.data.serviceMissing) return;
-    if (this.data.loadingMore) return;
-    if (!this.data.hasMore) return;
-    void this.loadPage(this.data.pageNo + 1);
+    this.loadNextPage("reach-bottom");
   },
 
   findPhotoById(id) {

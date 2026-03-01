@@ -78,7 +78,7 @@
 
         <view class="module-intro motion-fade-up" wx:if="{{activeSection !== 'stats' && activeSection !== 'poses' && activeSection !== 'releases'}}">
           <text class="module-title">{{activeSectionTitle}}</text>
-          <text class="module-desc">{{activeSectionDesc}}</text>
+          <text class="module-desc" wx:if="{{activeSection !== 'gallery' && activeSectionDesc}}">{{activeSectionDesc}}</text>
         </view>
 
         <block wx:if="{{activeSection === 'stats'}}">
@@ -1232,166 +1232,7 @@
         </block>
 
         <block wx:if="{{activeSection === 'gallery'}}">
-          <view class="booking-panel gallery-panel motion-fade-up">
-            <view class="booking-toolbar gallery-toolbar">
-              <view class="booking-toolbar-actions booking-toolbar-actions--right" wx:if="{{!gallerySelectionMode}}">
-                <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onEnterGallerySelectionMode"
-                  hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{galleryLoading || !galleryTotalCount}}"
-                >
-                  批量删除
-                </button>
-                <button
-                  class="booking-pill-btn booking-pill-btn--primary"
-                  bindtap="onOpenGalleryWallAlbumDetail"
-                  hover-class="booking-pill-btn--primary-active"
-                  disabled="{{galleryLoading}}"
-                >
-                  照片墙空间管理
-                </button>
-              </view>
-
-              <view class="booking-toolbar-actions booking-toolbar-actions--selection" wx:if="{{gallerySelectionMode}}">
-                <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onToggleGallerySelectAll"
-                  hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{galleryBatchDeleting}}"
-                >
-                  {{galleryAllSelected ? "取消全选" : "全选"}} ({{gallerySelectedCount}}/{{galleryTotalCount}})
-                </button>
-                <button
-                  class="booking-pill-btn booking-pill-btn--danger"
-                  bindtap="onOpenGalleryBatchDeleteConfirm"
-                  hover-class="booking-pill-btn--danger-active"
-                  disabled="{{galleryBatchDeleting || !gallerySelectedCount}}"
-                  loading="{{galleryBatchDeleting}}"
-                >
-                  删除 ({{gallerySelectedCount}})
-                </button>
-                <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onCancelGallerySelectionMode"
-                  hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{galleryBatchDeleting}}"
-                >
-                  取消
-                </button>
-              </view>
-            </view>
-
-            <view class="gallery-album-filter" wx:if="{{galleryAlbumFilterId}}">
-              <view class="gallery-album-filter__main">
-                <text class="gallery-album-filter__label">当前图集</text>
-                <text class="gallery-album-filter__title">{{galleryAlbumFilterTitle}}</text>
-              </view>
-              <button
-                class="gallery-album-filter__clear"
-                bindtap="onClearGalleryAlbumFilter"
-                hover-class="gallery-album-filter__clear--active"
-                disabled="{{galleryBatchDeleting || galleryActionLoading}}"
-              >
-                查看全部
-              </button>
-            </view>
-
-            <view class="pose-loading" wx:if="{{galleryLoading}}">
-              <view class="pose-loading__spinner"></view>
-              <text class="pose-loading__text">加载中...</text>
-            </view>
-
-            <view class="empty booking-empty-card gallery-empty-card" wx:elif="{{!galleryRows.length}}">
-              <text class="booking-empty-card__icon">🖼️</text>
-              <text>暂无照片</text>
-            </view>
-
-            <view class="gallery-grid" wx:else>
-              <view
-                class="gallery-card {{gallerySelectionMode ? (item.selected ? 'gallery-card--selected' : 'gallery-card--selectable') : ''}} {{!item.isPublic ? 'gallery-card--hidden' : ''}}"
-                wx:for="{{galleryRows}}"
-                wx:key="id"
-                data-id="{{item.id}}"
-                bindtap="onToggleGallerySelection"
-              >
-                <view class="gallery-card__media">
-                  <view class="gallery-card__check {{item.selected ? 'gallery-card__check--active' : ''}}" wx:if="{{gallerySelectionMode}}">
-                    <text wx:if="{{item.selected}}">✓</text>
-                  </view>
-
-                  <image
-                    class="gallery-card__image"
-                    src="{{item.imageResolved}}"
-                    mode="aspectFill"
-                    data-url="{{item.previewResolved || item.imageResolved}}"
-                    catchtap="onPreviewGalleryImage"
-                  />
-
-                  <button
-                    wx:if="{{!gallerySelectionMode}}"
-                    class="gallery-card__hide"
-                    data-id="{{item.id}}"
-                    catchtap="onHideGalleryPhoto"
-                    hover-class="gallery-card__hide--active"
-                    disabled="{{galleryActionLoading}}"
-                  >
-                    <image
-                      class="gallery-card__hide-icon"
-                      src="{{item.isPublic ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-brown.svg'}}"
-                      mode="aspectFit"
-                    />
-                  </button>
-
-                  <button
-                    wx:if="{{!gallerySelectionMode}}"
-                    class="gallery-card__delete"
-                    data-id="{{item.id}}"
-                    catchtap="onOpenGalleryDeleteConfirm"
-                    hover-class="gallery-card__delete--active"
-                    disabled="{{galleryActionLoading}}"
-                  >
-                    <image class="gallery-card__delete-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
-                  </button>
-                </view>
-
-                <view class="gallery-card__meta">
-                  <view class="gallery-card__stats">
-                    <view class="gallery-card__stat">
-                      <text class="gallery-card__stat-icon">❤</text>
-                      <text>{{item.likeCount}}</text>
-                    </view>
-                    <view class="gallery-card__stat">
-                      <text class="gallery-card__stat-icon">👁</text>
-                      <text>{{item.viewCount}}</text>
-                    </view>
-                    <view class="gallery-visibility {{item.visibilityClass}}">
-                      <text>{{item.visibilityText}}</text>
-                    </view>
-                  </view>
-                  <text class="gallery-card__date">{{item.createdDateText}}</text>
-                </view>
-              </view>
-            </view>
-
-            <view class="gallery-pagination">
-              <button
-                class="gallery-page-btn gallery-page-btn--ghost"
-                bindtap="onGalleryPrevPage"
-                disabled="{{galleryLoading || galleryCurrentPage <= 1}}"
-              >
-                上一页
-              </button>
-              <text class="gallery-page-indicator">第 {{galleryCurrentPage}} 页 / 共 {{galleryTotalPages}} 页</text>
-              <button
-                class="gallery-page-btn gallery-page-btn--ghost"
-                bindtap="onGalleryNextPage"
-                disabled="{{galleryLoading || galleryCurrentPage >= galleryTotalPages}}"
-              >
-                下一页
-              </button>
-            </view>
-          </view>
+          <gallery-manager class="motion-fade-up" />
         </block>
 
         <block wx:if="{{activeSection === 'albums'}}">
@@ -1408,11 +1249,12 @@
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onOpenGalleryWallAlbumDetail"
+                  bindtap="onSelectSection"
+                  data-key="gallery"
                   hover-class="booking-pill-btn--ghost-active"
                   disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
                 >
-                  照片墙空间管理
+                  照片墙管理
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
@@ -2406,128 +2248,6 @@
           disabled="{{cityDeletingId !== 0}}"
         >
           {{cityDeletingId !== 0 ? "删除中..." : "确认删除"}}
-        </button>
-      </view>
-    </view>
-  </view>
-
-  <view class="booking-modal-mask" wx:if="{{activeSection === 'gallery' && galleryUploadModalOpen}}" bindtap="onCloseGalleryUploadModal">
-    <view class="booking-modal booking-modal--form gallery-upload-modal" catchtap="onPoseModalTap">
-      <view class="booking-modal__head">
-        <text class="booking-modal__title">批量上传照片</text>
-        <view class="booking-modal__close" bindtap="onCloseGalleryUploadModal">
-          <text>✕</text>
-        </view>
-      </view>
-      <view class="booking-modal__body">
-        <view class="gallery-upload-picker" catchtap="onChooseGalleryUploadImages">
-          <text class="gallery-upload-picker__icon">📤</text>
-          <text class="gallery-upload-picker__text" wx:if="{{galleryUploadFiles.length}}">
-            已选择 {{galleryUploadFiles.length}} 张图片
-          </text>
-          <text class="gallery-upload-picker__text" wx:else>点击选择多张图片</text>
-        </view>
-
-        <view class="gallery-upload-list-wrap" wx:if="{{galleryUploadFiles.length}}">
-          <view class="gallery-upload-list-head">
-            <text class="gallery-upload-list-title">已选择 {{galleryUploadFiles.length}} 张</text>
-            <view class="gallery-upload-list-clear" bindtap="onClearGalleryUploadFiles">
-              <text>清空</text>
-            </view>
-          </view>
-          <scroll-view class="gallery-upload-list" scroll-y="true">
-            <view class="gallery-upload-item" wx:for="{{galleryUploadFiles}}" wx:key="key">
-              <view class="gallery-upload-item__main">
-                <text class="gallery-upload-item__name">{{index + 1}}. {{item.fileName}}</text>
-                <text class="gallery-upload-item__meta">{{item.sizeText}}</text>
-              </view>
-              <view class="gallery-upload-item__remove" data-index="{{index}}" bindtap="onRemoveGalleryUploadFile" wx:if="{{!galleryUploadSubmitting}}">
-                <text>✕</text>
-              </view>
-            </view>
-          </scroll-view>
-        </view>
-
-        <view class="gallery-upload-progress" wx:if="{{galleryUploadSubmitting && galleryUploadProgressTotal > 0}}">
-          <view class="gallery-upload-progress__head">
-            <text class="gallery-upload-progress__title">上传进度</text>
-            <text class="gallery-upload-progress__text">{{galleryUploadProgressCurrent}} / {{galleryUploadProgressTotal}}</text>
-          </view>
-          <view class="gallery-upload-progress__bar">
-            <view
-              class="gallery-upload-progress__bar-fill"
-              style="width: {{(galleryUploadProgressCurrent * 100 / galleryUploadProgressTotal)}}%;"
-            ></view>
-          </view>
-        </view>
-
-        <button
-          class="booking-modal__submit"
-          bindtap="onSubmitGalleryUpload"
-          hover-class="booking-modal__submit--active"
-          loading="{{galleryUploadSubmitting}}"
-          disabled="{{galleryUploadSubmitting || !galleryUploadFiles.length}}"
-        >
-          <text wx:if="{{galleryUploadSubmitting}}">上传中 ({{galleryUploadProgressCurrent}}/{{galleryUploadProgressTotal}})...</text>
-          <text wx:else>批量上传 ({{galleryUploadFiles.length}} 张)</text>
-        </button>
-      </view>
-    </view>
-  </view>
-
-  <view class="booking-modal-mask" wx:if="{{activeSection === 'gallery' && galleryDeleteConfirmOpen}}" bindtap="onCloseGalleryDeleteConfirm">
-    <view class="booking-confirm-modal" catchtap="onPoseModalTap">
-      <view class="booking-confirm-modal__head">
-        <view class="booking-confirm-modal__icon booking-confirm-modal__icon--danger">
-          <text>🗑️</text>
-        </view>
-        <text class="booking-confirm-modal__title">删除照片</text>
-        <text class="booking-confirm-modal__desc">确定要删除这张照片吗？</text>
-        <view class="gallery-confirm-warn">
-          <text>删除后将从照片墙移除</text>
-        </view>
-      </view>
-      <view class="booking-confirm-modal__actions">
-        <button class="booking-confirm-modal__btn booking-confirm-modal__btn--ghost" bindtap="onCloseGalleryDeleteConfirm" disabled="{{galleryActionLoading}}">
-          取消
-        </button>
-        <button
-          class="booking-confirm-modal__btn booking-confirm-modal__btn--danger"
-          bindtap="onConfirmGalleryDelete"
-          loading="{{galleryActionLoading}}"
-          disabled="{{galleryActionLoading}}"
-        >
-          {{galleryActionLoading ? "删除中..." : "确认删除"}}
-        </button>
-      </view>
-    </view>
-  </view>
-
-  <view class="booking-modal-mask" wx:if="{{activeSection === 'gallery' && galleryBatchDeleteConfirmOpen}}" bindtap="onCloseGalleryBatchDeleteConfirm">
-    <view class="booking-confirm-modal" catchtap="onPoseModalTap">
-      <view class="booking-confirm-modal__head">
-        <view class="booking-confirm-modal__icon booking-confirm-modal__icon--danger">
-          <text>🗑️</text>
-        </view>
-        <text class="booking-confirm-modal__title">批量删除照片</text>
-        <text class="booking-confirm-modal__desc">
-          确定要删除选中的 <text class="booking-confirm-modal__accent">{{gallerySelectedCount}}</text> 张照片吗？
-        </text>
-        <view class="booking-confirm-modal__warn">
-          <text>⚠ 此操作不可撤销</text>
-        </view>
-      </view>
-      <view class="booking-confirm-modal__actions">
-        <button class="booking-confirm-modal__btn booking-confirm-modal__btn--ghost" bindtap="onCloseGalleryBatchDeleteConfirm" disabled="{{galleryBatchDeleting}}">
-          取消
-        </button>
-        <button
-          class="booking-confirm-modal__btn booking-confirm-modal__btn--danger"
-          bindtap="onConfirmGalleryBatchDelete"
-          loading="{{galleryBatchDeleting}}"
-          disabled="{{galleryBatchDeleting}}"
-        >
-          {{galleryBatchDeleting ? "删除中..." : "确认删除"}}
         </button>
       </view>
     </view>

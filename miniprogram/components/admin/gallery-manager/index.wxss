@@ -1,7 +1,7 @@
 .album-detail-page {
-  min-height: 100vh;
-  background: #fffbf0;
-  padding: 20rpx;
+  min-height: 0;
+  background: transparent;
+  padding: 0;
 }
 
 button {
@@ -53,66 +53,7 @@ button::after {
 }
 
 .header-section {
-  margin-bottom: 24rpx;
-}
-
-.header-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 12rpx;
-  margin-bottom: 18rpx;
-}
-
-.header-back-btn {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.95);
-  border: 2rpx solid rgba(93, 64, 55, 0.18);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4rpx 12rpx rgba(93, 64, 55, 0.12);
-  flex: none;
-  margin-top: 6rpx;
-}
-
-.header-back-btn:active {
-  transform: scale(0.96);
-}
-
-.header-back-btn__icon {
-  width: 26rpx;
-  height: 26rpx;
-}
-
-.header-info {
-  flex: 1;
-  min-width: 0;
-  padding: 6rpx 4rpx 10rpx;
-}
-
-.album-title {
-  display: block;
-  font-size: 46rpx;
-  font-weight: 700;
-  color: #5d4037;
-  line-height: 1.25;
-  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
-}
-
-.album-subtitle {
-  margin-top: 6rpx;
-  display: block;
-  font-size: 24rpx;
-  color: rgba(93, 64, 55, 0.6);
-}
-
-.album-key {
-  margin-top: 4rpx;
-  display: block;
-  font-size: 21rpx;
-  color: rgba(93, 64, 55, 0.6);
+  margin-bottom: 16rpx;
 }
 
 .toolbar-actions {
@@ -391,12 +332,12 @@ button::after {
   top: 10rpx;
   right: 10rpx;
   display: flex;
-  gap: 10rpx;
+  gap: 8rpx;
 }
 
 .photo-card__action {
-  width: 40rpx;
-  height: 40rpx;
+  width: 38rpx;
+  height: 38rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.92);
   border: 2rpx solid rgba(93, 64, 55, 0.12);
@@ -417,6 +358,19 @@ button::after {
 .photo-card__action--date {
   background: rgba(255, 255, 255, 0.95);
   border-color: rgba(93, 64, 55, 0.18);
+}
+
+.photo-card__action--visibility {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(93, 64, 55, 0.2);
+}
+
+.photo-card__action--visible {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.photo-card__action--hidden {
+  background: rgba(255, 241, 242, 0.98);
 }
 
 .photo-card__action--danger {
@@ -445,43 +399,72 @@ button::after {
   border-top: 2rpx solid rgba(93, 64, 55, 0.1);
   padding: 10rpx 12rpx;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8rpx;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 4rpx 8rpx;
 }
 
-.photo-card__folder {
+.photo-card__shot-time {
   display: flex;
   align-items: center;
   gap: 4rpx;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 100%;
+  min-width: 100%;
 }
 
-.photo-card__folder-icon {
-  width: 14rpx;
-  height: 14rpx;
-  flex: none;
+.photo-card__shot-time-icon {
+  font-size: 16rpx;
+  line-height: 1;
+  opacity: 0.72;
 }
 
-.photo-card__folder-name {
+.photo-card__shot-time-text {
   font-size: 18rpx;
+  line-height: 1.2;
   color: rgba(93, 64, 55, 0.72);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.photo-card__date {
-  font-size: 17rpx;
-  color: rgba(93, 64, 55, 0.55);
-  flex: none;
+.photo-card__meta-bottom {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6rpx;
 }
 
-.photo-card__meta-right {
-  display: flex;
+.photo-card__stat {
+  min-height: 24rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2rpx solid rgba(93, 64, 55, 0.12);
+  padding: 0 8rpx;
+  font-size: 16rpx;
+  color: rgba(93, 64, 55, 0.76);
+  display: inline-flex;
   align-items: center;
-  gap: 6rpx;
+}
+
+.photo-card__visibility {
+  min-height: 24rpx;
+  border-radius: 999rpx;
+  padding: 0 8rpx;
+  font-size: 16rpx;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+}
+
+.photo-card__visibility--public {
+  background: rgba(220, 252, 231, 0.92);
+  color: #166534;
+}
+
+.photo-card__visibility--hidden {
+  background: rgba(254, 226, 226, 0.95);
+  color: #b91c1c;
 }
 
 .photo-card__story-badge {

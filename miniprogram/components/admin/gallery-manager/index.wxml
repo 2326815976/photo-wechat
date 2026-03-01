@@ -1,4 +1,4 @@
-<view class="album-detail-page" style="padding-top: {{contentTopPx}}px;">
+<view class="album-detail-page">
   <view wx:if="{{loading}}" class="loading-container">
     <view class="loading-spinner"></view>
     <text class="loading-text">加载中...</text>
@@ -6,17 +6,6 @@
 
   <view wx:else class="main-content">
     <view class="header-section">
-      <view class="header-main">
-        <view class="header-back-btn" bindtap="onBack">
-          <image class="header-back-btn__icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
-        </view>
-        <view class="header-info">
-          <text class="album-title">{{isSystemAlbum ? '照片墙管理' : (album.title || '未命名空间')}}</text>
-          <text class="album-subtitle">{{isSystemAlbum ? '管理公开展示照片' : '管理专属空间照片'}}</text>
-          <text class="album-key" wx:if="{{!isSystemAlbum && album.access_key}}">密钥: {{album.access_key}}</text>
-        </view>
-      </view>
-
       <view wx:if="{{!isSelectionMode}}" class="toolbar-actions toolbar-actions--normal">
         <button class="toolbar-btn toolbar-btn--soft" bindtap="onShowNewFolderModal">
           <image class="toolbar-btn__icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
@@ -124,6 +113,18 @@
           </view>
 
           <view wx:if="{{!isSelectionMode}}" class="photo-card__actions">
+            <view
+              wx:if="{{isSystemAlbum}}"
+              class="photo-card__action photo-card__action--visibility {{item.isPublic ? 'photo-card__action--visible' : 'photo-card__action--hidden'}}"
+              catchtap="onTogglePhotoVisibility"
+              data-photo-id="{{item.id}}"
+            >
+              <image
+                class="photo-card__action-icon"
+                src="{{item.isPublic ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-brown.svg'}}"
+                mode="aspectFit"
+              />
+            </view>
             <view class="photo-card__action photo-card__action--story" catchtap="onOpenStoryModal" data-photo-id="{{item.id}}">
               <text class="photo-card__story-icon">↻</text>
             </view>
@@ -140,14 +141,22 @@
         </view>
 
         <view class="photo-card__meta">
-          <view class="photo-card__folder">
-            <image class="photo-card__folder-icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
-            <text class="photo-card__folder-name">{{item.folderName}}</text>
+          <view class="photo-card__shot-time">
+            <text class="photo-card__shot-time-icon">📅</text>
+            <text class="photo-card__shot-time-text">{{item.dateText}}</text>
           </view>
-          <view class="photo-card__meta-right">
+          <view class="photo-card__meta-bottom">
+            <view class="photo-card__stat" wx:if="{{isSystemAlbum}}">
+              <text>❤ {{item.likeCount}}</text>
+            </view>
+            <view class="photo-card__stat" wx:if="{{isSystemAlbum}}">
+              <text>👁 {{item.viewCount}}</text>
+            </view>
+            <view class="photo-card__visibility {{item.visibilityClass}}" wx:if="{{isSystemAlbum}}">
+              <text>{{item.visibilityText}}</text>
+            </view>
             <text class="photo-card__story-badge" wx:if="{{item.has_story}}">故事</text>
             <text class="photo-card__story-badge photo-card__story-badge--highlight" wx:elif="{{item.story_highlight}}">高亮</text>
-            <text class="photo-card__date">{{item.dateText}}</text>
           </view>
         </view>
 

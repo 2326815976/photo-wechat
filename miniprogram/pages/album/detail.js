@@ -302,6 +302,20 @@ function isRpcFunctionNotImplemented(errorMessage) {
   );
 }
 
+function hasStorageCleanupFailed(payload) {
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    if (Object.prototype.hasOwnProperty.call(current, "storage_cleanup_failed")) {
+      return Boolean(current.storage_cleanup_failed);
+    }
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return false;
+}
+
 function filterPhotosByFolder(list, folderId) {
   const targetFolderId = String(folderId || ROOT_FOLDER_ID);
   const rows = Array.isArray(list) ? list : [];
@@ -373,6 +387,8 @@ Page({
   photoLoadTicket: 0,
   useLegacyPhotoPaging: false,
   legacyPhotosByFolder: null,
+  _lastAlbumAutoLoadAt: 0,
+  _windowHeight: 0,
 
   onLoad(options) {
     const app = getApp();
@@ -381,6 +397,19 @@ Page({
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
+    this._lastAlbumAutoLoadAt = 0;
+    this._windowHeight = 0;
+    try {
+      if (typeof wx.getWindowInfo === "function") {
+        const info = wx.getWindowInfo();
+        this._windowHeight = Number(info && info.windowHeight) || 0;
+      } else if (typeof wx.getSystemInfoSync === "function") {
+        const info = wx.getSystemInfoSync();
+        this._windowHeight = Number(info && info.windowHeight) || 0;
+      }
+    } catch (error) {
+      this._windowHeight = 0;
+    }
 
     const key = String((options && options.key) || "").trim().toUpperCase();
     const cachedRootFolderName = getCachedAlbumRootName(key);
@@ -428,11 +457,56 @@ Page({
     }
   },
 
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
+    if (hideAudit && this.data.confirmPhotoId) {
+      this.setData({ hideAudit, confirmPhotoId: "" });
+    } else {
+      this.setData({ hideAudit });
+    }
+
+    if (this.data.serviceMissing) return;
+    if (!String(this.data.key || "").trim()) return;
+    if (this.consumeSuppressRefreshOnShow()) return;
+    if (this.data.loading || this.data.loadingMore) return;
+    if (!this.data.album) return;
+
+    void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, 1, {
+      reset: true,
+      silent: true,
+      skipWave: true,
+    });
+  },
+
+  markTransientForegroundReturn() {
+    this._suppressRefreshOnNextShow = true;
+    this._suppressRefreshMarkedAt = Date.now();
+  },
+
+  consumeSuppressRefreshOnShow() {
+    if (!this._suppressRefreshOnNextShow) return false;
+    const markedAt = Number(this._suppressRefreshMarkedAt || 0);
+    const expired = markedAt > 0 && Date.now() - markedAt > 2 * 60 * 1000;
+    this._suppressRefreshOnNextShow = false;
+    this._suppressRefreshMarkedAt = 0;
+    return !expired;
+  },
+
   onUnload() {
     this.clearToastTimer();
     this.clearFolderGuideTimer();
     this.clearFolderWaveTimer();
     this.photoLoadTicket += 1;
+    this._lastAlbumAutoLoadAt = 0;
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
     }
@@ -831,6 +905,7 @@ Page({
 
     const reset = Boolean(opts && opts.reset);
     const silent = Boolean(opts && opts.silent);
+    const skipWave = Boolean(opts && opts.skipWave);
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const nextPageNo = toPageNumber(pageNo, 1);
 
@@ -928,7 +1003,8 @@ Page({
       }
     } finally {
       if (ticket === this.photoLoadTicket) {
-        const shouldPlayWaveOnVisible = reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
+        const shouldPlayWaveOnVisible =
+          !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
         this.setData({ loading: false, loadingMore: false }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
@@ -947,6 +1023,7 @@ Page({
   async loadPhotoPageLegacy(folderId, pageNo, opts) {
     const reset = Boolean(opts && opts.reset);
     const silent = Boolean(opts && opts.silent);
+    const skipWave = Boolean(opts && opts.skipWave);
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const nextPageNo = toPageNumber(pageNo, 1);
 
@@ -1021,7 +1098,8 @@ Page({
       }
     } finally {
       if (ticket === this.photoLoadTicket) {
-        const shouldPlayWaveOnVisible = reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
+        const shouldPlayWaveOnVisible =
+          !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
         this.setData({ loading: false, loadingMore: false }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
@@ -1041,10 +1119,57 @@ Page({
     if (this.data.serviceMissing) return;
     if (this.data.loading || this.data.loadingMore) return;
     if (!this.data.hasMore) return;
+    this._lastAlbumAutoLoadAt = Date.now();
     void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, Number(this.data.pageNo || 0) + 1, {
       reset: false,
       silent: false,
     });
+  },
+
+  onPageScroll(event) {
+    if (this.data.serviceMissing) return;
+    if (this.data.loading || this.data.loadingMore) return;
+    if (!this.data.hasMore) return;
+
+    const scrollTop = Number(event && event.scrollTop);
+    if (!Number.isFinite(scrollTop) || scrollTop < 0) return;
+
+    const now = Date.now();
+    const lastAutoLoadAt = Number(this._lastAlbumAutoLoadAt || 0);
+    if (lastAutoLoadAt > 0 && now - lastAutoLoadAt < 280) return;
+
+    if (!(Number(this._windowHeight) > 0)) {
+      try {
+        if (typeof wx.getWindowInfo === "function") {
+          const info = wx.getWindowInfo();
+          this._windowHeight = Number(info && info.windowHeight) || 0;
+        } else if (typeof wx.getSystemInfoSync === "function") {
+          const info = wx.getSystemInfoSync();
+          this._windowHeight = Number(info && info.windowHeight) || 0;
+        }
+      } catch (error) {
+        this._windowHeight = 0;
+      }
+    }
+    if (!(Number(this._windowHeight) > 0)) return;
+
+    wx.createSelectorQuery()
+      .selectViewport()
+      .scrollOffset((offset) => {
+        if (this.data.loading || this.data.loadingMore || !this.data.hasMore) return;
+        const scrollHeight = Number((offset && offset.scrollHeight) || 0);
+        if (!(scrollHeight > 0)) return;
+
+        const progress = (scrollTop + Number(this._windowHeight || 0)) / scrollHeight;
+        if (progress < 0.8) return;
+
+        this._lastAlbumAutoLoadAt = Date.now();
+        void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, Number(this.data.pageNo || 0) + 1, {
+          reset: false,
+          silent: false,
+        });
+      })
+      .exec();
   },
 
   refreshSelectionMeta() {
@@ -1411,6 +1536,7 @@ Page({
 
     let success = 0;
     let fail = 0;
+    let storageWarningCount = 0;
     const deletedIds = [];
     let hasPublicDeleted = false;
 
@@ -1425,6 +1551,9 @@ Page({
           fail += 1;
         } else {
           success += 1;
+          if (hasStorageCleanupFailed(rawPayload)) {
+            storageWarningCount += 1;
+          }
           const id = String(photo && photo.id ? photo.id : "");
           if (id) {
             deletedIds.push(id);
@@ -1464,8 +1593,15 @@ Page({
 
     this.setData({ batchLoading: false, showDeleteConfirm: false });
 
-    if (fail > 0) {
-      this.showToast(`删除完成：成功${success}张，失败${fail}张`, "error", 3200);
+    if (fail > 0 || storageWarningCount > 0) {
+      const warnings = [];
+      if (fail > 0) {
+        warnings.push(`失败${fail}张`);
+      }
+      if (storageWarningCount > 0) {
+        warnings.push(`云存储清理失败${storageWarningCount}张`);
+      }
+      this.showToast(`删除完成：成功${success}张，${warnings.join("，")}`, "error", 3200);
     } else {
       this.showToast(`成功删除 ${success} 张`, "success", 2600);
     }
@@ -1495,6 +1631,7 @@ Page({
     }
 
     const idx = Math.max(0, images.findIndex((x) => String(x) === String(currentUrl)));
+    this.markTransientForegroundReturn();
     wx.previewImage({
       current: images[idx],
       urls: images,

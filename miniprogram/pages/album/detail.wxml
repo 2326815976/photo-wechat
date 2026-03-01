@@ -4,7 +4,8 @@
     subtitle="{{hideAudit ? '✨ 趁图片消失前，把美好保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
-    fallbackTab="pages/album/index"
+    fallbackTab="{{hideAudit ? 'pages/gallery/index' : 'pages/album/index'}}"
+    preferFallback="{{hideAudit}}"
   />
 
   <view class="content">
@@ -104,7 +105,10 @@
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
-                  <text class="photo-story-panel__text">{{item.story_text}}</text>
+                  <view class="photo-story-panel__paper">
+                    <text class="photo-story-panel__title">关于此刻</text>
+                    <text class="photo-story-panel__text">{{item.story_text}}</text>
+                  </view>
                 </view>
               </block>
               <block wx:else>
@@ -118,21 +122,21 @@
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 
-              <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
-                <image
-                  class="select-badge-icon"
-                  src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
-                  mode="aspectFit"
-                />
+              <view
+                class="select-badge {{item._selected ? 'select-badge--checked' : ''}}"
+                hover-class="select-badge--active"
+                catchtap="togglePhotoSelection"
+                data-id="{{item.id}}"
+              >
+                <view class="select-badge-core">
+                  <text class="select-badge-check" wx:if="{{item._selected}}">✓</text>
+                </view>
               </view>
 
-              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
                 <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
-              <view class="photo-highlight-badge" wx:if="{{item.has_story && !item.story_open}}">
-                <text class="photo-highlight-badge__text">有故事</text>
-              </view>
             </view>
 
             <view class="photo-actions" wx:if="{{!hideAudit}}">
@@ -149,7 +153,10 @@
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
-                  <text class="photo-story-panel__text">{{item.story_text}}</text>
+                  <view class="photo-story-panel__paper">
+                    <text class="photo-story-panel__title">关于此刻</text>
+                    <text class="photo-story-panel__text">{{item.story_text}}</text>
+                  </view>
                 </view>
               </block>
               <block wx:else>
@@ -163,21 +170,21 @@
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 
-              <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
-                <image
-                  class="select-badge-icon"
-                  src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
-                  mode="aspectFit"
-                />
+              <view
+                class="select-badge {{item._selected ? 'select-badge--checked' : ''}}"
+                hover-class="select-badge--active"
+                catchtap="togglePhotoSelection"
+                data-id="{{item.id}}"
+              >
+                <view class="select-badge-core">
+                  <text class="select-badge-check" wx:if="{{item._selected}}">✓</text>
+                </view>
               </view>
 
-              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
                 <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
-              <view class="photo-highlight-badge" wx:if="{{item.has_story && !item.story_open}}">
-                <text class="photo-highlight-badge__text">有故事</text>
-              </view>
             </view>
 
             <view class="photo-actions" wx:if="{{!hideAudit}}">

@@ -20,6 +20,10 @@ Component({
       type: String,
       value: "pages/index/index",
     },
+    preferFallback: {
+      type: Boolean,
+      value: false,
+    },
     isHomePage: {
       type: Boolean,
       value: false,
@@ -32,6 +36,11 @@ Component({
   methods: {
     onBack() {
       this.triggerEvent("back");
+
+      if (this.properties.preferFallback) {
+        wx.switchTab({ url: `/${this.properties.fallbackTab}` });
+        return;
+      }
 
       wx.navigateBack({
         delta: 1,

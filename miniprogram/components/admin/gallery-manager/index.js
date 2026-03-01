@@ -36,6 +36,14 @@ function normalizeShotDate(value) {
   return `${matched[1]}-${matched[2]}-${matched[3]}`;
 }
 
+function normalizeDbBoolean(value, fallback) {
+  if (value === undefined || value === null) return Boolean(fallback);
+  if (value === true || value === 1 || value === "1" || String(value).toLowerCase() === "true") {
+    return true;
+  }
+  return false;
+}
+
 function isColumnMissingError(message, column) {
   const normalized = String(message || "").toLowerCase();
   const target = String(column || "").trim().toLowerCase();
@@ -171,6 +179,18 @@ function readStringFromPayloadChain(payload, fields) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function markAdminPageTransientForeground(reason) {
+  try {
+    const pages = getCurrentPages();
+    const currentPage = Array.isArray(pages) && pages.length ? pages[pages.length - 1] : null;
+    if (currentPage && typeof currentPage.markTransientForegroundReturn === "function") {
+      currentPage.markTransientForegroundReturn(reason);
+    }
+  } catch (error) {
+    // ignore
+  }
+}
+
 function readRpcRows(result) {
   const payload = readRpcData(result, []);
   if (Array.isArray(payload)) return payload;
@@ -247,6 +267,7 @@ function buildUploadKey(fileName, fallbackPrefix) {
 }
 
 const ALBUM_THUMBNAIL_MAX_LONG_EDGE = 960;
+const ALBUM_PREVIEW_MAX_LONG_EDGE = 1600;
 
 function pickAlbumThumbnailQuality(sizeBytes) {
   const bytes = Number(sizeBytes || 0);
@@ -258,6 +279,18 @@ function pickAlbumThumbnailQuality(sizeBytes) {
   if (bytes >= 5 * 1024 * 1024) return 64;
   if (bytes >= 2 * 1024 * 1024) return 70;
   return 74;
+}
+
+function pickAlbumPreviewQuality(sizeBytes) {
+  const bytes = Number(sizeBytes || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return 86;
+  }
+  if (bytes >= 12 * 1024 * 1024) return 72;
+  if (bytes >= 8 * 1024 * 1024) return 76;
+  if (bytes >= 5 * 1024 * 1024) return 80;
+  if (bytes >= 2 * 1024 * 1024) return 84;
+  return 86;
 }
 
 function cleanupLocalTempFile(filePath) {
@@ -280,6 +313,14 @@ async function buildAlbumThumbnailTempPath(filePath, fileSize) {
     quality: pickAlbumThumbnailQuality(fileSize),
     maxLongEdge: ALBUM_THUMBNAIL_MAX_LONG_EDGE,
     label: "缩略图",
+  });
+}
+
+async function buildAlbumPreviewTempPath(filePath, fileSize) {
+  return buildAlbumCompressedTempPath(filePath, {
+    quality: pickAlbumPreviewQuality(fileSize),
+    maxLongEdge: ALBUM_PREVIEW_MAX_LONG_EDGE,
+    label: "高清图",
   });
 }
 
@@ -417,23 +458,25 @@ async function uploadAlbumPhotoVariants(filePath, fileName, fileSize) {
 
   const cleanupTargets = [];
   let thumbnailTempPath = "";
+  let previewTempPath = "";
   try {
     thumbnailTempPath = await buildAlbumThumbnailTempPath(normalizedPath, fileSize);
+    previewTempPath = await buildAlbumPreviewTempPath(normalizedPath, fileSize);
     const thumbnailUpload = await uploadAlbumAsset(thumbnailTempPath, fileName, {
       variant: "thumb",
     });
     cleanupTargets.push(thumbnailUpload.path, thumbnailUpload.url, thumbnailUpload.fileId);
 
-    const originalUpload = await uploadAlbumAsset(normalizedPath, fileName, {
-      variant: "original",
+    const previewUpload = await uploadAlbumAsset(previewTempPath, fileName, {
+      variant: "preview",
     });
-    cleanupTargets.push(originalUpload.path, originalUpload.url, originalUpload.fileId);
+    cleanupTargets.push(previewUpload.path, previewUpload.url, previewUpload.fileId);
 
     return {
-      url: originalUpload.url,
+      url: previewUpload.url,
       thumbnail_url: thumbnailUpload.url,
-      preview_url: originalUpload.url,
-      original_url: originalUpload.url,
+      preview_url: previewUpload.url,
+      original_url: previewUpload.url,
       cleanupTargets: toUniqueNonEmptyStrings(cleanupTargets),
     };
   } catch (error) {
@@ -442,6 +485,9 @@ async function uploadAlbumPhotoVariants(filePath, fileName, fileSize) {
   } finally {
     if (thumbnailTempPath && thumbnailTempPath !== normalizedPath) {
       cleanupLocalTempFile(thumbnailTempPath);
+    }
+    if (previewTempPath && previewTempPath !== normalizedPath) {
+      cleanupLocalTempFile(previewTempPath);
     }
   }
 }
@@ -488,6 +534,9 @@ function normalizePhotoRecord(row) {
   const hasStory = Boolean(storyText);
   const isHighlight = Boolean(item.is_highlight);
   const shotDate = normalizeShotDate(item.shot_date);
+  const isPublic = normalizeDbBoolean(item.is_public, true);
+  const viewCount = Number(item.view_count || 0);
+  const likeCount = Number(item.like_count || 0);
   const sortRaw = Number(item.sort_order);
   const sortOrder = Number.isFinite(sortRaw) && sortRaw > 0 ? Math.round(sortRaw) : DEFAULT_SORT_ORDER;
 
@@ -501,6 +550,9 @@ function normalizePhotoRecord(row) {
     is_highlight: isHighlight,
     shot_date: shotDate,
     story_highlight: hasStory || isHighlight,
+    is_public: isPublic,
+    view_count: Number.isFinite(viewCount) ? Math.max(0, Math.round(viewCount)) : 0,
+    like_count: Number.isFinite(likeCount) ? Math.max(0, Math.round(likeCount)) : 0,
     sort_order: sortOrder,
   });
 }
@@ -540,7 +592,7 @@ function formatPhotoDateWithYear(value) {
   return `${year}/${month}/${day}`;
 }
 
-Page({
+const pageDefinition = {
   data: {
     safeTop: 0,
     contentTopPx: 12,
@@ -666,15 +718,6 @@ Page({
 
     this.setData({ albumId, safeTop, contentTopPx, album: initialAlbum, isSystemAlbum });
     this.loadAlbumData();
-  },
-
-  onBack() {
-    wx.navigateBack({
-      delta: 1,
-      fail: () => {
-        wx.redirectTo({ url: "/pages/admin/index" });
-      },
-    });
   },
 
   async loadAlbumData() {
@@ -810,7 +853,7 @@ Page({
       let result = await dbQuery({
         table: "album_photos",
         action: "select",
-        columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at",
+        columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,is_public,view_count,like_count,created_at",
         filters: photoFilters,
         orders: [
           { column: "sort_order", ascending: true },
@@ -828,7 +871,7 @@ Page({
         result = await dbQuery({
           table: "album_photos",
           action: "select",
-          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,created_at",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,is_public,view_count,like_count,created_at",
           filters: photoFilters,
           orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
           range: {
@@ -849,7 +892,7 @@ Page({
         result = await dbQuery({
           table: "album_photos",
           action: "select",
-          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,shot_date,created_at",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,shot_date,is_public,view_count,like_count,created_at",
           filters: photoFilters,
           orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
           range: {
@@ -864,7 +907,7 @@ Page({
         result = await dbQuery({
           table: "album_photos",
           action: "select",
-          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,created_at",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,is_public,view_count,like_count,created_at",
           filters: photoFilters,
           orders: [{ column: "created_at", ascending: false }],
           range: {
@@ -927,7 +970,7 @@ Page({
   },
 
   updateFilteredPhotos() {
-    const { photos, selectedFolder, folders, rootFolderName } = this.data;
+    const { photos, selectedFolder } = this.data;
     const selectedSet = new Set((Array.isArray(this.data.selectedPhotoIds) ? this.data.selectedPhotoIds : []).map(id => String(id)));
 
     let filteredPhotos = selectedFolder
@@ -947,16 +990,21 @@ Page({
     });
 
     filteredPhotos = filteredPhotos.map(photo => {
-      const folderName = photo.folder_id
-        ? folders.find(f => String(f.id) === String(photo.folder_id))?.name || "未知文件夹"
-        : rootFolderName;
-
       const dateText = formatPhotoDateWithYear(photo.shot_date || photo.created_at);
+      const viewCount = Number((photo && photo.view_count) || 0);
+      const likeCount = Number((photo && photo.like_count) || 0);
+      const safeViewCount = Number.isFinite(viewCount) ? Math.max(0, Math.round(viewCount)) : 0;
+      const safeLikeCount = Number.isFinite(likeCount) ? Math.max(0, Math.round(likeCount)) : 0;
+      const isPublic = normalizeDbBoolean(photo && photo.is_public, true);
 
       return {
         ...photo,
-        folderName,
         dateText,
+        viewCount: safeViewCount,
+        likeCount: safeLikeCount,
+        isPublic,
+        visibilityText: isPublic ? "公开" : "已隐藏",
+        visibilityClass: isPublic ? "photo-card__visibility--public" : "photo-card__visibility--hidden",
         selected: selectedSet.has(String(photo.id)),
         has_story: Boolean(photo.has_story),
         story_highlight: Boolean(photo.story_highlight),
@@ -1027,6 +1075,11 @@ Page({
     } catch (error) {
       console.error("加载文件夹照片统计失败:", error);
     }
+  },
+
+  // 返回
+  onBack() {
+    wx.navigateBack();
   },
 
   // 选择文件夹
@@ -1381,6 +1434,7 @@ Page({
 
     try {
       const isSingle = String(this.data.uploadMode || "batch") === "single";
+      markAdminPageTransientForeground("gallery-manager-upload-choose-media");
       const res = await wx.chooseMedia({
         count: isSingle ? 1 : 9,
         mediaType: ['image'],
@@ -1477,6 +1531,7 @@ Page({
         thumbnail_url: uploadVariants.thumbnail_url,
         preview_url: uploadVariants.preview_url,
         original_url: uploadVariants.original_url,
+        ...(this.data.isSystemAlbum ? { is_public: 1 } : {}),
       };
       const width = Number(singleImage && singleImage.width);
       const height = Number(singleImage && singleImage.height);
@@ -1504,8 +1559,8 @@ Page({
         storyText ? { story_text: storyText } : {},
         singleHighlight ? { is_highlight: 1 } : {}
       );
-      const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at";
-      const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,created_at";
+      const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,is_public,view_count,like_count,created_at";
+      const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
 
       let result = await dbQuery({
         table: "album_photos",
@@ -1654,9 +1709,10 @@ Page({
             preview_url: uploadVariants.preview_url,
             original_url: uploadVariants.original_url,
             shot_date: batchShotDate,
+            ...(this.data.isSystemAlbum ? { is_public: 1 } : {}),
           };
-          const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at";
-          const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,created_at";
+          const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,is_public,view_count,like_count,created_at";
+          const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
           const width = Number(image && image.width);
           const height = Number(image && image.height);
           if (Number.isFinite(width) && width > 0) {
@@ -2332,6 +2388,62 @@ Page({
     }
   },
 
+  async onTogglePhotoVisibility(e) {
+    if (this.data.actionLoading || this.data.isSelectionMode) return;
+    if (!this.data.isSystemAlbum) return;
+
+    const photoId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.photoId || "").trim()
+        : "";
+    if (!photoId) return;
+
+    const target =
+      (Array.isArray(this.data.photos) ? this.data.photos : []).find((item) => String(item.id) === photoId) || null;
+    if (!target) {
+      this.showToastMessage("照片不存在或已删除", "warning");
+      return;
+    }
+
+    const nextPublic = !normalizeDbBoolean(target.is_public, true);
+    this.setData({ actionLoading: true });
+    try {
+      const result = await dbQuery({
+        table: "album_photos",
+        action: "update",
+        values: { is_public: nextPublic ? 1 : 0 },
+        filters: [
+          { column: "id", operator: "eq", value: photoId },
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+        ],
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,is_public",
+      });
+      if (hasRpcError(result)) {
+        this.showToastMessage(readRpcError(result, nextPublic ? "恢复公开失败" : "隐藏失败"), "error");
+        return;
+      }
+
+      const nextPhotos = (Array.isArray(this.data.photos) ? this.data.photos : []).map((item) => {
+        if (String(item.id) !== photoId) return item;
+        return Object.assign({}, item, {
+          is_public: nextPublic,
+        });
+      });
+      this.setData({ photos: nextPhotos }, () => this.updateFilteredPhotos());
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
+      this.showToastMessage(nextPublic ? "照片已恢复公开" : "照片已隐藏", "success");
+    } catch (error) {
+      console.error("更新照片可见性失败:", error);
+      this.showToastMessage(readErrorMessage(error, nextPublic ? "恢复公开失败" : "隐藏失败"), "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
   // 删除照片
   onDeletePhoto(e) {
     const photoId = e.currentTarget.dataset.photoId;
@@ -2560,4 +2672,28 @@ Page({
   onStopPropagation() {
     // 阻止事件冒泡
   }
+};
+
+const { data, onLoad, onUnload, ...methods } = pageDefinition;
+
+Component({
+  data,
+  lifetimes: {
+    attached() {
+      const options = {
+        id: SYSTEM_GALLERY_ALBUM_ID,
+        title: encodeURIComponent("照片墙管理"),
+        key: "PUBLIC_GALLERY",
+      };
+      if (typeof onLoad === "function") {
+        onLoad.call(this, options);
+      }
+    },
+    detached() {
+      if (typeof onUnload === "function") {
+        onUnload.call(this);
+      }
+    },
+  },
+  methods,
 });
