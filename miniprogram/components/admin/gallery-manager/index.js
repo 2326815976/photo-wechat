@@ -1154,6 +1154,9 @@ const pageDefinition = {
         this.showToastMessage("文件夹创建成功", "success");
         this.setData({ showNewFolderModal: false });
         await this.loadFolders();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
       } else {
         this.showToastMessage(readRpcError(result, "创建失败"), "error");
       }
@@ -1228,6 +1231,9 @@ const pageDefinition = {
           ...patch
         });
         this.updateFilteredPhotos();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
         this.showToastMessage("根目录名称已更新", "success");
       } else {
         this.showToastMessage(readRpcError(result, "修改失败"), "error");
@@ -1370,6 +1376,9 @@ const pageDefinition = {
         this.setData({ deletingFolder: null });
         await this.loadFolders();
         await this.loadPhotos();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
       } else {
         this.showToastMessage(readRpcError(result, "删除失败"), "error");
       }
@@ -1646,6 +1655,9 @@ const pageDefinition = {
         singleShotDate: getTodayDateUTC8(),
       });
       await this.loadPhotos();
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
     } catch (error) {
       console.error("单图上传失败:", error);
       this.showToastMessage(readErrorMessage(error, "上传失败"), "error");
@@ -1822,6 +1834,9 @@ const pageDefinition = {
 
       if (successCount > 0) {
         await this.loadPhotos();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
       }
     } catch (error) {
       console.error("上传失败:", error);
@@ -2162,6 +2177,9 @@ const pageDefinition = {
       });
 
       this.setData({ photos: allPhotos }, () => this.updateFilteredPhotos());
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
       this.showToastMessage(direction === "up" ? "已上移一位" : "已下移一位", "success");
     } catch (error) {
       console.error("排序失败:", error);
@@ -2380,6 +2398,9 @@ const pageDefinition = {
         selectedPhotoIds: []
       });
       await this.loadPhotos();
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
     } catch (error) {
       console.error("迁移失败:", error);
       this.showToastMessage(String((error && error.message) || "迁移失败"), "error");
@@ -2496,6 +2517,9 @@ const pageDefinition = {
         }
         this.setData({ deletingPhoto: null });
         await this.loadPhotos();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
       } else {
         this.showToastMessage(readRpcError(result, "删除失败"), "error");
       }
@@ -2580,6 +2604,9 @@ const pageDefinition = {
           isSelectionMode: false
         });
         await this.loadPhotos();
+        if (shouldInvalidatePublicGalleryCache(this.data)) {
+          markGalleryCacheDirty();
+        }
       } else {
         this.showToastMessage(readRpcError(result, "删除失败"), "error");
       }

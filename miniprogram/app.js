@@ -12,6 +12,7 @@ const SHARE_TITLE_BY_ROUTE = {
   "pages/booking/index": "拾光谣｜约拍入口，来定格你的故事",
   "pages/album/index": "拾光谣｜专属返图空间",
   "pages/album/detail": "「拾光谣」相册分享",
+  "pages/album/detail/index": "「拾光谣」相册分享",
   "pages/profile/index": "拾光谣｜记录你的拍摄旅程",
 };
 
