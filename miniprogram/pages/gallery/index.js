@@ -529,6 +529,10 @@ Page({
       }
     });
 
+    if (left.length === 0 && right.length > 0) {
+      return { left: right.slice(), right: [], leftHeight: rightHeight, rightHeight: 0 };
+    }
+
     return { left, right, leftHeight, rightHeight };
   },
 

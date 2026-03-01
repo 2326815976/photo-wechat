@@ -242,6 +242,10 @@ function splitWaterfallColumns(list) {
     }
   });
 
+  if (left.length === 0 && right.length > 0) {
+    return { left: right.slice(), right: [] };
+  }
+
   return { left, right };
 }
 
