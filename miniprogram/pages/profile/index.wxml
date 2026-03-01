@@ -121,7 +121,6 @@
         </view>
 
         <view class="audit-entry-card motion-fade-up motion-delay-5">
-          <text class="audit-entry-card__title">即可进入临时相册空间</text>
           <view class="audit-entry-card__actions">
             <button class="btn-primary audit-entry-card__btn" hover-class="btn-primary--active" bindtap="goLogin">前往登录</button>
           </view>

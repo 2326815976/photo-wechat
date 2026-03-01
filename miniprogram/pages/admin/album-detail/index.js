@@ -246,18 +246,18 @@ function buildUploadKey(fileName, fallbackPrefix) {
   return `${Date.now()}_${randomSuffix}_${normalizedName}`;
 }
 
-const ALBUM_THUMBNAIL_MAX_LONG_EDGE = 960;
+const ALBUM_THUMBNAIL_MAX_LONG_EDGE = 1600;
 
 function pickAlbumThumbnailQuality(sizeBytes) {
   const bytes = Number(sizeBytes || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return 74;
+    return 90;
   }
-  if (bytes >= 12 * 1024 * 1024) return 52;
-  if (bytes >= 8 * 1024 * 1024) return 58;
-  if (bytes >= 5 * 1024 * 1024) return 64;
-  if (bytes >= 2 * 1024 * 1024) return 70;
-  return 74;
+  if (bytes >= 12 * 1024 * 1024) return 82;
+  if (bytes >= 8 * 1024 * 1024) return 84;
+  if (bytes >= 5 * 1024 * 1024) return 86;
+  if (bytes >= 2 * 1024 * 1024) return 88;
+  return 90;
 }
 
 function cleanupLocalTempFile(filePath) {

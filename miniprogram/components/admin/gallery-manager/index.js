@@ -266,31 +266,31 @@ function buildUploadKey(fileName, fallbackPrefix) {
   return `${Date.now()}_${randomSuffix}_${normalizedName}`;
 }
 
-const ALBUM_THUMBNAIL_MAX_LONG_EDGE = 960;
-const ALBUM_PREVIEW_MAX_LONG_EDGE = 1600;
+const ALBUM_THUMBNAIL_MAX_LONG_EDGE = 1280;
+const ALBUM_PREVIEW_MAX_LONG_EDGE = 2560;
 
 function pickAlbumThumbnailQuality(sizeBytes) {
   const bytes = Number(sizeBytes || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return 74;
+    return 84;
   }
-  if (bytes >= 12 * 1024 * 1024) return 52;
-  if (bytes >= 8 * 1024 * 1024) return 58;
-  if (bytes >= 5 * 1024 * 1024) return 64;
-  if (bytes >= 2 * 1024 * 1024) return 70;
-  return 74;
+  if (bytes >= 12 * 1024 * 1024) return 76;
+  if (bytes >= 8 * 1024 * 1024) return 78;
+  if (bytes >= 5 * 1024 * 1024) return 80;
+  if (bytes >= 2 * 1024 * 1024) return 82;
+  return 84;
 }
 
 function pickAlbumPreviewQuality(sizeBytes) {
   const bytes = Number(sizeBytes || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) {
-    return 86;
+    return 95;
   }
-  if (bytes >= 12 * 1024 * 1024) return 72;
-  if (bytes >= 8 * 1024 * 1024) return 76;
-  if (bytes >= 5 * 1024 * 1024) return 80;
-  if (bytes >= 2 * 1024 * 1024) return 84;
-  return 86;
+  if (bytes >= 12 * 1024 * 1024) return 90;
+  if (bytes >= 8 * 1024 * 1024) return 91;
+  if (bytes >= 5 * 1024 * 1024) return 92;
+  if (bytes >= 2 * 1024 * 1024) return 94;
+  return 95;
 }
 
 function cleanupLocalTempFile(filePath) {

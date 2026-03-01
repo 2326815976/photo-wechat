@@ -641,7 +641,7 @@
 }
 
 .audit-entry-card__actions {
-  margin-top: 20rpx;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   gap: 16rpx;

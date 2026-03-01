@@ -121,7 +121,7 @@
           <button class="submit-btn" hover-class="submit-btn--active" bindtap="submit" disabled="{{submitting}}">
             <view class="submit-row">
               <image class="submit-icon {{submitting ? 'submit-icon--spin' : ''}}" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-              <text>{{submitting ? '验证中...' : '开启回忆'}}</text>
+              <text>{{submitting ? '验证中...' : '解锁相册'}}</text>
             </view>
           </button>
 
