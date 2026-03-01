@@ -1,5 +1,6 @@
 <view class="page">
   <app-header
+    wx:if="{{!auditChecking && !hideAudit}}"
     title="拾光谣"
     subtitle="✨ 记录此刻的不期而遇 ✨"
     safeTop="{{safeTop}}"
@@ -7,7 +8,7 @@
     animateIn="{{pageReady}}"
   />
 
-  <view class="content">
+  <view class="content" wx:if="{{!auditChecking && !hideAudit}}">
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
@@ -153,5 +154,7 @@
       </view>
     </view>
   </view>
+
+  <view class="audit-guard" wx:if="{{auditChecking}}"></view>
 
 </view>

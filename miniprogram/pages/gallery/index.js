@@ -295,9 +295,14 @@ Page({
     rootFolderName: "根目录",
     folders: [{ id: ROOT_FOLDER_ID, name: "根目录" }],
 
+    sourcePhotos: [],
     photos: [],
     left: [],
     right: [],
+    sortMode: "time_desc",
+    filterMode: "all",
+    showFilterModal: false,
+    activeFilterPreset: "default_desc",
 
     previewPhoto: null,
     showLoginPrompt: false,
@@ -441,9 +446,11 @@ Page({
       hasMore: true,
       pageNo: 1,
       total: 0,
+      sourcePhotos: [],
       photos: [],
       left: [],
       right: [],
+      showFilterModal: false,
       previewPhoto: null,
     });
 
@@ -491,6 +498,7 @@ Page({
       pageNo: 1,
       total: 0,
       hasMore: true,
+      sourcePhotos: [],
       photos: [],
       left: [],
       right: [],
@@ -500,7 +508,7 @@ Page({
 
   async bootstrap() {
     await this.refreshLoginState();
-    const hasCachedPhotos = Array.isArray(this.data.photos) && this.data.photos.length > 0;
+    const hasCachedPhotos = Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0;
     await this.loadPage(1, { silent: hasCachedPhotos });
   },
 
@@ -522,15 +530,135 @@ Page({
     if (!cached || !Array.isArray(cached.photos) || cached.photos.length === 0) return;
 
     const photos = cached.photos.map(normalizePhoto);
-    this.applyPhotoList(photos);
     this.setData({
       loading: false,
       pageNo: 1,
       total: Number(cached.total || photos.length),
       hasMore: photos.length < Number(cached.total || photos.length),
+      sourcePhotos: photos,
+    });
+    this.applyGalleryViewFromSource(photos);
+
+    this.persistGalleryCache(
+      { writeStorage: Boolean(storage) },
+      photos,
+      Number(cached.total || photos.length)
+    );
+  },
+
+  getPhotoTimeValue(photo) {
+    const parsed = parseDateTimeUTC8((photo && photo.shot_date) || (photo && photo.created_at));
+    if (!parsed) return 0;
+    const timestamp = parsed.getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  },
+
+  applyGalleryViewFromSource(sourceRows) {
+    const source = Array.isArray(sourceRows)
+      ? sourceRows.slice()
+      : (Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos.slice() : []);
+
+    const sortMode = String(this.data.sortMode || "time_desc");
+    const filterMode = String(this.data.filterMode || "all");
+
+    let viewRows = source;
+    if (filterMode === "highlight") {
+      viewRows = viewRows.filter((photo) =>
+        Boolean(photo && (photo.story_highlight || photo.is_highlight || photo.has_story))
+      );
+    } else if (filterMode === "story") {
+      viewRows = viewRows.filter((photo) => Boolean(photo && photo.has_story));
+    }
+
+    viewRows = viewRows.slice().sort((a, b) => {
+      const timeA = this.getPhotoTimeValue(a);
+      const timeB = this.getPhotoTimeValue(b);
+      if (timeA !== timeB) {
+        return sortMode === "time_asc" ? timeA - timeB : timeB - timeA;
+      }
+      return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
     });
 
-    this.persistGalleryCache({ writeStorage: Boolean(storage) });
+    this.applyPhotoList(viewRows);
+  },
+
+  getActiveFilterPreset() {
+    const filterMode = String(this.data.filterMode || "all");
+    const sortMode = String(this.data.sortMode || "time_desc");
+    if (filterMode === "highlight") return "highlight";
+    if (filterMode === "story") return "story";
+    if (sortMode === "time_asc") return "time_asc";
+    return "default_desc";
+  },
+
+  onTapFilter() {
+    this.setData({
+      showFilterModal: true,
+      activeFilterPreset: this.getActiveFilterPreset(),
+    });
+  },
+
+  closeFilterModal() {
+    this.setData({ showFilterModal: false });
+  },
+
+  onSelectFilterPreset(e) {
+    const preset =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.preset || "").trim()
+        : "";
+    if (!preset) return;
+
+    if (preset === "default_desc") {
+      this.setData(
+        {
+          activeFilterPreset: preset,
+          sortMode: "time_desc",
+          filterMode: "all",
+          showFilterModal: false,
+        },
+        () => this.applyGalleryViewFromSource()
+      );
+      return;
+    }
+
+    if (preset === "time_asc") {
+      this.setData(
+        {
+          activeFilterPreset: preset,
+          sortMode: "time_asc",
+          filterMode: "all",
+          showFilterModal: false,
+        },
+        () => this.applyGalleryViewFromSource()
+      );
+      return;
+    }
+
+    if (preset === "highlight") {
+      this.setData(
+        {
+          activeFilterPreset: preset,
+          sortMode: "time_desc",
+          filterMode: "highlight",
+          showFilterModal: false,
+        },
+        () => this.applyGalleryViewFromSource()
+      );
+      return;
+    }
+
+    if (preset === "story") {
+      this.setData(
+        {
+          activeFilterPreset: preset,
+          sortMode: "time_desc",
+          filterMode: "story",
+          showFilterModal: false,
+        },
+        () => this.applyGalleryViewFromSource()
+      );
+    }
   },
 
   buildColumnsFromPhotos(photos) {
@@ -644,7 +772,10 @@ Page({
       if (!Array.isArray(photos) || photos.length === 0) return;
 
       this.applyPhotoList(photos);
-      this.persistGalleryCache({ writeStorage: Number(this.data.pageNo || 1) === 1 });
+      this.persistGalleryCache(
+        { writeStorage: Number(this.data.pageNo || 1) === 1 },
+        this.data.sourcePhotos
+      );
     }, 48);
   },
 
@@ -678,11 +809,6 @@ Page({
       right: columns.right,
     });
     this.scheduleScrollMetricsRefresh();
-  },
-
-  appendPhotos(photos) {
-    const merged = (this.data.photos || []).concat(Array.isArray(photos) ? photos : []);
-    this.applyPhotoList(merged);
   },
 
   onPhotoLoad(e) {
@@ -721,12 +847,18 @@ Page({
     this.scheduleRelayout();
   },
 
-  persistGalleryCache(opts) {
+  persistGalleryCache(opts, sourceRows, totalOverride) {
     if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
-    const photos = this.data.photos || [];
+    const photos = Array.isArray(sourceRows)
+      ? sourceRows
+      : (
+        Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0
+          ? this.data.sourcePhotos
+          : (this.data.photos || [])
+      );
     if (!photos.length) return;
 
-    const total = Math.max(Number(this.data.total || 0), photos.length);
+    const total = Math.max(Number(totalOverride || this.data.total || 0), photos.length);
     writeGalleryMemoryCache(photos, total);
 
     if (opts && opts.writeStorage) {
@@ -776,17 +908,19 @@ Page({
         rpcFolders.filter((item) => String(item.id) !== ROOT_FOLDER_ID)
       );
 
+      const currentSource = Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos : [];
+      let mergedSource = currentSource;
       if (pageNo === 1) {
-        this.applyPhotoList(photos);
+        mergedSource = photos;
       } else if (photos.length > 0) {
-        const existingIds = new Set((this.data.photos || []).map((p) => String(p.id)));
+        const existingIds = new Set(currentSource.map((p) => String(p.id)));
         const incremental = photos.filter((p) => !existingIds.has(String(p.id)));
-        if (incremental.length > 0) {
-          this.appendPhotos(incremental);
-        }
+        mergedSource = incremental.length > 0 ? currentSource.concat(incremental) : currentSource;
       }
 
-      const loadedCount = (this.data.photos || []).length;
+      this.applyGalleryViewFromSource(mergedSource);
+
+      const loadedCount = mergedSource.length;
       const hasKnownTotal = total > 0;
       const hasMore = hasKnownTotal
         ? photos.length >= PAGE_SIZE && loadedCount < total
@@ -798,9 +932,10 @@ Page({
         hasMore,
         rootFolderName,
         folders,
+        sourcePhotos: mergedSource,
       });
 
-      this.persistGalleryCache({ writeStorage: pageNo === 1 });
+      this.persistGalleryCache({ writeStorage: pageNo === 1 }, mergedSource, total);
     } catch (e) {
       if (!(pageNo === 1 && silent)) {
         wx.showToast({ title: "加载失败", icon: "none" });
@@ -858,15 +993,28 @@ Page({
   updatePhoto(id, updater) {
     const updateOne = (p) => (String(p.id) === String(id) ? updater(p) : p);
 
-    const photos = (this.data.photos || []).map(updateOne);
-    const left = (this.data.left || []).map(updateOne);
-    const right = (this.data.right || []).map(updateOne);
+    const sourceBase =
+      Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0
+        ? this.data.sourcePhotos
+        : (this.data.photos || []);
+    const sourcePhotos = sourceBase.map(updateOne);
 
     const preview = this.data.previewPhoto;
     const nextPreview = preview && String(preview.id) === String(id) ? updater(preview) : preview;
 
-    this.setData({ photos, left, right, previewPhoto: nextPreview });
-    this.persistGalleryCache({ writeStorage: Number(this.data.pageNo || 1) === 1 });
+    this.setData(
+      {
+        sourcePhotos,
+        previewPhoto: nextPreview,
+      },
+      () => {
+        this.applyGalleryViewFromSource();
+        this.persistGalleryCache(
+          { writeStorage: Number(this.data.pageNo || 1) === 1 },
+          sourcePhotos
+        );
+      }
+    );
   },
 
   async incrementPhotoViewCount(photoId, fallbackPhoto) {

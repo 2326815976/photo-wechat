@@ -1,7 +1,7 @@
 <view class="page">
   <app-header
     title="{{headerTitle}}"
-    subtitle="{{hideAudit ? '✨ 趁图片消失前，把美好保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
+    subtitle="{{hideAudit ? '✨ 趁图片消失前，及时保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="{{hideAudit ? 'pages/gallery/index' : 'pages/album/index'}}"
@@ -256,6 +256,18 @@
 
   <view class="toast toast--{{toast.type}} motion-pop-in" wx:if="{{toast}}">
     <text class="toast-text">{{toast.message}}</text>
+  </view>
+
+  <view
+    class="welcome-easter-egg"
+    wx:if="{{hideAudit && showWelcomeEasterEgg && !showWelcomeLetter}}"
+    hover-class="welcome-easter-egg--active"
+    hover-stay-time="80"
+    bindtap="onOpenWelcomeEasterEgg"
+  >
+    <view class="welcome-easter-egg__inner">
+      <image class="welcome-easter-egg__icon" src="/images/icons/sparkles-white.svg" mode="aspectFit" />
+    </view>
   </view>
 
   <!-- Web 同款：拆信交互（信封 -> 信纸） -->

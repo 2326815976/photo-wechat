@@ -56,7 +56,7 @@ Component({
   data: {
     selected: 0,
     selectedPath: "pages/index/index",
-    visible: true,
+    visible: false,
     hideAudit: false,
     list: DEFAULT_TAB_LIST.slice(),
   },
@@ -64,8 +64,16 @@ Component({
     attached() {
       const app = typeof getApp === "function" ? getApp() : null;
       const globalData = app && app.globalData ? app.globalData : {};
-      const hideAudit = Boolean(globalData.hideAudit);
-      this.applyAuditConfig(hideAudit);
+      const auditConfigReady = Boolean(globalData.auditConfigReady);
+      if (!auditConfigReady) {
+        this.setData({ visible: false });
+        if (app && typeof app.ensureAuditConfig === "function") {
+          app.ensureAuditConfig().catch(() => {});
+        }
+      } else {
+        const hideAudit = Boolean(globalData.hideAudit);
+        this.applyAuditConfig(hideAudit);
+      }
 
       if (app && typeof app.subscribeAuditConfig === "function") {
         this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
@@ -108,6 +116,7 @@ Component({
         : "";
 
       this.setData({
+        visible: true,
         hideAudit: nextHideAudit,
         list: nextList,
         selected: nextSelected,

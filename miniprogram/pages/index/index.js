@@ -82,6 +82,7 @@ Page({
 
     showTagSelector: false,
     shakeEnabled: false,
+    auditChecking: true,
     pageReady: false,
 
     skeletonTags: [1, 2, 3, 4, 5, 6, 7, 8],
@@ -105,6 +106,7 @@ Page({
   lastTagsRefreshAt: 0,
   isRefreshingTags: false,
   isPageAlive: false,
+  homeBootstrapped: false,
 
   onLoad() {
     this.isPageAlive = true;
@@ -112,20 +114,36 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
-
-    this.setData({ safeTop, serviceMissing, hideAudit });
+    const auditConfigReady = Boolean(globalData.auditConfigReady);
+    const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
+    this.homeBootstrapped = false;
+    this.setData({
+      safeTop,
+      serviceMissing,
+      hideAudit,
+      auditChecking: !auditConfigReady,
+    });
 
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
         const enabled = Boolean(nextHideAudit);
-        if (!enabled) {
-          this.setData({ hideAudit: false });
+        this.setData({
+          hideAudit: enabled,
+          auditChecking: false,
+        });
+        if (enabled) {
+          this.redirectToGallery();
           return;
         }
-        this.setData({ hideAudit: true });
-        this.redirectToGallery();
+        this.startHomePageIfNeeded();
       });
+    }
+
+    if (!auditConfigReady) {
+      if (app && typeof app.ensureAuditConfig === "function") {
+        app.ensureAuditConfig().catch(() => {});
+      }
+      return;
     }
 
     if (hideAudit) {
@@ -133,38 +151,32 @@ Page({
       return;
     }
 
-    this.loadCachedTags();
-    this.loadCachedPose();
-    this.markPageReady();
-    this.bootstrap();
+    this.startHomePageIfNeeded();
   },
 
-  onShow() {
+  async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
-    if (app && typeof app.ensureAuditConfig === "function") {
-      app.ensureAuditConfig()
-        .then((hideAudit) => {
-          const enabled = Boolean(hideAudit);
-          this.setData({ hideAudit: enabled });
-          if (enabled) {
-            this.redirectToGallery();
-          }
-        })
-        .catch(() => {});
-    } else {
-      const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
-      this.setData({ hideAudit: enabled });
-      if (enabled) {
-        this.redirectToGallery();
-        return;
+    const hasAuditReady = Boolean(app && app.globalData && app.globalData.auditConfigReady);
+    if (!hasAuditReady && app && typeof app.ensureAuditConfig === "function") {
+      this.setData({ auditChecking: true });
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
       }
     }
 
-    if (this.data.hideAudit) {
+    const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
+    this.setData({
+      hideAudit: enabled,
+      auditChecking: false,
+    });
+    if (enabled) {
       this.redirectToGallery();
       return;
     }
 
+    this.startHomePageIfNeeded();
     this.syncTabBar("pages/index/index");
     if (!this.data.pageReady) {
       this.markPageReady();
@@ -194,6 +206,7 @@ Page({
 
   onUnload() {
     this.isPageAlive = false;
+    this.homeBootstrapped = false;
     this.clearAnimationTimers();
     this.stopShake();
     this.stopTagsRefreshTimer();
@@ -226,6 +239,17 @@ Page({
         this._redirectingToGallery = false;
       },
     });
+  },
+
+  startHomePageIfNeeded() {
+    if (this.homeBootstrapped) return;
+    if (this.data.hideAudit || this.data.auditChecking) return;
+    this.homeBootstrapped = true;
+
+    this.loadCachedTags();
+    this.loadCachedPose();
+    this.markPageReady();
+    this.bootstrap();
   },
 
   markTransientForegroundReturn() {

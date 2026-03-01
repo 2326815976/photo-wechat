@@ -26,19 +26,24 @@
     </view>
 
     <view wx:if="{{!loading}}">
-      <scroll-view class="folder-tabs motion-fade-up motion-delay-2" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
-        <view class="folder-tabs__row">
-          <view
-            class="folder-tab {{selectedFolder === item.id ? 'folder-tab--active' : ''}}"
-            wx:for="{{folders}}"
-            wx:key="id"
-            data-id="{{item.id}}"
-            bindtap="onSelectFolder"
-          >
-            <text class="folder-tab__text">{{item.name}}</text>
+      <view class="folder-tabs-wrap motion-fade-up motion-delay-2">
+        <scroll-view class="folder-tabs" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
+          <view class="folder-tabs__row">
+            <view
+              class="folder-tab {{selectedFolder === item.id ? 'folder-tab--active' : ''}}"
+              wx:for="{{folders}}"
+              wx:key="id"
+              data-id="{{item.id}}"
+              bindtap="onSelectFolder"
+            >
+              <text class="folder-tab__text">{{item.name}}</text>
+            </view>
           </view>
+        </scroll-view>
+        <view class="filter-btn" hover-class="filter-btn--active" hover-stay-time="80" bindtap="onTapFilter">
+          <text class="filter-btn__text">筛选</text>
         </view>
-      </scroll-view>
+      </view>
 
       <view class="masonry {{right.length === 0 ? 'masonry--single' : ''}} motion-fade-up motion-delay-2" wx:if="{{left.length > 0 || right.length > 0}}">
         <view class="col">
@@ -69,11 +74,11 @@
 
             </view>
             <view class="meta">
-              <text class="date">{{item.created_at_text}}</text>
               <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
                 <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
                 <text class="like-count">{{item.like_count}}</text>
               </view>
+              <text class="date">{{item.created_at_text}}</text>
             </view>
           </view>
         </view>
@@ -105,11 +110,11 @@
 
             </view>
             <view class="meta">
-              <text class="date">{{item.created_at_text}}</text>
               <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
                 <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
                 <text class="like-count">{{item.like_count}}</text>
               </view>
+              <text class="date">{{item.created_at_text}}</text>
             </view>
           </view>
         </view>
@@ -125,6 +130,64 @@
       </view>
       <view class="end" wx:if="{{!hasMore && (left.length + right.length) > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{showFilterModal}}" bindtap="closeFilterModal"></view>
+  <view class="filter-modal motion-fade-in" wx:if="{{showFilterModal}}">
+    <view class="filter-card motion-pop-in" catchtap="noop">
+      <view class="filter-card__header">
+        <text class="filter-card__title">筛选照片墙</text>
+        <view class="filter-card__close" hover-class="filter-card__close--active" hover-stay-time="80" bindtap="closeFilterModal">
+          <text class="filter-card__close-text">×</text>
+        </view>
+      </view>
+
+      <view class="filter-card__group">
+        <view
+          class="filter-option {{activeFilterPreset === 'default_desc' ? 'filter-option--active' : ''}}"
+          hover-class="filter-option--touch"
+          hover-stay-time="80"
+          data-preset="default_desc"
+          bindtap="onSelectFilterPreset"
+        >
+          <text class="filter-option__label">默认排序（时间降序）</text>
+          <text class="filter-option__mark" wx:if="{{activeFilterPreset === 'default_desc'}}">✓</text>
+        </view>
+
+        <view
+          class="filter-option {{activeFilterPreset === 'time_asc' ? 'filter-option--active' : ''}}"
+          hover-class="filter-option--touch"
+          hover-stay-time="80"
+          data-preset="time_asc"
+          bindtap="onSelectFilterPreset"
+        >
+          <text class="filter-option__label">时间升序</text>
+          <text class="filter-option__mark" wx:if="{{activeFilterPreset === 'time_asc'}}">✓</text>
+        </view>
+
+        <view
+          class="filter-option {{activeFilterPreset === 'highlight' ? 'filter-option--active' : ''}}"
+          hover-class="filter-option--touch"
+          hover-stay-time="80"
+          data-preset="highlight"
+          bindtap="onSelectFilterPreset"
+        >
+          <text class="filter-option__label">高亮</text>
+          <text class="filter-option__mark" wx:if="{{activeFilterPreset === 'highlight'}}">✓</text>
+        </view>
+
+        <view
+          class="filter-option {{activeFilterPreset === 'story' ? 'filter-option--active' : ''}}"
+          hover-class="filter-option--touch"
+          hover-stay-time="80"
+          data-preset="story"
+          bindtap="onSelectFilterPreset"
+        >
+          <text class="filter-option__label">故事</text>
+          <text class="filter-option__mark" wx:if="{{activeFilterPreset === 'story'}}">✓</text>
+        </view>
       </view>
     </view>
   </view>

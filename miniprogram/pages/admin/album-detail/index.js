@@ -799,8 +799,22 @@ Page({
     const silent = Boolean(options && options.silent);
     try {
       const { currentPage, photosPerPage, selectedFolder } = this.data;
+      const isSystemAlbum = Boolean(this.data.isSystemAlbum);
       const offset = (currentPage - 1) * photosPerPage;
       const photoFilters = [{ column: "album_id", operator: "eq", value: this.data.albumId }];
+      const primaryOrders = isSystemAlbum
+        ? [
+            { column: "sort_order", ascending: true },
+            { column: "shot_date", ascending: false },
+            { column: "created_at", ascending: false },
+          ]
+        : [
+            { column: "sort_order", ascending: true },
+            { column: "created_at", ascending: false },
+          ];
+      const fallbackOrdersWithoutSort = isSystemAlbum
+        ? [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }]
+        : [{ column: "created_at", ascending: false }];
       if (selectedFolder === null || selectedFolder === undefined || String(selectedFolder).trim() === "") {
         photoFilters.push({ column: "folder_id", operator: "eq", value: null });
       } else {
@@ -812,11 +826,7 @@ Page({
         action: "select",
         columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at",
         filters: photoFilters,
-        orders: [
-          { column: "sort_order", ascending: true },
-          { column: "shot_date", ascending: false },
-          { column: "created_at", ascending: false },
-        ],
+        orders: primaryOrders,
         range: {
           from: offset,
           to: offset + photosPerPage - 1,
@@ -830,7 +840,7 @@ Page({
           action: "select",
           columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,created_at",
           filters: photoFilters,
-          orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
+          orders: fallbackOrdersWithoutSort,
           range: {
             from: offset,
             to: offset + photosPerPage - 1,
@@ -849,9 +859,9 @@ Page({
         result = await dbQuery({
           table: "album_photos",
           action: "select",
-          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,shot_date,created_at",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,sort_order,shot_date,created_at",
           filters: photoFilters,
-          orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
+          orders: fallbackOrdersWithoutSort,
           range: {
             from: offset,
             to: offset + photosPerPage - 1,
@@ -927,7 +937,7 @@ Page({
   },
 
   updateFilteredPhotos() {
-    const { photos, selectedFolder, folders, rootFolderName } = this.data;
+    const { photos, selectedFolder, folders, rootFolderName, isSystemAlbum } = this.data;
     const selectedSet = new Set((Array.isArray(this.data.selectedPhotoIds) ? this.data.selectedPhotoIds : []).map(id => String(id)));
 
     let filteredPhotos = selectedFolder
@@ -940,9 +950,11 @@ Page({
       const normalizedA = Number.isFinite(sortA) && sortA > 0 ? Math.round(sortA) : DEFAULT_SORT_ORDER;
       const normalizedB = Number.isFinite(sortB) && sortB > 0 ? Math.round(sortB) : DEFAULT_SORT_ORDER;
       if (normalizedA !== normalizedB) return normalizedA - normalizedB;
-      const shotA = normalizeShotDate(a && a.shot_date) || "";
-      const shotB = normalizeShotDate(b && b.shot_date) || "";
-      if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
+      if (isSystemAlbum) {
+        const shotA = normalizeShotDate(a && a.shot_date) || "";
+        const shotB = normalizeShotDate(b && b.shot_date) || "";
+        if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
+      }
       return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
     });
 

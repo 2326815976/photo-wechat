@@ -369,9 +369,11 @@ Page({
     confirmPhotoId: "",
     showDeleteConfirm: false,
     showWelcomeLetter: false,
+    showWelcomeEasterEgg: false,
     pendingFolderWaveAfterLetterClose: false,
     showDonationModal: false,
     welcomeStorageKey: "",
+    welcomeEggStorageKey: "",
 
     toast: null,
 
@@ -436,6 +438,7 @@ Page({
       hideAudit: Boolean(globalData.hideAudit),
       key,
       welcomeStorageKey: `album_welcome_seen_${key}`,
+      welcomeEggStorageKey: `album_welcome_egg_seen_${key}`,
       rootFolderName: cachedRootFolderName || initialRootFolderName || "根目录",
       initialRootFolderName: cachedRootFolderName || initialRootFolderName || "",
     });
@@ -673,6 +676,7 @@ Page({
     this.setData(
       {
         showWelcomeLetter: false,
+        showWelcomeEasterEgg: false,
         letterStage: "envelope",
       },
       () => {
@@ -688,6 +692,16 @@ Page({
     // Web 端：只有在信纸阶段点击遮罩才会关闭
     if (this.data.letterStage !== "letter") return;
     this.closeWelcomeLetterAnimated();
+  },
+
+  onOpenWelcomeEasterEgg() {
+    if (!this.data.showWelcomeEasterEgg) return;
+    // 审核模式：点击彩蛋直接展示欢迎信内容，跳过“拆信”阶段
+    this.setData({
+      showWelcomeEasterEgg: false,
+      showWelcomeLetter: true,
+      letterStage: "letter",
+    });
   },
 
   onOpenLetter() {
@@ -778,9 +792,26 @@ Page({
           hasSeenWelcome = false;
         }
       }
+      const eggStorageKey = String(this.data.welcomeEggStorageKey || "").trim();
+      let hasSeenWelcomeEgg = false;
+      if (eggStorageKey) {
+        try {
+          hasSeenWelcomeEgg = Boolean(wx.getStorageSync(eggStorageKey));
+        } catch (e) {
+          hasSeenWelcomeEgg = false;
+        }
+      }
 
       const showWelcomeLetter =
         Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) && !hasSeenWelcome;
+      const showWelcomeEasterEgg = Boolean(this.data.hideAudit) && showWelcomeLetter && !hasSeenWelcomeEgg;
+      if (showWelcomeEasterEgg && eggStorageKey) {
+        try {
+          wx.setStorageSync(eggStorageKey, "1");
+        } catch (e) {
+          // ignore
+        }
+      }
       await new Promise((resolve) => {
         this.setData(
           {
@@ -811,9 +842,10 @@ Page({
             hasMore: true,
             pageNo: 0,
             total: 0,
-            showWelcomeLetter,
+            showWelcomeLetter: showWelcomeEasterEgg ? false : showWelcomeLetter,
+            showWelcomeEasterEgg,
             pendingFolderWaveAfterLetterClose: false,
-            letterStage: showWelcomeLetter ? "envelope" : "envelope",
+            letterStage: "envelope",
             showDonationModal: false,
           },
           () => {

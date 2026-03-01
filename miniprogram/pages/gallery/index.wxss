@@ -109,8 +109,16 @@
   color: rgba(93, 64, 55, 0.60);
 }
 
-.folder-tabs {
+.folder-tabs-wrap {
   margin-bottom: 14rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.folder-tabs {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
 }
 
@@ -119,6 +127,30 @@
   align-items: center;
   gap: 10rpx;
   padding-bottom: 4rpx;
+}
+
+.filter-btn {
+  flex: none;
+  height: 58rpx;
+  padding: 0 20rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.88);
+  border: 3rpx solid rgba(93, 64, 55, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-btn--active {
+  background: rgba(255, 200, 87, 0.30);
+  border-color: rgba(93, 64, 55, 0.28);
+}
+
+.filter-btn__text {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #5D4037;
+  white-space: nowrap;
 }
 
 .folder-tab {
@@ -349,12 +381,14 @@
   padding: 12rpx 14rpx;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .date {
   font-size: 20rpx;
   color: rgba(141, 110, 99, 0.70);
+  margin-left: auto;
+  text-align: right;
 }
 
 .like {
@@ -420,6 +454,108 @@
 .end-text {
   font-size: 22rpx;
   color: rgba(93, 64, 55, 0.40);
+}
+
+.filter-modal {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 180rpx 26rpx 0;
+  box-sizing: border-box;
+}
+
+.filter-card {
+  width: 100%;
+  max-width: 640rpx;
+  border-radius: 28rpx;
+  background: #FFFBF0;
+  border: 3rpx solid rgba(93, 64, 55, 0.12);
+  box-shadow: 0 24rpx 56rpx rgba(93, 64, 55, 0.22);
+  overflow: hidden;
+}
+
+.filter-card__header {
+  height: 90rpx;
+  padding: 0 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2rpx dashed rgba(93, 64, 55, 0.10);
+}
+
+.filter-card__title {
+  font-size: 28rpx;
+  color: #5D4037;
+  font-weight: 800;
+}
+
+.filter-card__close {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.22);
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-card__close--active {
+  background: rgba(255, 200, 87, 0.30);
+}
+
+.filter-card__close-text {
+  font-size: 32rpx;
+  line-height: 1;
+  color: #5D4037;
+}
+
+.filter-card__group {
+  padding: 18rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.filter-option {
+  height: 84rpx;
+  border-radius: 18rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.12);
+  background: rgba(255, 255, 255, 0.90);
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filter-option--active {
+  border-color: rgba(93, 64, 55, 0.28);
+  background: linear-gradient(90deg, rgba(255, 237, 191, 0.95) 0%, rgba(255, 200, 87, 0.88) 100%);
+  box-shadow: 0 8rpx 18rpx rgba(93, 64, 55, 0.14);
+}
+
+.filter-option--touch {
+  border-color: rgba(93, 64, 55, 0.24);
+  transform: scale(0.996);
+}
+
+.filter-option__label {
+  font-size: 27rpx;
+  color: #5D4037;
+  font-weight: 700;
+}
+
+.filter-option__mark {
+  font-size: 30rpx;
+  line-height: 1;
+  color: #5D4037;
+  font-weight: 900;
 }
 
 .modal-mask {

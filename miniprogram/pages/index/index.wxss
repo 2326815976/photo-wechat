@@ -5,6 +5,11 @@
   background: #FFFBF0;
 }
 
+.audit-guard {
+  flex: 1;
+  background: #FFFBF0;
+}
+
 .content {
   flex: 1;
   /* Web: px-5 pt-3 pb-3 */
