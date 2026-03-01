@@ -618,10 +618,10 @@
 }
 
 .audit-entry-card {
-  background: #ffffff;
-  border-radius: 28rpx;
-  border: 2rpx solid rgba(255, 200, 87, 0.36);
-  box-shadow: 0 10rpx 30rpx rgba(93, 64, 55, 0.08);
+  background: #fffdf5;
+  border-radius: 32rpx;
+  border: 2rpx solid rgba(255, 200, 87, 0.4);
+  box-shadow: 0 12rpx 36rpx rgba(93, 64, 55, 0.12);
   padding: 28rpx;
   margin-bottom: 20rpx;
 }

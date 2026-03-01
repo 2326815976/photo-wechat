@@ -5,6 +5,8 @@ const { markGalleryCacheDirty } = require("../../../utils/gallery-cache");
 
 const ROOT_FOLDER_SENTINEL = '__ROOT__';
 const DEFAULT_SORT_ORDER = 2147483647;
+const TOP_PIN_SORT_ORDER = 1;
+const TOP_PIN_CONFLICT_SORT_ORDER = 11;
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_highlight / sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/06_album_photo_story_sort.sql";
 const ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT = "数据库缺少 shot_date 字段，请先执行 SQL 迁移：photo/sql/migrations/07_album_photo_shot_date.sql";
@@ -1540,6 +1542,7 @@ const pageDefinition = {
         thumbnail_url: uploadVariants.thumbnail_url,
         preview_url: uploadVariants.preview_url,
         original_url: uploadVariants.original_url,
+        sort_order: TOP_PIN_SORT_ORDER,
         ...(this.data.isSystemAlbum ? { is_public: 1 } : {}),
       };
       const width = Number(singleImage && singleImage.width);
@@ -1720,6 +1723,7 @@ const pageDefinition = {
             thumbnail_url: uploadVariants.thumbnail_url,
             preview_url: uploadVariants.preview_url,
             original_url: uploadVariants.original_url,
+            sort_order: TOP_PIN_SORT_ORDER,
             shot_date: batchShotDate,
             ...(this.data.isSystemAlbum ? { is_public: 1 } : {}),
           };
@@ -2184,6 +2188,86 @@ const pageDefinition = {
     } catch (error) {
       console.error("排序失败:", error);
       this.showToastMessage(readErrorMessage(error, "排序失败"), "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  async onMovePhotoTop(e) {
+    if (this.data.actionLoading) return;
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const photoId = String(dataset.photoId || "").trim();
+    if (!photoId) return;
+
+    this.setData({ actionLoading: true });
+    try {
+      const folderFilters =
+        this.data.selectedFolder === null || this.data.selectedFolder === undefined || String(this.data.selectedFolder).trim() === ""
+          ? [{ column: "folder_id", operator: "eq", value: null }]
+          : [{ column: "folder_id", operator: "eq", value: String(this.data.selectedFolder) }];
+
+      const conflictResult = await dbQuery({
+        table: "album_photos",
+        action: "update",
+        values: { sort_order: TOP_PIN_CONFLICT_SORT_ORDER },
+        filters: [
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+          { column: "sort_order", operator: "eq", value: TOP_PIN_SORT_ORDER },
+          { column: "id", operator: "neq", value: photoId },
+        ].concat(folderFilters),
+      });
+      if (hasRpcError(conflictResult)) {
+        const conflictMessage = readRpcError(conflictResult, "置顶失败");
+        if (isColumnMissingError(conflictMessage, "sort_order")) {
+          this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(conflictMessage, "error");
+        }
+        return;
+      }
+
+      const topResult = await dbQuery({
+        table: "album_photos",
+        action: "update",
+        values: { sort_order: TOP_PIN_SORT_ORDER },
+        filters: [
+          { column: "id", operator: "eq", value: photoId },
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+        ],
+      });
+      if (hasRpcError(topResult)) {
+        const message = readRpcError(topResult, "置顶失败");
+        if (isColumnMissingError(message, "sort_order")) {
+          this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      const allPhotos = (Array.isArray(this.data.photos) ? this.data.photos : []).map((item) => {
+        const inCurrentFolder =
+          (this.data.selectedFolder === null || this.data.selectedFolder === undefined || String(this.data.selectedFolder).trim() === "")
+            ? !item.folder_id
+            : String(item.folder_id || "") === String(this.data.selectedFolder);
+        if (!inCurrentFolder) return item;
+        if (String(item.id) === photoId) {
+          return Object.assign({}, item, { sort_order: TOP_PIN_SORT_ORDER });
+        }
+        if (Number(item.sort_order || 0) === TOP_PIN_SORT_ORDER) {
+          return Object.assign({}, item, { sort_order: TOP_PIN_CONFLICT_SORT_ORDER });
+        }
+        return item;
+      });
+
+      this.setData({ photos: allPhotos }, () => this.updateFilteredPhotos());
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
+      this.showToastMessage("已置顶", "success");
+    } catch (error) {
+      console.error("置顶失败:", error);
+      this.showToastMessage(readErrorMessage(error, "置顶失败"), "error");
     } finally {
       this.setData({ actionLoading: false });
     }

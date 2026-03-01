@@ -152,6 +152,7 @@
         </view>
 
         <view class="photo-card__sort-actions" wx:if="{{!isSelectionMode}}">
+          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" catchtap="onMovePhotoTop" disabled="{{actionLoading}}">置顶</button>
           <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{index === 0 || actionLoading}}">上移</button>
           <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{index === filteredPhotos.length - 1 || actionLoading}}">下移</button>
         </view>

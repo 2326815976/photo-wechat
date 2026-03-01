@@ -303,6 +303,8 @@ Page({
     filterMode: "all",
     showFilterModal: false,
     activeFilterPreset: "default_desc",
+    tempFilterPreset: "default_desc",
+    tempFolderId: ROOT_FOLDER_ID,
 
     previewPhoto: null,
     showLoginPrompt: false,
@@ -428,6 +430,10 @@ Page({
         ? String(e.currentTarget.dataset.id || ROOT_FOLDER_ID).trim()
         : ROOT_FOLDER_ID;
     const nextId = id || ROOT_FOLDER_ID;
+    this.switchFolder(nextId);
+  },
+
+  switchFolder(nextId) {
     if (nextId === String(this.data.selectedFolder || ROOT_FOLDER_ID)) return;
 
     clearGalleryMemoryCache();
@@ -591,15 +597,52 @@ Page({
     return "default_desc";
   },
 
+  resolveFilterPreset(preset) {
+    const normalized = String(preset || "").trim();
+    if (normalized === "time_asc") {
+      return { preset: "time_asc", sortMode: "time_asc", filterMode: "all" };
+    }
+    if (normalized === "highlight") {
+      return { preset: "highlight", sortMode: "time_desc", filterMode: "highlight" };
+    }
+    if (normalized === "story") {
+      return { preset: "story", sortMode: "time_desc", filterMode: "story" };
+    }
+    return { preset: "default_desc", sortMode: "time_desc", filterMode: "all" };
+  },
+
+  applyFilterPreset(preset) {
+    const resolved = this.resolveFilterPreset(preset);
+    this.setData(
+      {
+        activeFilterPreset: resolved.preset,
+        sortMode: resolved.sortMode,
+        filterMode: resolved.filterMode,
+      },
+      () => this.applyGalleryViewFromSource()
+    );
+  },
+
   onTapFilter() {
+    const activePreset = this.getActiveFilterPreset();
     this.setData({
       showFilterModal: true,
-      activeFilterPreset: this.getActiveFilterPreset(),
+      activeFilterPreset: activePreset,
+      tempFilterPreset: activePreset,
+      tempFolderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
     });
   },
 
   closeFilterModal() {
     this.setData({ showFilterModal: false });
+  },
+
+  onSelectModalFolder(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || ROOT_FOLDER_ID).trim()
+        : ROOT_FOLDER_ID;
+    this.setData({ tempFolderId: id || ROOT_FOLDER_ID });
   },
 
   onSelectFilterPreset(e) {
@@ -608,57 +651,36 @@ Page({
         ? String(e.currentTarget.dataset.preset || "").trim()
         : "";
     if (!preset) return;
+    this.setData({ tempFilterPreset: preset });
+  },
 
-    if (preset === "default_desc") {
+  onResetFilterSelector() {
+    this.setData({
+      tempFolderId: ROOT_FOLDER_ID,
+      tempFilterPreset: "default_desc",
+    });
+  },
+
+  onApplyFilterSelector() {
+    const nextPreset = String(this.data.tempFilterPreset || this.getActiveFilterPreset());
+    const nextFolderId = String(this.data.tempFolderId || ROOT_FOLDER_ID);
+    const currentFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
+    const resolved = this.resolveFilterPreset(nextPreset);
+
+    if (nextFolderId !== currentFolderId) {
       this.setData(
         {
-          activeFilterPreset: preset,
-          sortMode: "time_desc",
-          filterMode: "all",
           showFilterModal: false,
+          activeFilterPreset: resolved.preset,
+          sortMode: resolved.sortMode,
+          filterMode: resolved.filterMode,
         },
-        () => this.applyGalleryViewFromSource()
+        () => this.switchFolder(nextFolderId)
       );
       return;
     }
 
-    if (preset === "time_asc") {
-      this.setData(
-        {
-          activeFilterPreset: preset,
-          sortMode: "time_asc",
-          filterMode: "all",
-          showFilterModal: false,
-        },
-        () => this.applyGalleryViewFromSource()
-      );
-      return;
-    }
-
-    if (preset === "highlight") {
-      this.setData(
-        {
-          activeFilterPreset: preset,
-          sortMode: "time_desc",
-          filterMode: "highlight",
-          showFilterModal: false,
-        },
-        () => this.applyGalleryViewFromSource()
-      );
-      return;
-    }
-
-    if (preset === "story") {
-      this.setData(
-        {
-          activeFilterPreset: preset,
-          sortMode: "time_desc",
-          filterMode: "story",
-          showFilterModal: false,
-        },
-        () => this.applyGalleryViewFromSource()
-      );
-    }
+    this.setData({ showFilterModal: false }, () => this.applyFilterPreset(nextPreset));
   },
 
   buildColumnsFromPhotos(photos) {
