@@ -441,6 +441,11 @@ button::after {
   box-shadow: 0 8rpx 24rpx rgba(93, 64, 55, 0.14);
 }
 
+.photo-card--story-highlight {
+  border: 3rpx solid rgba(255, 200, 87, 0.82);
+  box-shadow: 0 10rpx 28rpx rgba(255, 200, 87, 0.36);
+}
+
 .photo-img-wrap {
   position: relative;
   overflow: hidden;
@@ -454,6 +459,24 @@ button::after {
 .photo-img--empty {
   min-height: 220rpx;
   background: linear-gradient(135deg, #f8f2e6, #efe5d2);
+}
+
+.photo-story-panel {
+  min-height: 300rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx;
+  background: linear-gradient(160deg, #fffdf7 0%, #fff5db 100%);
+}
+
+.photo-story-panel__text {
+  width: 100%;
+  color: #5d4037;
+  font-size: 24rpx;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .select-badge {
@@ -486,6 +509,37 @@ button::after {
 .select-badge-icon {
   width: 34rpx;
   height: 34rpx;
+}
+
+.story-toggle {
+  position: absolute;
+  top: 10rpx;
+  left: 10rpx;
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2rpx solid rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.story-toggle--highlight {
+  background: rgba(255, 200, 87, 0.88);
+  border-color: rgba(93, 64, 55, 0.3);
+}
+
+.story-toggle__icon {
+  color: #fff;
+  font-size: 28rpx;
+  line-height: 1;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+}
+
+.story-toggle__icon--open {
+  transform: rotate(180deg);
 }
 
 .photo-actions {

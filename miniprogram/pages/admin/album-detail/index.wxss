@@ -335,6 +335,11 @@ button::after {
   box-shadow: 0 10rpx 26rpx rgba(93, 64, 55, 0.2);
 }
 
+.photo-card--story-highlight {
+  border-color: rgba(255, 200, 87, 0.88);
+  box-shadow: 0 10rpx 26rpx rgba(255, 200, 87, 0.35);
+}
+
 .photo-card__image-wrap {
   position: relative;
   width: 100%;
@@ -394,6 +399,16 @@ button::after {
   background: rgba(255, 200, 87, 0.9);
 }
 
+.photo-card__action--story {
+  background: rgba(93, 64, 55, 0.85);
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.photo-card__action--date {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(93, 64, 55, 0.18);
+}
+
 .photo-card__action--danger {
   background: rgba(254, 226, 226, 0.98);
 }
@@ -401,6 +416,18 @@ button::after {
 .photo-card__action-icon {
   width: 18rpx;
   height: 18rpx;
+}
+
+.photo-card__story-icon {
+  color: #ffffff;
+  font-size: 24rpx;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.photo-card__date-icon {
+  font-size: 20rpx;
+  line-height: 1;
 }
 
 .photo-card__meta {
@@ -439,6 +466,52 @@ button::after {
   font-size: 17rpx;
   color: rgba(93, 64, 55, 0.55);
   flex: none;
+}
+
+.photo-card__meta-right {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.photo-card__story-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 200, 87, 0.24);
+  color: #5d4037;
+  font-size: 16rpx;
+  font-weight: 700;
+}
+
+.photo-card__story-badge--highlight {
+  background: rgba(93, 64, 55, 0.1);
+}
+
+.photo-card__sort-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8rpx;
+  padding: 0 12rpx 12rpx;
+  background: #fffbf0;
+}
+
+.photo-card__sort-btn {
+  min-height: 38rpx;
+  height: 38rpx;
+  padding: 0 12rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.18);
+  background: #ffffff;
+  color: #5d4037;
+  font-size: 18rpx;
+}
+
+.photo-card__sort-btn[disabled] {
+  opacity: 0.45;
 }
 
 .pagination {
@@ -704,6 +777,31 @@ button::after {
   padding-right: 2rpx;
 }
 
+.booking-modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.booking-modal__label {
+  font-size: 22rpx;
+  color: #5d4037;
+  font-weight: 600;
+}
+
+.booking-modal__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 130rpx;
+  border-radius: 14rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.14);
+  background: #ffffff;
+  padding: 14rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #5d4037;
+}
+
 .booking-modal__submit {
   width: 100%;
   height: 64rpx;
@@ -726,6 +824,33 @@ button::after {
 
 .gallery-upload-modal {
   max-width: 680rpx;
+}
+
+.upload-mode-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  border-radius: 999rpx;
+  background: #fffbf0;
+  border: 2rpx solid rgba(93, 64, 55, 0.12);
+  padding: 6rpx;
+}
+
+.upload-mode-tab {
+  min-width: 108rpx;
+  height: 46rpx;
+  border-radius: 999rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(93, 64, 55, 0.65);
+  font-size: 20rpx;
+  font-weight: 700;
+}
+
+.upload-mode-tab--active {
+  background: #ffc857;
+  color: #5d4037;
 }
 
 .gallery-upload-picker {
@@ -752,6 +877,74 @@ button::after {
 .gallery-upload-picker__text {
   font-size: 24rpx;
   color: rgba(93, 64, 55, 0.68);
+}
+
+.single-upload-config {
+  border-radius: 16rpx;
+  background: #fffbf0;
+  padding: 14rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.single-upload-preview {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  flex-wrap: wrap;
+}
+
+.single-upload-preview__title {
+  font-size: 20rpx;
+  color: #5d4037;
+  font-weight: 600;
+}
+
+.single-upload-preview__meta {
+  font-size: 18rpx;
+  color: rgba(93, 64, 55, 0.5);
+}
+
+.single-highlight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 12rpx;
+}
+
+.single-highlight-row__label {
+  font-size: 20rpx;
+  color: #5d4037;
+}
+
+.single-date-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 12rpx;
+}
+
+.single-date-row__label {
+  font-size: 20rpx;
+  color: #5d4037;
+}
+
+.single-date-row__value {
+  min-width: 190rpx;
+  text-align: center;
+  font-size: 20rpx;
+  color: #5d4037;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.14);
+  background: #ffffff;
+  padding: 8rpx 14rpx;
 }
 
 .gallery-upload-list-wrap {
@@ -872,6 +1065,24 @@ button::after {
   border-radius: 999rpx;
   background: #ffc857;
   transition: width 0.2s ease;
+}
+
+.upload-mode-tip {
+  font-size: 20rpx;
+  color: rgba(93, 64, 55, 0.55);
+}
+
+.shot-date-picker {
+  width: 100%;
+  min-height: 74rpx;
+  border-radius: 14rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.18);
+  background: #fffbf0;
+  padding: 0 14rpx;
+  display: flex;
+  align-items: center;
+  color: #5d4037;
+  font-size: 22rpx;
 }
 
 .upload-box {

@@ -11,6 +11,12 @@ let cloudInitPromise = null;
 let initedEnv = "";
 let runtimeFingerprint = "";
 let requestTraceCounter = 0;
+let backendRecoveryPromise = null;
+
+const BACKEND_HEALTH_CHECK_PATH = "/api/auth/session";
+const BACKEND_RECOVERY_MAX_WAIT_MS = 45 * 1000;
+const BACKEND_RECOVERY_INTERVAL_MS = 2500;
+const BACKEND_HEALTH_CHECK_TIMEOUT_MS = 5000;
 
 function normalizeRuntimeValue(value) {
   return String(value || "").trim();
@@ -73,6 +79,73 @@ function normalizeStatusCode(value) {
   const code = Number(value || 0);
   if (!Number.isFinite(code)) return 0;
   return code;
+}
+
+function sleep(ms) {
+  const delay = toPositiveNumber(ms, 0);
+  if (!delay) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
+}
+
+function isBackendUnavailableStatus(statusCode) {
+  const code = normalizeStatusCode(statusCode);
+  if (!code) return false;
+  return [502, 503, 504, 520, 521, 522, 523, 524].includes(code);
+}
+
+function hasBackendUnavailableMessageKeyword(message) {
+  const text = String(message || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("service unavailable") ||
+    text.includes("upstream connect error") ||
+    text.includes("upstream request timeout") ||
+    text.includes("gateway timeout") ||
+    text.includes("connection reset") ||
+    text.includes("econnreset") ||
+    text.includes("socket hang up") ||
+    text.includes("request:fail") ||
+    text.includes("timeout") ||
+    text.includes("timed out") ||
+    text.includes("网络错误") ||
+    text.includes("连接失败") ||
+    text.includes("连接超时") ||
+    text.includes("暂不可用") ||
+    text.includes("云托管请求失败")
+  );
+}
+
+function shouldTriggerBackendRecovery(error, statusCodeHint) {
+  const statusCode = normalizeStatusCode(
+    statusCodeHint !== undefined && statusCodeHint !== null
+      ? statusCodeHint
+      : error && typeof error === "object"
+      ? error.statusCode
+      : 0
+  );
+  if (isBackendUnavailableStatus(statusCode)) {
+    return true;
+  }
+
+  const message = String((error && error.message) || "").trim();
+  if (!message) {
+    return false;
+  }
+
+  // 500 仅在命中“后端不可用”关键字时触发恢复，避免掩盖真实业务错误。
+  if (statusCode === 500) {
+    return hasBackendUnavailableMessageKeyword(message);
+  }
+
+  if (!statusCode || statusCode >= 520) {
+    return hasBackendUnavailableMessageKeyword(message);
+  }
+
+  return false;
 }
 
 function resolveLogWriter(level) {
@@ -326,19 +399,95 @@ async function callContainer(options) {
   return res;
 }
 
+async function probeBackendHealthOnce() {
+  try {
+    const response = await callContainer({
+      path: BACKEND_HEALTH_CHECK_PATH,
+      method: "GET",
+      timeout: BACKEND_HEALTH_CHECK_TIMEOUT_MS,
+    });
+    const statusCode = normalizeStatusCode(response && response.statusCode);
+    if (!statusCode) {
+      return false;
+    }
+    return !isBackendUnavailableStatus(statusCode);
+  } catch (error) {
+    return false;
+  }
+}
+
+async function waitForBackendRecovery(runtime, trigger) {
+  if (backendRecoveryPromise) {
+    return backendRecoveryPromise;
+  }
+
+  const startedAt = Date.now();
+  backendRecoveryPromise = (async () => {
+    let attempts = 0;
+    const deadline = startedAt + BACKEND_RECOVERY_MAX_WAIT_MS;
+
+    logRequestTrace(runtime, "warn", "backend-recovery-start", {
+      trigger: String((trigger && trigger.message) || "unknown"),
+      maxWaitMs: BACKEND_RECOVERY_MAX_WAIT_MS,
+      intervalMs: BACKEND_RECOVERY_INTERVAL_MS,
+      healthPath: BACKEND_HEALTH_CHECK_PATH,
+    });
+
+    while (Date.now() <= deadline) {
+      attempts += 1;
+      const healthy = await probeBackendHealthOnce();
+      if (healthy) {
+        const elapsedMs = Date.now() - startedAt;
+        logRequestTrace(runtime, "log", "backend-recovery-ok", {
+          attempts,
+          elapsedMs,
+        });
+        return {
+          recovered: true,
+          attempts,
+          elapsedMs,
+        };
+      }
+      if (Date.now() + BACKEND_RECOVERY_INTERVAL_MS > deadline) {
+        break;
+      }
+      await sleep(BACKEND_RECOVERY_INTERVAL_MS);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    logRequestTrace(runtime, "warn", "backend-recovery-timeout", {
+      attempts,
+      elapsedMs,
+      maxWaitMs: BACKEND_RECOVERY_MAX_WAIT_MS,
+    });
+    return {
+      recovered: false,
+      attempts,
+      elapsedMs,
+    };
+  })().finally(() => {
+    backendRecoveryPromise = null;
+  });
+
+  return backendRecoveryPromise;
+}
+
 async function requestJson(path, init) {
-  const method = String((init && init.method) || "GET").toUpperCase();
-  const header = Object.assign({}, init && init.header ? init.header : {});
+  const options = init && typeof init === "object" ? init : {};
+  const method = String((options && options.method) || "GET").toUpperCase();
+  const header = Object.assign({}, options && options.header ? options.header : {});
   header["Content-Type"] = header["Content-Type"] || "application/json";
   const runtime = getRuntime();
+  const disableBackendRecovery = Boolean(options.disableBackendRecovery);
+  let recoveryAttempted = false;
 
   const sendRequest = async () => {
     const response = await callContainer({
       path,
       method,
-      data: init ? init.data : undefined,
+      data: options ? options.data : undefined,
       header,
-      timeout: init && init.timeout,
+      timeout: options && options.timeout,
     });
     return {
       response,
@@ -347,20 +496,25 @@ async function requestJson(path, init) {
     };
   };
 
-  let { response: res, statusCode, parsedData } = await sendRequest();
+  const sendRequestWithCookieRetry = async () => {
+    let { response: res, statusCode, parsedData } = await sendRequest();
+    const hasStoredCookie = Boolean(getStoredCookie());
+    const shouldRetryWithCleanCookie = hasStoredCookie && (statusCode === 401 || statusCode === 403);
+    if (shouldRetryWithCleanCookie) {
+      clearStoredCookie();
+      const retried = await sendRequest();
+      res = retried.response;
+      statusCode = retried.statusCode;
+      parsedData = retried.parsedData;
+    }
+    return {
+      response: res,
+      statusCode,
+      parsedData,
+    };
+  };
 
-  // 小程序长时间后台后，历史 cookie 可能失效；清理后重试一次可提升恢复成功率。
-  const hasStoredCookie = Boolean(getStoredCookie());
-  const shouldRetryWithCleanCookie = hasStoredCookie && (statusCode === 401 || statusCode === 403);
-  if (shouldRetryWithCleanCookie) {
-    clearStoredCookie();
-    const retried = await sendRequest();
-    res = retried.response;
-    statusCode = retried.statusCode;
-    parsedData = retried.parsedData;
-  }
-
-  if (statusCode && (statusCode < 200 || statusCode >= 300)) {
+  const buildHttpError = (res, statusCode, parsedData) => {
     const apiPath = String(path || "");
     const message = resolveErrorMessage(parsedData, statusCode, `请求失败（${statusCode}）`);
     const hint =
@@ -377,7 +531,71 @@ async function requestJson(path, init) {
     err.service = runtime.service;
     err.env = runtime.env;
     err.message = `${String(message)}${hint}`;
-    throw err;
+    return err;
+  };
+
+  const appendRecoveryHint = (error, recoveryResult, recovered) => {
+    const err = error instanceof Error ? error : new Error(String(error || "请求失败"));
+    if (recoveryResult && typeof recoveryResult === "object") {
+      err.backendRecovery = recoveryResult;
+    }
+    const elapsedMs = Number((recoveryResult && recoveryResult.elapsedMs) || 0);
+    const elapsedSeconds = elapsedMs > 0 ? (elapsedMs / 1000).toFixed(1) : "0";
+    if (recovered) {
+      err.message = `${String(err.message || "请求失败")}（后端已恢复并自动重试，等待约 ${elapsedSeconds}s）`;
+    } else {
+      err.message = `${String(err.message || "请求失败")}（后端可能处于冷启动，已自动等待 ${elapsedSeconds}s 仍未恢复）`;
+    }
+    return err;
+  };
+
+  const tryRecoverAndRetry = async (triggerError, statusCodeHint) => {
+    if (recoveryAttempted) {
+      return null;
+    }
+    if (disableBackendRecovery || !shouldTriggerBackendRecovery(triggerError, statusCodeHint)) {
+      return null;
+    }
+    recoveryAttempted = true;
+
+    const recoveryResult = await waitForBackendRecovery(runtime, triggerError);
+    if (!recoveryResult || !recoveryResult.recovered) {
+      throw appendRecoveryHint(triggerError, recoveryResult, false);
+    }
+
+    try {
+      return await sendRequestWithCookieRetry();
+    } catch (retryError) {
+      throw appendRecoveryHint(retryError, recoveryResult, true);
+    }
+  };
+
+  let result;
+  try {
+    result = await sendRequestWithCookieRetry();
+  } catch (requestError) {
+    const recoveredResult = await tryRecoverAndRetry(requestError);
+    if (!recoveredResult) {
+      throw requestError;
+    }
+    result = recoveredResult;
+  }
+
+  let { response: res, statusCode, parsedData } = result;
+  if (statusCode && (statusCode < 200 || statusCode >= 300)) {
+    let httpError = buildHttpError(res, statusCode, parsedData);
+    const recoveredResult = await tryRecoverAndRetry(httpError, statusCode);
+    if (!recoveredResult) {
+      throw httpError;
+    }
+    res = recoveredResult.response;
+    statusCode = recoveredResult.statusCode;
+    parsedData = recoveredResult.parsedData;
+  }
+
+  if (statusCode && (statusCode < 200 || statusCode >= 300)) {
+    const httpError = buildHttpError(res, statusCode, parsedData);
+    throw httpError;
   }
 
   return parsedData;

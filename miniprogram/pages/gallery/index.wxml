@@ -26,14 +26,42 @@
     </view>
 
     <view wx:if="{{!loading}}">
+      <scroll-view class="folder-tabs motion-fade-up motion-delay-2" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
+        <view class="folder-tabs__row">
+          <view
+            class="folder-tab {{selectedFolder === item.id ? 'folder-tab--active' : ''}}"
+            wx:for="{{folders}}"
+            wx:key="id"
+            data-id="{{item.id}}"
+            bindtap="onSelectFolder"
+          >
+            <text class="folder-tab__text">{{item.name}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
       <view class="masonry motion-fade-up motion-delay-2" wx:if="{{left.length > 0 || right.length > 0}}">
         <view class="col">
-          <view class="card motion-fade-up" wx:for="{{left}}" wx:key="id" style="animation-delay: {{100 + (index % 8) * 30}}ms;">
-            <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
-              <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
-              <view class="views" wx:if="{{!hideAudit}}">
+          <view class="card {{item.story_highlight ? 'card--highlight' : ''}} motion-fade-up" wx:for="{{left}}" wx:key="id" style="animation-delay: {{100 + (index % 8) * 30}}ms;">
+            <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
+              <block wx:if="{{item.story_open && item.has_story}}">
+                <view class="story-panel" data-id="{{item.id}}" bindtap="toggleStory">
+                  <text class="story-panel__text">{{item.story_text}}</text>
+                </view>
+              </block>
+              <block wx:else>
+                <view data-id="{{item.id}}" bindtap="previewPhoto">
+                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+                </view>
+              </block>
+
+              <view class="views" wx:if="{{!hideAudit && !item.story_open}}">
                 <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
                 <text class="views-num">{{item.view_count}}</text>
+              </view>
+
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
             </view>
             <view class="meta">
@@ -46,12 +74,26 @@
           </view>
         </view>
         <view class="col">
-          <view class="card motion-fade-up" wx:for="{{right}}" wx:key="id" style="animation-delay: {{120 + (index % 8) * 30}}ms;">
-            <view class="img-wrap" hover-class="img-wrap--active" hover-stay-time="80" data-id="{{item.id}}" bindtap="previewPhoto">
-              <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
-              <view class="views" wx:if="{{!hideAudit}}">
+          <view class="card {{item.story_highlight ? 'card--highlight' : ''}} motion-fade-up" wx:for="{{right}}" wx:key="id" style="animation-delay: {{120 + (index % 8) * 30}}ms;">
+            <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
+              <block wx:if="{{item.story_open && item.has_story}}">
+                <view class="story-panel" data-id="{{item.id}}" bindtap="toggleStory">
+                  <text class="story-panel__text">{{item.story_text}}</text>
+                </view>
+              </block>
+              <block wx:else>
+                <view data-id="{{item.id}}" bindtap="previewPhoto">
+                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+                </view>
+              </block>
+
+              <view class="views" wx:if="{{!hideAudit && !item.story_open}}">
                 <image class="views-icon" src="/images/icons/eye-white.svg" mode="aspectFit" />
                 <text class="views-num">{{item.view_count}}</text>
+              </view>
+
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
             </view>
             <view class="meta">

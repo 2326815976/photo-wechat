@@ -100,16 +100,23 @@
 
       <view class="grid motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
         <view class="grid-col">
-          <view class="photo-card motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
+          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
-              <image
-                wx:if="{{item.card_url_resolved}}"
-                class="photo-img"
-                src="{{item.card_url_resolved}}"
-                mode="widthFix"
-                lazy-load="{{true}}"
-              />
-              <view wx:else class="photo-img photo-img--empty"></view>
+              <block wx:if="{{item.story_open && item.has_story}}">
+                <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
+                  <text class="photo-story-panel__text">{{item.story_text}}</text>
+                </view>
+              </block>
+              <block wx:else>
+                <image
+                  wx:if="{{item.card_url_resolved}}"
+                  class="photo-img"
+                  src="{{item.card_url_resolved}}"
+                  mode="widthFix"
+                  lazy-load="{{true}}"
+                />
+                <view wx:else class="photo-img photo-img--empty"></view>
+              </block>
 
               <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
                 <image
@@ -117,6 +124,10 @@
                   src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
                   mode="aspectFit"
                 />
+              </view>
+
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
             </view>
 
@@ -130,16 +141,23 @@
         </view>
 
         <view class="grid-col">
-          <view class="photo-card motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
+          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
-              <image
-                wx:if="{{item.card_url_resolved}}"
-                class="photo-img"
-                src="{{item.card_url_resolved}}"
-                mode="widthFix"
-                lazy-load="{{true}}"
-              />
-              <view wx:else class="photo-img photo-img--empty"></view>
+              <block wx:if="{{item.story_open && item.has_story}}">
+                <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
+                  <text class="photo-story-panel__text">{{item.story_text}}</text>
+                </view>
+              </block>
+              <block wx:else>
+                <image
+                  wx:if="{{item.card_url_resolved}}"
+                  class="photo-img"
+                  src="{{item.card_url_resolved}}"
+                  mode="widthFix"
+                  lazy-load="{{true}}"
+                />
+                <view wx:else class="photo-img photo-img--empty"></view>
+              </block>
 
               <view class="select-badge" hover-class="select-badge--active" catchtap="togglePhotoSelection" data-id="{{item.id}}">
                 <image
@@ -147,6 +165,10 @@
                   src="{{item._selected ? '/images/icons/check-square-yellow.svg' : '/images/icons/square-muted.svg'}}"
                   mode="aspectFit"
                 />
+              </view>
+
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
             </view>
 

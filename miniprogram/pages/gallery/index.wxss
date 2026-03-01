@@ -109,6 +109,44 @@
   color: rgba(93, 64, 55, 0.60);
 }
 
+.folder-tabs {
+  margin-bottom: 14rpx;
+  white-space: nowrap;
+}
+
+.folder-tabs__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  padding-bottom: 4rpx;
+}
+
+.folder-tab {
+  flex: none;
+  height: 58rpx;
+  padding: 0 22rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.8);
+  border: 3rpx dashed rgba(93, 64, 55, 0.16);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folder-tab--active {
+  background: #ffc857;
+  border-style: solid;
+  border-color: rgba(93, 64, 55, 0.2);
+  box-shadow: 0 8rpx 18rpx rgba(93, 64, 55, 0.2);
+}
+
+.folder-tab__text {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #5d4037;
+  white-space: nowrap;
+}
+
 .masonry {
   display: flex;
   gap: 16rpx;
@@ -128,9 +166,18 @@
   box-shadow: 0 10rpx 30rpx rgba(93, 64, 55, 0.10);
 }
 
+.card--highlight {
+  border: 3rpx solid rgba(255, 200, 87, 0.82);
+  box-shadow: 0 12rpx 30rpx rgba(255, 200, 87, 0.34);
+}
+
 .img-wrap {
   position: relative;
   transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.img-wrap--story-open {
+  background: linear-gradient(150deg, #fffdf7 0%, #fff6de 100%);
 }
 
 .img-wrap--active {
@@ -139,6 +186,23 @@
 }
 
 .img {
+  width: 100%;
+}
+
+.story-panel {
+  min-height: 360rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx;
+}
+
+.story-panel__text {
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #5d4037;
+  text-align: left;
+  white-space: pre-wrap;
   width: 100%;
 }
 
@@ -163,6 +227,37 @@
   font-size: 20rpx;
   color: #FFFFFF;
   font-weight: 700;
+}
+
+.story-toggle {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  width: 46rpx;
+  height: 46rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.38);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2rpx solid rgba(255, 255, 255, 0.45);
+}
+
+.story-toggle--highlight {
+  background: rgba(255, 200, 87, 0.82);
+  border-color: rgba(93, 64, 55, 0.35);
+}
+
+.story-toggle__icon {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.story-toggle__icon--open {
+  transform: rotate(180deg);
 }
 
 .meta {

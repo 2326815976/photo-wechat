@@ -46,10 +46,18 @@ function normalizePhoto(photo) {
   const thumbnailUrl = resolvePublicUrl(photo && photo.thumbnail_url);
   const previewUrl = resolvePublicUrl(photo && photo.preview_url);
   const originalUrl = resolveOriginalUrl(photo);
+  const storyText = String((photo && photo.story_text) || "").trim();
+  const hasStory = Boolean(storyText);
+  const isHighlight = Boolean(photo && photo.is_highlight);
   return Object.assign({}, photo, {
     thumbnail_url_resolved: thumbnailUrl,
     preview_url_resolved: previewUrl,
     original_url_resolved: originalUrl,
+    story_text: storyText,
+    has_story: hasStory,
+    is_highlight: isHighlight,
+    story_open: false,
+    story_highlight: hasStory || isHighlight,
     // 列表卡片优先走缩略图，保证清晰度同时降低首屏体积
     card_url_resolved: thumbnailUrl || previewUrl || originalUrl,
     // 全屏查看优先走原图，历史数据回退预览/缩略图
@@ -1060,6 +1068,24 @@ Page({
     }
 
     this.setData({ selectedPhotoMap: map }, () => this.applyFilter());
+  },
+
+  toggleStory(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!id) return;
+
+    const nextAll = (this.data.allPhotos || []).map((photo) => {
+      if (String(photo.id) !== id) return photo;
+      if (!photo.has_story) return photo;
+      return Object.assign({}, photo, {
+        story_open: !Boolean(photo.story_open),
+      });
+    });
+
+    this.setData({ allPhotos: nextAll }, () => this.applyFilter());
   },
 
   async toggleSelectAll() {

@@ -106,7 +106,7 @@
       <view
         wx:for="{{filteredPhotos}}"
         wx:key="id"
-        class="photo-card {{isSelectionMode && item.selected ? 'photo-card--selected' : ''}}"
+        class="photo-card {{isSelectionMode && item.selected ? 'photo-card--selected' : ''}} {{item.story_highlight ? 'photo-card--story-highlight' : ''}}"
         bindtap="onPhotoCardTap"
         data-photo-id="{{item.id}}"
       >
@@ -123,6 +123,12 @@
           </view>
 
           <view wx:if="{{!isSelectionMode}}" class="photo-card__actions">
+            <view class="photo-card__action photo-card__action--story" catchtap="onOpenStoryModal" data-photo-id="{{item.id}}">
+              <text class="photo-card__story-icon">↻</text>
+            </view>
+            <view class="photo-card__action photo-card__action--date" catchtap="onOpenShotDateModal" data-photo-id="{{item.id}}">
+              <text class="photo-card__date-icon">📅</text>
+            </view>
             <view class="photo-card__action photo-card__action--move" catchtap="onMovePhoto" data-photo-id="{{item.id}}">
               <image class="photo-card__action-icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
             </view>
@@ -137,7 +143,16 @@
             <image class="photo-card__folder-icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
             <text class="photo-card__folder-name">{{item.folderName}}</text>
           </view>
-          <text class="photo-card__date">{{item.dateText}}</text>
+          <view class="photo-card__meta-right">
+            <text class="photo-card__story-badge" wx:if="{{item.has_story}}">故事</text>
+            <text class="photo-card__story-badge photo-card__story-badge--highlight" wx:elif="{{item.story_highlight}}">高亮</text>
+            <text class="photo-card__date">{{item.dateText}}</text>
+          </view>
+        </view>
+
+        <view class="photo-card__sort-actions" wx:if="{{!isSelectionMode}}">
+          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{index === 0 || actionLoading}}">上移</button>
+          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{index === filteredPhotos.length - 1 || actionLoading}}">下移</button>
         </view>
       </view>
     </view>
@@ -230,21 +245,67 @@
   <view wx:if="{{showUploadModal}}" class="booking-modal-mask" bindtap="onCloseUploadModal">
     <view class="booking-modal booking-modal--form gallery-upload-modal" catchtap="onStopPropagation">
       <view class="booking-modal__head">
-        <text class="booking-modal__title">批量上传照片</text>
+        <text class="booking-modal__title">上传照片</text>
         <view class="booking-modal__close" bindtap="onCloseUploadModal">
           <text>✕</text>
         </view>
       </view>
       <view class="booking-modal__body">
-        <view class="gallery-upload-picker" catchtap="onChooseImages">
-          <text class="gallery-upload-picker__icon">📤</text>
-          <text class="gallery-upload-picker__text" wx:if="{{batchImages.length}}">
-            已选择 {{batchImages.length}} 张图片
-          </text>
-          <text class="gallery-upload-picker__text" wx:else>点击选择多张图片</text>
+        <view class="upload-mode-tabs">
+          <view class="upload-mode-tab {{uploadMode === 'single' ? 'upload-mode-tab--active' : ''}}" bindtap="onUploadModeChange" data-mode="single">
+            <text>单图</text>
+          </view>
+          <view class="upload-mode-tab {{uploadMode === 'batch' ? 'upload-mode-tab--active' : ''}}" bindtap="onUploadModeChange" data-mode="batch">
+            <text>批量</text>
+          </view>
         </view>
 
-        <view class="gallery-upload-list-wrap" wx:if="{{batchImages.length}}">
+        <view class="gallery-upload-picker" catchtap="onChooseImages">
+          <text class="gallery-upload-picker__icon">📤</text>
+          <text class="gallery-upload-picker__text" wx:if="{{uploadMode === 'single' && singleImage}}">
+            已选择 1 张图片
+          </text>
+          <text class="gallery-upload-picker__text" wx:elif="{{uploadMode === 'batch' && batchImages.length}}">
+            已选择 {{batchImages.length}} 张图片
+          </text>
+          <text class="gallery-upload-picker__text" wx:else>{{uploadMode === 'single' ? '点击选择单张图片' : '点击选择多张图片'}}</text>
+        </view>
+
+        <view class="single-upload-config" wx:if="{{uploadMode === 'single'}}">
+          <view class="single-upload-preview" wx:if="{{singleImage}}">
+            <text class="single-upload-preview__title">{{singleImage.name}}</text>
+            <text class="single-upload-preview__meta">{{singleImage.sizeText}}</text>
+            <view class="gallery-upload-list-clear" bindtap="onClearImages">
+              <text>清空</text>
+            </view>
+          </view>
+
+          <view class="single-date-row">
+            <text class="single-date-row__label">拍摄日期（单图可选）</text>
+            <picker mode="date" value="{{singleShotDate}}" bindchange="onSingleShotDateChange">
+              <view class="single-date-row__value">{{singleShotDate}}</view>
+            </picker>
+          </view>
+
+          <view class="booking-modal__field">
+            <text class="booking-modal__label">关于此刻（单图可选）</text>
+            <textarea
+              class="booking-modal__textarea"
+              placeholder="写下这张照片的故事"
+              maxlength="800"
+              value="{{singleStoryText}}"
+              bindinput="onSingleStoryInput"
+              auto-height="{{true}}"
+            />
+          </view>
+
+          <view class="single-highlight-row">
+            <text class="single-highlight-row__label">高亮该照片（无文案也可高亮）</text>
+            <switch checked="{{singleHighlight}}" color="#FFC857" bindchange="onSingleHighlightChange" />
+          </view>
+        </view>
+
+        <view class="gallery-upload-list-wrap" wx:if="{{uploadMode === 'batch' && batchImages.length}}">
           <view class="gallery-upload-list-head">
             <text class="gallery-upload-list-title">已选择 {{batchImages.length}} 张</text>
             <view class="gallery-upload-list-clear" bindtap="onClearImages">
@@ -279,10 +340,61 @@
           catchtap="onUploadPhotos"
           hover-class="booking-modal__submit--active"
           loading="{{uploading}}"
-          disabled="{{uploading || !batchImages.length}}"
+          disabled="{{uploading || (uploadMode === 'single' ? !singleImage : !batchImages.length)}}"
         >
           <text wx:if="{{uploading}}">上传中 ({{uploadProgress.current}}/{{uploadProgress.total}})...</text>
+          <text wx:elif="{{uploadMode === 'single'}}">上传单张照片</text>
           <text wx:else>批量上传 ({{batchImages.length}} 张)</text>
+        </button>
+
+        <text class="upload-mode-tip" wx:if="{{uploadMode === 'batch'}}">批量上传默认拍摄日期为今天，不支持“关于此刻”，可在列表中后续编辑。</text>
+        <text class="upload-mode-tip" wx:elif="{{uploadMode === 'single'}}">单图上传可设置拍摄日期、“关于此刻”和高亮。</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showStoryModal}}" class="modal-mask" bindtap="onCloseStoryModal">
+    <view class="modal-container" catchtap="onStopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">编辑关于此刻</text>
+      </view>
+      <view class="modal-body">
+        <textarea
+          class="booking-modal__textarea"
+          placeholder="写下这张照片的故事（可留空）"
+          maxlength="800"
+          value="{{editingStoryText}}"
+          bindinput="onEditingStoryInput"
+          auto-height="{{true}}"
+        />
+        <view class="single-highlight-row">
+          <text class="single-highlight-row__label">高亮该照片（可独立于文案）</text>
+          <switch checked="{{editingStoryHighlight}}" color="#FFC857" bindchange="onEditingStoryHighlightChange" />
+        </view>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseStoryModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onSaveStory" disabled="{{actionLoading}}">
+          {{actionLoading ? '保存中...' : '保存'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showShotDateModal}}" class="modal-mask" bindtap="onCloseShotDateModal">
+    <view class="modal-container" catchtap="onStopPropagation">
+      <view class="modal-header">
+        <text class="modal-title">修改拍摄日期</text>
+      </view>
+      <view class="modal-body">
+        <picker mode="date" value="{{editingShotDateValue}}" bindchange="onEditingShotDateChange">
+          <view class="shot-date-picker">{{editingShotDateValue}}</view>
+        </picker>
+      </view>
+      <view class="modal-footer">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseShotDateModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary" bindtap="onSaveShotDate" disabled="{{actionLoading}}">
+          {{actionLoading ? '保存中...' : '保存'}}
         </button>
       </view>
     </view>

@@ -3,6 +3,41 @@ const { resolvePublicUrl } = require("../../../utils/storage-url");
 const { setCachedAlbumRootName } = require("../../../utils/album-root-name-cache");
 
 const ROOT_FOLDER_SENTINEL = '__ROOT__';
+const DEFAULT_SORT_ORDER = 2147483647;
+const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_highlight / sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/06_album_photo_story_sort.sql";
+const ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT = "数据库缺少 shot_date 字段，请先执行 SQL 迁移：photo/sql/migrations/07_album_photo_shot_date.sql";
+
+function normalizeStoryText(value) {
+  const text = String(value || "").trim();
+  return text ? text : "";
+}
+
+function getTodayDateUTC8() {
+  const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeShotDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!matched) return "";
+  return `${matched[1]}-${matched[2]}-${matched[3]}`;
+}
+
+function isColumnMissingError(message, column) {
+  const normalized = String(message || "").toLowerCase();
+  const target = String(column || "").trim().toLowerCase();
+  if (!target) return false;
+  return (
+    (normalized.includes("unknown column") && normalized.includes(target)) ||
+    (normalized.includes("column") && normalized.includes("not found") && normalized.includes(target)) ||
+    (normalized.includes("does not exist") && normalized.includes(target))
+  );
+}
 
 function isRootFolderTarget(value) {
   const text = String(value === undefined || value === null ? "" : value).trim();
@@ -372,12 +407,24 @@ function normalizePhotoRecord(row) {
   const previewResolved = resolvePublicUrl(rawPreview || rawOriginal || rawUrl || rawThumb);
   const originalResolved = resolvePublicUrl(rawOriginal || rawPreview || rawUrl || rawThumb);
   const urlResolved = resolvePublicUrl(rawUrl || rawPreview || rawOriginal || rawThumb);
+  const storyText = normalizeStoryText(item.story_text);
+  const hasStory = Boolean(storyText);
+  const isHighlight = Boolean(item.is_highlight);
+  const shotDate = normalizeShotDate(item.shot_date);
+  const sortRaw = Number(item.sort_order);
+  const sortOrder = Number.isFinite(sortRaw) && sortRaw > 0 ? Math.round(sortRaw) : DEFAULT_SORT_ORDER;
 
   return Object.assign({}, item, {
     url: urlResolved,
     thumbnail_url: thumbnailResolved,
     preview_url: previewResolved,
     original_url: originalResolved,
+    story_text: storyText,
+    has_story: hasStory,
+    is_highlight: isHighlight,
+    shot_date: shotDate,
+    story_highlight: hasStory || isHighlight,
+    sort_order: sortOrder,
   });
 }
 
@@ -452,9 +499,23 @@ Page({
 
     // 上传照片
     showUploadModal: false,
+    uploadMode: "batch",
+    singleImage: null,
+    singleStoryText: "",
+    singleHighlight: false,
+    singleShotDate: getTodayDateUTC8(),
     batchImages: [],
     uploading: false,
     uploadProgress: { current: 0, total: 0 },
+
+    // 关于此刻编辑
+    showStoryModal: false,
+    editingStoryPhotoId: "",
+    editingStoryText: "",
+    editingStoryHighlight: false,
+    showShotDateModal: false,
+    editingShotDatePhotoId: "",
+    editingShotDateValue: getTodayDateUTC8(),
 
     // 批量选择
     isSelectionMode: false,
@@ -650,18 +711,69 @@ Page({
         photoFilters.push({ column: "folder_id", operator: "eq", value: String(selectedFolder) });
       }
 
-      const result = await dbQuery({
+      let result = await dbQuery({
         table: "album_photos",
         action: "select",
-        columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,created_at",
+        columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at",
         filters: photoFilters,
-        orders: [{ column: "created_at", ascending: false }],
+        orders: [{ column: "sort_order", ascending: true }, { column: "created_at", ascending: false }],
         range: {
           from: offset,
           to: offset + photosPerPage - 1,
         },
         count: "exact",
       });
+
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "select",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,created_at",
+          filters: photoFilters,
+          orders: [{ column: "created_at", ascending: false }],
+          range: {
+            from: offset,
+            to: offset + photosPerPage - 1,
+          },
+          count: "exact",
+        });
+      }
+
+      if (
+        hasRpcError(result) &&
+        (
+          isColumnMissingError(readRpcError(result, "获取照片失败"), "story_text") ||
+          isColumnMissingError(readRpcError(result, "获取照片失败"), "is_highlight")
+        )
+      ) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "select",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,shot_date,created_at",
+          filters: photoFilters,
+          orders: [{ column: "created_at", ascending: false }],
+          range: {
+            from: offset,
+            to: offset + photosPerPage - 1,
+          },
+          count: "exact",
+        });
+      }
+
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "shot_date")) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "select",
+          columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,created_at",
+          filters: photoFilters,
+          orders: [{ column: "created_at", ascending: false }],
+          range: {
+            from: offset,
+            to: offset + photosPerPage - 1,
+          },
+          count: "exact",
+        });
+      }
 
       if (!hasRpcError(result)) {
         const payload = readRpcData(result, []);
@@ -722,18 +834,29 @@ Page({
       ? photos.filter(p => String(p.folder_id || "") === String(selectedFolder))
       : photos.filter(p => !p.folder_id);
 
+    filteredPhotos = filteredPhotos.slice().sort((a, b) => {
+      const sortA = Number(a && a.sort_order);
+      const sortB = Number(b && b.sort_order);
+      const normalizedA = Number.isFinite(sortA) && sortA > 0 ? Math.round(sortA) : DEFAULT_SORT_ORDER;
+      const normalizedB = Number.isFinite(sortB) && sortB > 0 ? Math.round(sortB) : DEFAULT_SORT_ORDER;
+      if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+      return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""));
+    });
+
     filteredPhotos = filteredPhotos.map(photo => {
       const folderName = photo.folder_id
         ? folders.find(f => String(f.id) === String(photo.folder_id))?.name || "未知文件夹"
         : rootFolderName;
 
-      const dateText = formatPhotoDateWithYear(photo.created_at);
+      const dateText = formatPhotoDateWithYear(photo.shot_date || photo.created_at);
 
       return {
         ...photo,
         folderName,
         dateText,
-        selected: selectedSet.has(String(photo.id))
+        selected: selectedSet.has(String(photo.id)),
+        has_story: Boolean(photo.has_story),
+        story_highlight: Boolean(photo.story_highlight),
       };
     });
 
@@ -1109,13 +1232,47 @@ Page({
 
   // 上传照片
   onShowUploadModal() {
-    this.setData({ showUploadModal: true });
+    this.setData({
+      showUploadModal: true,
+      uploadMode: "batch",
+      singleImage: null,
+      singleStoryText: "",
+      singleHighlight: false,
+      singleShotDate: getTodayDateUTC8(),
+      batchImages: [],
+      uploadProgress: { current: 0, total: 0 },
+    });
   },
 
   onCloseUploadModal() {
     if (!this.data.uploading) {
-      this.setData({ showUploadModal: false });
+      this.setData({
+        showUploadModal: false,
+        singleImage: null,
+        singleStoryText: "",
+        singleHighlight: false,
+        singleShotDate: getTodayDateUTC8(),
+        batchImages: [],
+      });
     }
+  },
+
+  onUploadModeChange(e) {
+    if (this.data.uploading) return;
+    const mode =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.mode || "batch").trim()
+        : "batch";
+    const nextMode = mode === "single" ? "single" : "batch";
+    this.setData({
+      uploadMode: nextMode,
+      singleImage: null,
+      singleStoryText: "",
+      singleHighlight: false,
+      singleShotDate: getTodayDateUTC8(),
+      batchImages: [],
+      uploadProgress: { current: 0, total: 0 },
+    });
   },
 
   async onChooseImages() {
@@ -1125,14 +1282,15 @@ Page({
     }
 
     try {
+      const isSingle = String(this.data.uploadMode || "batch") === "single";
       const res = await wx.chooseMedia({
-        count: 9,
+        count: isSingle ? 1 : 9,
         mediaType: ['image'],
         sourceType: ['album', 'camera']
       });
 
       if (res.tempFiles && res.tempFiles.length > 0) {
-        const batchImages = res.tempFiles.map((file, index) => ({
+        const selected = res.tempFiles.map((file, index) => ({
           path: file.tempFilePath,
           name: String((file && file.fileName) || "").trim() || `图片${index + 1}.jpg`,
           size: Number((file && file.size) || 0),
@@ -1140,7 +1298,12 @@ Page({
           width: Number((file && file.width) || 0),
           height: Number((file && file.height) || 0),
         }));
-        this.setData({ batchImages });
+
+        if (isSingle) {
+          this.setData({ singleImage: selected[0] || null });
+        } else {
+          this.setData({ batchImages: selected });
+        }
       }
     } catch (error) {
       console.error("选择图片失败:", error);
@@ -1148,11 +1311,19 @@ Page({
   },
 
   onClearImages() {
+    if (String(this.data.uploadMode || "batch") === "single") {
+      this.setData({ singleImage: null });
+      return;
+    }
     this.setData({ batchImages: [] });
   },
 
   onRemoveUploadImage(e) {
     if (this.data.uploading) return;
+    if (String(this.data.uploadMode || "batch") === "single") {
+      this.setData({ singleImage: null });
+      return;
+    }
     const index = Number(e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.index : -1);
     if (!Number.isInteger(index) || index < 0) return;
     const list = Array.isArray(this.data.batchImages) ? this.data.batchImages : [];
@@ -1161,7 +1332,186 @@ Page({
     this.setData({ batchImages: next });
   },
 
+  onSingleStoryInput(e) {
+    this.setData({ singleStoryText: e && e.detail ? e.detail.value : "" });
+  },
+
+  onSingleHighlightChange(e) {
+    this.setData({
+      singleHighlight: Boolean(e && e.detail ? e.detail.value : false),
+    });
+  },
+
+  onSingleShotDateChange(e) {
+    const value = normalizeShotDate(e && e.detail ? e.detail.value : "");
+    this.setData({
+      singleShotDate: value || getTodayDateUTC8(),
+    });
+  },
+
+  async onUploadSinglePhoto() {
+    const { singleImage, albumId, selectedFolder, folders, singleStoryText, singleHighlight, singleShotDate } = this.data;
+    if (!singleImage || !singleImage.path) {
+      this.showToastMessage("请选择图片", "warning");
+      return;
+    }
+
+    this.setData({
+      uploading: true,
+      uploadProgress: { current: 0, total: 1 },
+    });
+
+    const normalizedFolderId =
+      selectedFolder && Array.isArray(folders) && folders.some((folder) => String(folder.id) === String(selectedFolder))
+        ? String(selectedFolder)
+        : null;
+
+    let uploadVariants = null;
+    let shouldCleanupUpload = false;
+    try {
+      uploadVariants = await uploadAlbumPhotoVariants(singleImage.path, singleImage.name, singleImage.size);
+      shouldCleanupUpload = true;
+      this.setData({ uploadProgress: { current: 1, total: 1 } });
+
+      const baseValues = {
+        album_id: albumId,
+        url: uploadVariants.url,
+        thumbnail_url: uploadVariants.thumbnail_url,
+        preview_url: uploadVariants.preview_url,
+        original_url: uploadVariants.original_url,
+      };
+      const width = Number(singleImage && singleImage.width);
+      const height = Number(singleImage && singleImage.height);
+      if (Number.isFinite(width) && width > 0) {
+        baseValues.width = Math.round(width);
+      }
+      if (Number.isFinite(height) && height > 0) {
+        baseValues.height = Math.round(height);
+      }
+
+      const storyText = normalizeStoryText(singleStoryText);
+      const shotDate = normalizeShotDate(singleShotDate) || getTodayDateUTC8();
+      const valuesWithStory = Object.assign(
+        {},
+        baseValues,
+        normalizedFolderId ? { folder_id: normalizedFolderId } : {},
+        storyText ? { story_text: storyText } : {},
+        singleHighlight ? { is_highlight: 1 } : {},
+        { shot_date: shotDate }
+      );
+      const valuesWithoutShotDate = Object.assign(
+        {},
+        baseValues,
+        normalizedFolderId ? { folder_id: normalizedFolderId } : {},
+        storyText ? { story_text: storyText } : {},
+        singleHighlight ? { is_highlight: 1 } : {}
+      );
+      const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at";
+      const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,created_at";
+
+      let result = await dbQuery({
+        table: "album_photos",
+        action: "insert",
+        values: valuesWithStory,
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: photoColumnsWithShotDate,
+      });
+
+      if (
+        hasRpcError(result) &&
+        normalizedFolderId &&
+        isAlbumFolderForeignKeyError(readRpcError(result, "写入照片失败"))
+      ) {
+        const fallbackValues = Object.assign(
+          {},
+          baseValues,
+          storyText ? { story_text: storyText } : {},
+          singleHighlight ? { is_highlight: 1 } : {},
+          { shot_date: shotDate }
+        );
+        result = await dbQuery({
+          table: "album_photos",
+          action: "insert",
+          values: fallbackValues,
+          selectAfterWrite: true,
+          maybeSingle: true,
+          columns: photoColumnsWithShotDate,
+        });
+      }
+
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "写入照片失败"), "shot_date")) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "insert",
+          values: valuesWithoutShotDate,
+          selectAfterWrite: true,
+          maybeSingle: true,
+          columns: photoColumnsWithoutShotDate,
+        });
+        if (
+          hasRpcError(result) &&
+          normalizedFolderId &&
+          isAlbumFolderForeignKeyError(readRpcError(result, "写入照片失败"))
+        ) {
+          const fallbackValues = Object.assign(
+            {},
+            baseValues,
+            storyText ? { story_text: storyText } : {},
+            singleHighlight ? { is_highlight: 1 } : {}
+          );
+          result = await dbQuery({
+            table: "album_photos",
+            action: "insert",
+            values: fallbackValues,
+            selectAfterWrite: true,
+            maybeSingle: true,
+            columns: photoColumnsWithoutShotDate,
+          });
+        }
+      }
+
+      if (hasRpcError(result)) {
+        const message = readRpcError(result, "写入照片失败");
+        if (isColumnMissingError(message, "story_text") || isColumnMissingError(message, "is_highlight")) {
+          this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
+        } else if (isColumnMissingError(message, "shot_date")) {
+          this.showToastMessage(ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      shouldCleanupUpload = false;
+      this.showToastMessage("单图上传成功", "success");
+      this.setData({
+        showUploadModal: false,
+        singleImage: null,
+        singleStoryText: "",
+        singleHighlight: false,
+        singleShotDate: getTodayDateUTC8(),
+      });
+      await this.loadPhotos();
+    } catch (error) {
+      console.error("单图上传失败:", error);
+      this.showToastMessage(readErrorMessage(error, "上传失败"), "error");
+    } finally {
+      if (uploadVariants && shouldCleanupUpload) {
+        await cleanupStorageTargets(uploadVariants.cleanupTargets);
+      }
+      this.setData({
+        uploading: false,
+        uploadProgress: { current: 0, total: 0 },
+      });
+    }
+  },
+
   async onUploadPhotos() {
+    if (String(this.data.uploadMode || "batch") === "single") {
+      await this.onUploadSinglePhoto();
+      return;
+    }
     const { batchImages, albumId, selectedFolder, folders } = this.data;
 
     if (batchImages.length === 0) {
@@ -1176,6 +1526,7 @@ Page({
 
     let successCount = 0;
     let failCount = 0;
+    const batchShotDate = getTodayDateUTC8();
     const normalizedFolderId =
       selectedFolder && Array.isArray(folders) && folders.some((folder) => String(folder.id) === String(selectedFolder))
         ? String(selectedFolder)
@@ -1204,7 +1555,10 @@ Page({
             thumbnail_url: uploadVariants.thumbnail_url,
             preview_url: uploadVariants.preview_url,
             original_url: uploadVariants.original_url,
+            shot_date: batchShotDate,
           };
+          const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,created_at";
+          const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,created_at";
           const width = Number(image && image.width);
           const height = Number(image && image.height);
           if (Number.isFinite(width) && width > 0) {
@@ -1225,7 +1579,7 @@ Page({
             values: valuesWithFolder,
             selectAfterWrite: true,
             maybeSingle: true,
-            columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,created_at",
+            columns: photoColumnsWithShotDate,
           });
           if (
             hasRpcError(result) &&
@@ -1238,15 +1592,52 @@ Page({
               values: insertValues,
               selectAfterWrite: true,
               maybeSingle: true,
-              columns: "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,created_at",
+              columns: photoColumnsWithShotDate,
             });
+          }
+
+          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "写入照片失败"), "shot_date")) {
+            const insertValuesWithoutShotDate = Object.assign({}, insertValues);
+            delete insertValuesWithoutShotDate.shot_date;
+            const valuesWithoutShotDate = Object.assign(
+              {},
+              insertValuesWithoutShotDate,
+              normalizedFolderId ? { folder_id: normalizedFolderId } : {}
+            );
+            result = await dbQuery({
+              table: "album_photos",
+              action: "insert",
+              values: valuesWithoutShotDate,
+              selectAfterWrite: true,
+              maybeSingle: true,
+              columns: photoColumnsWithoutShotDate,
+            });
+            if (
+              hasRpcError(result) &&
+              normalizedFolderId &&
+              isAlbumFolderForeignKeyError(readRpcError(result, "写入照片失败"))
+            ) {
+              result = await dbQuery({
+                table: "album_photos",
+                action: "insert",
+                values: insertValuesWithoutShotDate,
+                selectAfterWrite: true,
+                maybeSingle: true,
+                columns: photoColumnsWithoutShotDate,
+              });
+            }
           }
 
           if (!hasRpcError(result) && readRpcData(result, null)) {
             successCount++;
             shouldCleanupUpload = false;
           } else {
-            console.error("写入照片记录失败:", readRpcError(result, "写入照片失败"));
+            const insertError = readRpcError(result, "写入照片失败");
+            if (isColumnMissingError(insertError, "shot_date")) {
+              this.showToastMessage(ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT, "warning");
+              return;
+            }
+            console.error("写入照片记录失败:", insertError);
             failCount++;
           }
         } catch (error) {
@@ -1271,7 +1662,8 @@ Page({
 
       this.setData({
         showUploadModal: false,
-        batchImages: []
+        batchImages: [],
+        singleShotDate: getTodayDateUTC8(),
       });
 
       if (successCount > 0) {
@@ -1342,6 +1734,281 @@ Page({
       return;
     }
     this.onPreviewPhoto(e);
+  },
+
+  onOpenStoryModal(e) {
+    if (this.data.actionLoading) return;
+    const photoId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.photoId || "").trim()
+        : "";
+    if (!photoId) return;
+    const target =
+      (Array.isArray(this.data.photos) ? this.data.photos : []).find((item) => String(item.id) === photoId) || null;
+    if (!target) {
+      this.showToastMessage("照片不存在或已删除", "warning");
+      return;
+    }
+
+    this.setData({
+      showStoryModal: true,
+      editingStoryPhotoId: photoId,
+      editingStoryText: normalizeStoryText(target.story_text),
+      editingStoryHighlight: Boolean(target.is_highlight),
+    });
+  },
+
+  onCloseStoryModal() {
+    if (this.data.actionLoading) return;
+    this.setData({
+      showStoryModal: false,
+      editingStoryPhotoId: "",
+      editingStoryText: "",
+      editingStoryHighlight: false,
+    });
+  },
+
+  onEditingStoryInput(e) {
+    this.setData({ editingStoryText: e && e.detail ? e.detail.value : "" });
+  },
+
+  onEditingStoryHighlightChange(e) {
+    this.setData({ editingStoryHighlight: Boolean(e && e.detail ? e.detail.value : false) });
+  },
+
+  async onSaveStory() {
+    const photoId = String(this.data.editingStoryPhotoId || "").trim();
+    if (!photoId) {
+      this.showToastMessage("目标照片不存在", "warning");
+      return;
+    }
+
+    this.setData({ actionLoading: true });
+    try {
+      const storyText = normalizeStoryText(this.data.editingStoryText);
+      const result = await dbQuery({
+        table: "album_photos",
+        action: "update",
+        values: {
+          story_text: storyText || null,
+          is_highlight: this.data.editingStoryHighlight ? 1 : 0,
+        },
+        filters: [
+          { column: "id", operator: "eq", value: photoId },
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+        ],
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,story_text,is_highlight",
+      });
+
+      if (hasRpcError(result)) {
+        const message = readRpcError(result, "保存失败");
+        if (isColumnMissingError(message, "story_text") || isColumnMissingError(message, "is_highlight")) {
+          this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      const rows = Array.isArray(this.data.photos) ? this.data.photos : [];
+      const nextPhotos = rows.map((item) => {
+        if (String(item.id) !== photoId) return item;
+        const normalized = normalizeStoryText(storyText);
+        return Object.assign({}, item, {
+          story_text: normalized,
+          has_story: Boolean(normalized),
+          is_highlight: Boolean(this.data.editingStoryHighlight),
+          story_highlight: Boolean(normalized) || Boolean(this.data.editingStoryHighlight),
+        });
+      });
+      this.setData(
+        {
+          photos: nextPhotos,
+          showStoryModal: false,
+          editingStoryPhotoId: "",
+          editingStoryText: "",
+          editingStoryHighlight: false,
+        },
+        () => this.updateFilteredPhotos()
+      );
+      this.showToastMessage("关于此刻已更新", "success");
+    } catch (error) {
+      console.error("保存关于此刻失败:", error);
+      this.showToastMessage(readErrorMessage(error, "保存失败"), "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  onOpenShotDateModal(e) {
+    if (this.data.actionLoading) return;
+    const photoId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.photoId || "").trim()
+        : "";
+    if (!photoId) return;
+
+    const target =
+      (Array.isArray(this.data.photos) ? this.data.photos : []).find((item) => String(item.id) === photoId) || null;
+    if (!target) {
+      this.showToastMessage("照片不存在或已删除", "warning");
+      return;
+    }
+
+    const fallbackDate = normalizeShotDate(target.created_at) || getTodayDateUTC8();
+    this.setData({
+      showShotDateModal: true,
+      editingShotDatePhotoId: photoId,
+      editingShotDateValue: normalizeShotDate(target.shot_date) || fallbackDate,
+    });
+  },
+
+  onCloseShotDateModal() {
+    if (this.data.actionLoading) return;
+    this.setData({
+      showShotDateModal: false,
+      editingShotDatePhotoId: "",
+      editingShotDateValue: getTodayDateUTC8(),
+    });
+  },
+
+  onEditingShotDateChange(e) {
+    const value = normalizeShotDate(e && e.detail ? e.detail.value : "");
+    this.setData({ editingShotDateValue: value || getTodayDateUTC8() });
+  },
+
+  async onSaveShotDate() {
+    const photoId = String(this.data.editingShotDatePhotoId || "").trim();
+    if (!photoId) {
+      this.showToastMessage("目标照片不存在", "warning");
+      return;
+    }
+
+    const shotDate = normalizeShotDate(this.data.editingShotDateValue);
+    if (!shotDate) {
+      this.showToastMessage("请选择有效的拍摄日期", "warning");
+      return;
+    }
+
+    this.setData({ actionLoading: true });
+    try {
+      const result = await dbQuery({
+        table: "album_photos",
+        action: "update",
+        values: { shot_date: shotDate },
+        filters: [
+          { column: "id", operator: "eq", value: photoId },
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+        ],
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,shot_date",
+      });
+
+      if (hasRpcError(result)) {
+        const message = readRpcError(result, "保存失败");
+        if (isColumnMissingError(message, "shot_date")) {
+          this.showToastMessage(ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      const rows = Array.isArray(this.data.photos) ? this.data.photos : [];
+      const nextPhotos = rows.map((item) => {
+        if (String(item.id) !== photoId) return item;
+        return Object.assign({}, item, {
+          shot_date: shotDate,
+        });
+      });
+      this.setData(
+        {
+          photos: nextPhotos,
+          showShotDateModal: false,
+          editingShotDatePhotoId: "",
+          editingShotDateValue: getTodayDateUTC8(),
+        },
+        () => this.updateFilteredPhotos()
+      );
+      this.showToastMessage("拍摄日期已更新", "success");
+    } catch (error) {
+      console.error("保存拍摄日期失败:", error);
+      this.showToastMessage(readErrorMessage(error, "保存失败"), "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  async onMovePhotoSort(e) {
+    if (this.data.actionLoading) return;
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const photoId = String(dataset.photoId || "").trim();
+    const direction = String(dataset.direction || "").trim().toLowerCase();
+    if (!photoId) return;
+    if (direction !== "up" && direction !== "down") return;
+
+    const rows = Array.isArray(this.data.filteredPhotos) ? this.data.filteredPhotos.slice() : [];
+    const currentIndex = rows.findIndex((item) => String(item.id) === photoId);
+    if (currentIndex < 0) return;
+
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= rows.length) return;
+
+    const reordered = rows.slice();
+    const moved = reordered[currentIndex];
+    reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+
+    const desiredMap = new Map();
+    reordered.forEach((item, index) => {
+      desiredMap.set(String(item.id), (index + 1) * 10);
+    });
+
+    const changed = reordered.filter((item) => Number(item.sort_order || 0) !== Number(desiredMap.get(String(item.id)) || 0));
+    if (!changed.length) return;
+
+    this.setData({ actionLoading: true });
+    try {
+      for (let i = 0; i < changed.length; i += 1) {
+        const row = changed[i];
+        const sortOrder = Number(desiredMap.get(String(row.id)) || 0);
+        const result = await dbQuery({
+          table: "album_photos",
+          action: "update",
+          values: { sort_order: sortOrder },
+          filters: [
+            { column: "id", operator: "eq", value: row.id },
+            { column: "album_id", operator: "eq", value: this.data.albumId },
+          ],
+        });
+        if (hasRpcError(result)) {
+          const message = readRpcError(result, "排序失败");
+          if (isColumnMissingError(message, "sort_order")) {
+            this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
+          } else {
+            this.showToastMessage(message, "error");
+          }
+          return;
+        }
+      }
+
+      const allPhotos = (Array.isArray(this.data.photos) ? this.data.photos : []).map((item) => {
+        const nextSort = desiredMap.get(String(item.id));
+        if (!Number.isFinite(Number(nextSort))) return item;
+        return Object.assign({}, item, { sort_order: Number(nextSort) });
+      });
+
+      this.setData({ photos: allPhotos }, () => this.updateFilteredPhotos());
+      this.showToastMessage(direction === "up" ? "已上移一位" : "已下移一位", "success");
+    } catch (error) {
+      console.error("排序失败:", error);
+      this.showToastMessage(readErrorMessage(error, "排序失败"), "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
   },
 
   // 迁移照片

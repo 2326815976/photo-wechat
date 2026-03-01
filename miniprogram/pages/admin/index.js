@@ -73,6 +73,7 @@ const RELEASE_ALLOWED_EXTENSIONS = [
 const MAX_RELEASE_FILE_SIZE = 100 * 1024 * 1024;
 const ALBUM_COVER_TARGET_SIZE = 900 * 1024;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
+const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 function resolveAppPublicUrl() {
   let appRuntimeUrl = "";
   try {
@@ -7297,6 +7298,14 @@ Page({
     // 跳转到专属空间管理详情页面
     wx.navigateTo({
       url: `/pages/admin/album-detail/index?id=${id}&title=${encodeURIComponent(title)}&key=${key}`
+    });
+  },
+
+  onOpenGalleryWallAlbumDetail() {
+    if (this.data.albumActionLoading || this.data.albumBatchDeleting) return;
+    const title = encodeURIComponent("照片墙空间");
+    wx.navigateTo({
+      url: `/pages/admin/album-detail/index?id=${SYSTEM_GALLERY_ALBUM_ID}&title=${title}&key=PUBLIC_GALLERY`,
     });
   },
 
