@@ -206,6 +206,28 @@
             </view>
           </view>
         </view>
+
+        <view class="selector-group">
+          <view class="selector-group__head">
+            <text class="selector-group__title selector-group__title--compact">日期范围</text>
+            <view class="date-range-clear" hover-class="date-range-clear--active" hover-stay-time="80" bindtap="onClearFilterDateRange">
+              清空日期
+            </view>
+          </view>
+          <view class="date-range-row">
+            <picker class="date-range-picker" mode="date" value="{{tempFilterDateStart}}" end="{{maxFilterDate}}" bindchange="onChangeFilterDateStart">
+              <view class="date-picker {{tempFilterDateStart ? 'date-picker--active' : ''}}">
+                <text>{{tempFilterDateStart || '开始日期'}}</text>
+              </view>
+            </picker>
+            <text class="date-range-sep">至</text>
+            <picker class="date-range-picker" mode="date" value="{{tempFilterDateEnd}}" end="{{maxFilterDate}}" bindchange="onChangeFilterDateEnd">
+              <view class="date-picker {{tempFilterDateEnd ? 'date-picker--active' : ''}}">
+                <text>{{tempFilterDateEnd || '结束日期'}}</text>
+              </view>
+            </picker>
+          </view>
+        </view>
       </scroll-view>
 
       <view class="tag-selector-footer">

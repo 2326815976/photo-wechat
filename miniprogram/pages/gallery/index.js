@@ -49,10 +49,31 @@ function formatDateSlashUTC8(date) {
   return `${y}/${m}/${d}`;
 }
 
+function formatDateDashUTC8(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const y = shifted.getUTCFullYear();
+  const m = pad2(shifted.getUTCMonth() + 1);
+  const d = pad2(shifted.getUTCDate());
+  return `${y}-${m}-${d}`;
+}
+
+function getTodayDateUTC8() {
+  return formatDateDashUTC8(new Date());
+}
+
 function formatDateDisplayUTC8(value) {
   const date = parseDateTimeUTC8(value);
   if (!date) return "";
   return formatDateSlashUTC8(date);
+}
+
+function normalizeDateOnlyText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) return "";
+  return `${matched[1]}-${matched[2]}-${matched[3]}`;
 }
 
 function readGalleryMemoryCache() {
@@ -301,10 +322,15 @@ Page({
     right: [],
     sortMode: "time_desc",
     filterMode: "all",
+    filterDateStart: "",
+    filterDateEnd: "",
     showFilterModal: false,
     activeFilterPreset: "default_desc",
     tempFilterPreset: "default_desc",
     tempFolderId: ROOT_FOLDER_ID,
+    tempFilterDateStart: "",
+    tempFilterDateEnd: "",
+    maxFilterDate: getTodayDateUTC8(),
 
     previewPhoto: null,
     showLoginPrompt: false,
@@ -559,6 +585,12 @@ Page({
     return Number.isFinite(timestamp) ? timestamp : 0;
   },
 
+  getPhotoDateText(photo) {
+    const parsed = parseDateTimeUTC8((photo && photo.shot_date) || (photo && photo.created_at));
+    if (!parsed) return "";
+    return formatDateDashUTC8(parsed);
+  },
+
   applyGalleryViewFromSource(sourceRows) {
     const source = Array.isArray(sourceRows)
       ? sourceRows.slice()
@@ -566,8 +598,20 @@ Page({
 
     const sortMode = String(this.data.sortMode || "time_desc");
     const filterMode = String(this.data.filterMode || "all");
+    const filterDateStart = normalizeDateOnlyText(this.data.filterDateStart);
+    const filterDateEnd = normalizeDateOnlyText(this.data.filterDateEnd);
 
     let viewRows = source;
+    if (filterDateStart || filterDateEnd) {
+      viewRows = viewRows.filter((photo) => {
+        const photoDate = this.getPhotoDateText(photo);
+        if (!photoDate) return false;
+        if (filterDateStart && photoDate < filterDateStart) return false;
+        if (filterDateEnd && photoDate > filterDateEnd) return false;
+        return true;
+      });
+    }
+
     if (filterMode === "highlight") {
       viewRows = viewRows.filter((photo) =>
         Boolean(photo && (photo.story_highlight || photo.is_highlight || photo.has_story))
@@ -630,6 +674,8 @@ Page({
       activeFilterPreset: activePreset,
       tempFilterPreset: activePreset,
       tempFolderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+      tempFilterDateStart: normalizeDateOnlyText(this.data.filterDateStart),
+      tempFilterDateEnd: normalizeDateOnlyText(this.data.filterDateEnd),
     });
   },
 
@@ -654,10 +700,29 @@ Page({
     this.setData({ tempFilterPreset: preset });
   },
 
+  onChangeFilterDateStart(e) {
+    const value = normalizeDateOnlyText(e && e.detail ? e.detail.value : "");
+    this.setData({ tempFilterDateStart: value });
+  },
+
+  onChangeFilterDateEnd(e) {
+    const value = normalizeDateOnlyText(e && e.detail ? e.detail.value : "");
+    this.setData({ tempFilterDateEnd: value });
+  },
+
+  onClearFilterDateRange() {
+    this.setData({
+      tempFilterDateStart: "",
+      tempFilterDateEnd: "",
+    });
+  },
+
   onResetFilterSelector() {
     this.setData({
       tempFolderId: ROOT_FOLDER_ID,
       tempFilterPreset: "default_desc",
+      tempFilterDateStart: "",
+      tempFilterDateEnd: "",
     });
   },
 
@@ -666,6 +731,13 @@ Page({
     const nextFolderId = String(this.data.tempFolderId || ROOT_FOLDER_ID);
     const currentFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
     const resolved = this.resolveFilterPreset(nextPreset);
+    const nextFilterDateStart = normalizeDateOnlyText(this.data.tempFilterDateStart);
+    const nextFilterDateEnd = normalizeDateOnlyText(this.data.tempFilterDateEnd);
+
+    if (nextFilterDateStart && nextFilterDateEnd && nextFilterDateStart > nextFilterDateEnd) {
+      wx.showToast({ title: "开始日期不能晚于结束日期", icon: "none" });
+      return;
+    }
 
     if (nextFolderId !== currentFolderId) {
       this.setData(
@@ -674,13 +746,25 @@ Page({
           activeFilterPreset: resolved.preset,
           sortMode: resolved.sortMode,
           filterMode: resolved.filterMode,
+          filterDateStart: nextFilterDateStart,
+          filterDateEnd: nextFilterDateEnd,
         },
         () => this.switchFolder(nextFolderId)
       );
       return;
     }
 
-    this.setData({ showFilterModal: false }, () => this.applyFilterPreset(nextPreset));
+    this.setData(
+      {
+        showFilterModal: false,
+        activeFilterPreset: resolved.preset,
+        sortMode: resolved.sortMode,
+        filterMode: resolved.filterMode,
+        filterDateStart: nextFilterDateStart,
+        filterDateEnd: nextFilterDateEnd,
+      },
+      () => this.applyGalleryViewFromSource()
+    );
   },
 
   buildColumnsFromPhotos(photos) {
