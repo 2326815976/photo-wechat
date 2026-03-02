@@ -2,6 +2,9 @@ const { getSession, dbQuery, logout, extractSessionUser } = require("../../servi
 const { clearStoredCookie } = require("../../utils/auth");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 
+const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
+const SHARE_TITLE = "拾光谣｜定格美好瞬间";
+
 const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
 const DEFAULT_ABOUT = {
   author_name: "",
@@ -471,5 +474,21 @@ Page({
       wx.showToast({ title: "已退出登录", icon: "none" });
       wx.navigateTo({ url: "/pages/login/index" });
     }
+  },
+
+  onShareAppMessage() {
+    return {
+      title: SHARE_TITLE,
+      path: "/pages/profile/index",
+      imageUrl: SHARE_IMAGE_URL,
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: SHARE_TITLE,
+      query: "",
+      imageUrl: SHARE_IMAGE_URL,
+    };
   },
 });

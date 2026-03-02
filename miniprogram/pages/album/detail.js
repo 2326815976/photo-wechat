@@ -3,6 +3,9 @@ const { resolvePublicUrl } = require("../../utils/storage-url");
 const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 
+const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
+const SHARE_TITLE = "「拾光谣」相册分享";
+
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -1754,5 +1757,26 @@ Page({
     } catch (e2) {
       this.showToast("操作失败", "error", 2600);
     }
+  },
+
+  onShareAppMessage() {
+    const key = String(this.data.key || "").trim();
+    const path = key
+      ? `/pages/album/detail?key=${encodeURIComponent(key)}`
+      : "/pages/album/index";
+    return {
+      title: SHARE_TITLE,
+      path,
+      imageUrl: SHARE_IMAGE_URL,
+    };
+  },
+
+  onShareTimeline() {
+    const key = String(this.data.key || "").trim();
+    return {
+      title: SHARE_TITLE,
+      query: key ? `key=${encodeURIComponent(key)}` : "",
+      imageUrl: SHARE_IMAGE_URL,
+    };
   },
 });

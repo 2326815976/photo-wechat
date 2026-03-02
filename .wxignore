@@ -1,2 +1,6 @@
 # 微信开发者工具上传/预览忽略列表
 # 当前保留为空：本地字体文件需要参与打包。
+images/share/shiguangyao-share.png
+images/share/miniprogram-share-cover-v8.jpg
+miniprogram/images/share/shiguangyao-share.png
+miniprogram/images/share/miniprogram-share-cover-v8.jpg

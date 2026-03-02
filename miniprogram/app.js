@@ -5,15 +5,15 @@ const { requestJson } = require("./utils/cloudrun");
 const CLOUDRUN_HEALTH_ENDPOINT = "/api/auth/session";
 const AUDIT_CONFIG_ENDPOINT = "/api/miniprogram/runtime-config";
 const DEFAULT_SHARE_TITLE = "拾光谣小工具";
-const DEFAULT_SHARE_IMAGE = String(config.shareImageUrl || "/images/share/miniprogram-share-cover-v8.jpg").trim();
+const DEFAULT_SHARE_IMAGE = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE_BY_ROUTE = {
   "pages/index/index": "拾光谣｜发现灵感摆姿，记录每一帧",
-  "pages/gallery/index": "拾光谣｜照片墙精选瞬间",
+  "pages/gallery/index": "拾光谣｜定格美好瞬间",
   "pages/booking/index": "拾光谣｜约拍入口，来定格你的故事",
-  "pages/album/index": "拾光谣｜专属返图空间",
+  "pages/album/index": "拾光谣｜相册提取",
   "pages/album/detail": "「拾光谣」相册分享",
   "pages/album/detail/index": "「拾光谣」相册分享",
-  "pages/profile/index": "拾光谣｜记录你的拍摄旅程",
+  "pages/profile/index": "拾光谣｜定格美好瞬间",
 };
 
 function parseBooleanLike(value) {

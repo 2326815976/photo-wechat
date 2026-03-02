@@ -2,6 +2,9 @@ const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 
+const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
+const SHARE_TITLE = "拾光谣｜相册提取";
+
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -524,5 +527,21 @@ Page({
     } finally {
       this.setData({ submitting: false });
     }
+  },
+
+  onShareAppMessage() {
+    return {
+      title: SHARE_TITLE,
+      path: "/pages/album/index",
+      imageUrl: SHARE_IMAGE_URL,
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: SHARE_TITLE,
+      query: "",
+      imageUrl: SHARE_IMAGE_URL,
+    };
   },
 });

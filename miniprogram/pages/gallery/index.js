@@ -11,6 +11,8 @@ const PAGE_SIZE = 20;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
 const GALLERY_CACHE_TTL = 30 * 60 * 1000;
 const ROOT_FOLDER_ID = "__ROOT__";
+const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
+const SHARE_TITLE = "拾光谣｜定格美好瞬间";
 
 let galleryMemoryCache = {
   photos: [],
@@ -1277,5 +1279,21 @@ Page({
   goLogin() {
     this.setData({ showLoginPrompt: false });
     wx.navigateTo({ url: "/pages/login/index" });
+  },
+
+  onShareAppMessage() {
+    return {
+      title: SHARE_TITLE,
+      path: "/pages/gallery/index",
+      imageUrl: SHARE_IMAGE_URL,
+    };
+  },
+
+  onShareTimeline() {
+    return {
+      title: SHARE_TITLE,
+      query: "",
+      imageUrl: SHARE_IMAGE_URL,
+    };
   },
 });

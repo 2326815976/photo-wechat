@@ -61,6 +61,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
     loading: true,
     error: "",
     savingDonationQr: false,
@@ -73,13 +74,40 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
+    const hideAudit = Boolean(globalData.hideAudit);
+    this.setData({ safeTop, serviceMissing, hideAudit });
+
+    if (app && typeof app.subscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
+        this.setData({ hideAudit: Boolean(nextHideAudit) });
+      });
+    }
 
     if (!serviceMissing) {
       this.loadAbout();
     } else {
       this.setData({ loading: false });
     }
+  },
+
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
+    this.setData({ hideAudit });
+  },
+
+  onUnload() {
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
   },
 
   async loadAbout() {

@@ -98,7 +98,7 @@
           </view>
         </view>
 
-        <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode}}">
+        <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && !hideAudit}}">
           <text class="section-title">赞赏码</text>
           <view class="qr-wrap" bindtap="onPreviewDonationQr">
             <image
