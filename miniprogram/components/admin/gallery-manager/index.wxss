@@ -426,6 +426,29 @@ button::after {
   white-space: nowrap;
 }
 
+.photo-card__shot-location {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+
+.photo-card__shot-location-icon {
+  font-size: 16rpx;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.photo-card__shot-location-text {
+  font-size: 18rpx;
+  line-height: 1.2;
+  color: rgba(93, 64, 55, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .photo-card__meta-bottom {
   display: flex;
   width: 100%;
@@ -1076,6 +1099,18 @@ button::after {
   align-items: center;
   color: #5d4037;
   font-size: 22rpx;
+}
+
+.shot-location-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 74rpx;
+  border-radius: 14rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.18);
+  background: #fffbf0;
+  padding: 0 14rpx;
+  font-size: 22rpx;
+  color: #5d4037;
 }
 
 .upload-box {
