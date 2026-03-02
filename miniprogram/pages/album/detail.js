@@ -46,11 +46,21 @@ function normalizeMaybeUrl(value) {
   return resolvePublicUrl(raw);
 }
 
+function normalizeMaybeText(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  const lowered = raw.toLowerCase();
+  if (lowered === "null" || lowered === "undefined" || lowered === "none" || lowered === "nil") {
+    return "";
+  }
+  return raw;
+}
+
 function normalizePhoto(photo) {
   const thumbnailUrl = resolvePublicUrl(photo && photo.thumbnail_url);
   const previewUrl = resolvePublicUrl(photo && photo.preview_url);
   const originalUrl = resolveOriginalUrl(photo);
-  const storyText = String((photo && photo.story_text) || "").trim();
+  const storyText = normalizeMaybeText(photo && photo.story_text);
   const hasStory = Boolean(storyText);
   const isHighlight = Boolean(photo && photo.is_highlight);
   return Object.assign({}, photo, {

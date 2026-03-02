@@ -18,8 +18,13 @@ function shouldInvalidatePublicGalleryCache(pageData) {
 }
 
 function normalizeStoryText(value) {
-  const text = String(value || "").trim();
-  return text ? text : "";
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return "";
+  const lowered = text.toLowerCase();
+  if (lowered === "null" || lowered === "undefined" || lowered === "none" || lowered === "nil") {
+    return "";
+  }
+  return text;
 }
 
 function getTodayDateUTC8() {
@@ -1556,11 +1561,12 @@ const pageDefinition = {
 
       const storyText = normalizeStoryText(singleStoryText);
       const shotDate = normalizeShotDate(singleShotDate) || getTodayDateUTC8();
+      const storyValues = storyText ? { story_text: storyText } : singleHighlight ? { story_text: "" } : {};
       const valuesWithStory = Object.assign(
         {},
         baseValues,
         normalizedFolderId ? { folder_id: normalizedFolderId } : {},
-        storyText ? { story_text: storyText } : {},
+        storyValues,
         singleHighlight ? { is_highlight: 1 } : {},
         { shot_date: shotDate }
       );
@@ -1568,7 +1574,7 @@ const pageDefinition = {
         {},
         baseValues,
         normalizedFolderId ? { folder_id: normalizedFolderId } : {},
-        storyText ? { story_text: storyText } : {},
+        storyValues,
         singleHighlight ? { is_highlight: 1 } : {}
       );
       const photoColumnsWithShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,is_public,view_count,like_count,created_at";
@@ -1591,7 +1597,7 @@ const pageDefinition = {
         const fallbackValues = Object.assign(
           {},
           baseValues,
-          storyText ? { story_text: storyText } : {},
+          storyValues,
           singleHighlight ? { is_highlight: 1 } : {},
           { shot_date: shotDate }
         );
@@ -1622,7 +1628,7 @@ const pageDefinition = {
           const fallbackValues = Object.assign(
             {},
             baseValues,
-            storyText ? { story_text: storyText } : {},
+            storyValues,
             singleHighlight ? { is_highlight: 1 } : {}
           );
           result = await dbQuery({
@@ -1963,7 +1969,7 @@ const pageDefinition = {
         table: "album_photos",
         action: "update",
         values: {
-          story_text: storyText || null,
+          story_text: storyText,
           is_highlight: this.data.editingStoryHighlight ? 1 : 0,
         },
         filters: [

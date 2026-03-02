@@ -78,7 +78,7 @@
 
         <view class="module-intro motion-fade-up" wx:if="{{activeSection !== 'stats' && activeSection !== 'poses' && activeSection !== 'releases'}}">
           <text class="module-title">{{activeSectionTitle}}</text>
-          <text class="module-desc" wx:if="{{activeSection !== 'gallery' && activeSectionDesc}}">{{activeSectionDesc}}</text>
+          <text class="module-desc" wx:if="{{activeSectionDesc}}">{{activeSectionDesc}}</text>
         </view>
 
         <block wx:if="{{activeSection === 'stats'}}">
@@ -1189,6 +1189,13 @@
 
                   <view class="pose-tag-card__actions" wx:if="{{!poseTagSelectionMode}}">
                     <view class="pose-tag-sort-controls">
+                      <view
+                        class="pose-tag-action-btn pose-tag-action-btn--move {{item.virtual || !item.canMoveTop || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                        data-id="{{item.id}}"
+                        catchtap="onMovePoseTagTop"
+                      >
+                        置顶
+                      </view>
                       <view
                         class="pose-tag-action-btn pose-tag-action-btn--move pose-tag-action-btn--move-icon {{item.virtual || !item.canMoveUp || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"

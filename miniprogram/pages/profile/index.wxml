@@ -1,12 +1,9 @@
 <view class="page">
-  <view class="profile-header motion-fade-in" style="padding-top: {{safeTop}}px;">
-    <view class="profile-header-inner">
-      <text class="profile-title">{{showAuditAboutMode ? '关于我' : '我的小天地'}}</text>
-      <view class="profile-tag">
-        <text class="profile-tag-text">{{showAuditAboutMode ? '✨ 作者的天地 ✨' : '📒 管理你的拾光小秘密 📒'}}</text>
-      </view>
-    </view>
-  </view>
+  <app-header
+    title="{{showAuditAboutMode ? '关于我' : '我的小天地'}}"
+    subtitle="{{showAuditAboutMode ? '✨ 作者的天地 ✨' : '📒 管理你的拾光小秘密 📒'}}"
+    safeTop="{{safeTop}}"
+  />
 
   <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">

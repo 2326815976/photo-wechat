@@ -119,7 +119,7 @@ const ADMIN_SECTION_META = {
   },
   gallery: {
     title: "照片墙管理",
-    desc: "",
+    desc: "管理公开展示照片",
   },
   albums: {
     title: "专属空间管理 💝",
@@ -140,7 +140,7 @@ const ADMIN_NAV_ITEMS = [
   { key: "poses", label: "摆姿管理", desc: "姿势与标签", icon: "📸" },
   { key: "bookings", label: "预约管理", desc: "预约与城市", icon: "📅" },
   { key: "schedule", label: "档期管理", desc: "锁档日期", icon: "🗓️" },
-  { key: "gallery", label: "照片墙管理", desc: "完整功能", icon: "🖼️" },
+  { key: "gallery", label: "照片墙管理", desc: "公开图集", icon: "🖼️" },
   { key: "albums", label: "专属空间管理", desc: "返图空间", icon: "💝" },
   { key: "about", label: "关于设置", desc: "作者信息", icon: "ℹ️" },
   { key: "releases", label: "发布版本", desc: "安装包发布", icon: "📦" },
@@ -750,13 +750,6 @@ function toSafeText(value, fallback) {
   return String(fallback || "");
 }
 
-function toAvgRating(value) {
-  const num = Number(value);
-  if (Number.isFinite(num)) return num.toFixed(2);
-  const text = toSafeText(value, "");
-  return text || "0.00";
-}
-
 function formatMonthDay(value) {
   const date = parseDateTimeUTC8(value);
   if (!date) return String(value || "");
@@ -1022,15 +1015,23 @@ function buildStatsView(stats) {
   return {
     userCards: [
       createStatCard("users-total", "总用户数", toSafeNumber(users.total, 0), "👥", "#FFC857", "#FFB347", ""),
-      createStatCard("users-admins", "管理员", toSafeNumber(users.admins, 0), "🛡️", "#FF9A3C", "#FF8C42", ""),
+      createStatCard("users-regular", "普通用户", toSafeNumber(users.regular_users, 0), "🙋", "#FF9A3C", "#FF8C42", ""),
       createStatCard("users-new", "今日新增", toSafeNumber(users.new_today, 0), "➕", "#FFB347", "#FFA500", ""),
       createStatCard("users-active", "今日活跃", toSafeNumber(users.active_today, 0), "⚡", "#FFA500", "#FF8C00", ""),
     ],
     albumCards: [
       createStatCard("albums-total", "总相册数", toSafeNumber(albums.total, 0), "📁", "#8B7355", "#6D5A4A", ""),
+      createStatCard(
+        "albums-active",
+        "有效空间",
+        Math.max(0, toSafeNumber(albums.total, 0) - toSafeNumber(albums.expired, 0)),
+        "🧩",
+        "#9C8063",
+        "#8B7355",
+        ""
+      ),
       createStatCard("albums-new", "今日新增", toSafeNumber(albums.new_today, 0), "🆕", "#A0826D", "#8B7355", ""),
       createStatCard("albums-expired", "已过期", toSafeNumber(albums.expired, 0), "⏰", "#B8956A", "#A0826D", ""),
-      createStatCard("albums-tipping", "启用打赏", toSafeNumber(albums.tipping_enabled, 0), "💝", "#D4A574", "#B8956A", ""),
     ],
     photoCardsPrimary: [
       createStatCard("photos-total", "总照片数", toSafeNumber(photos.total, 0), "🖼️", "#7B68EE", "#6A5ACD", ""),
@@ -1041,17 +1042,24 @@ function buildStatsView(stats) {
     photoCardsSecondary: [
       createStatCard("photos-views", "总浏览量", toSafeNumber(photos.total_views, 0), "👁️", "#4169E1", "#1E90FF", ""),
       createStatCard("photos-likes", "总点赞数", toSafeNumber(photos.total_likes, 0), "❤️", "#FF69B4", "#FF1493", ""),
-      createStatCard("photos-comments", "总评论数", toSafeNumber(photos.total_comments, 0), "💬", "#32CD32", "#228B22", ""),
-      createStatCard("photos-rating", "平均评分", toAvgRating(photos.avg_rating), "📈", "#FFD700", "#FFA500", ""),
+      createStatCard("photos-downloads", "总下载数", toSafeNumber(photos.total_downloads, 0), "⬇️", "#4DB6AC", "#26A69A", ""),
+      createStatCard(
+        "photos-stories",
+        "故事照片",
+        toSafeNumber(photos.with_story, 0),
+        "↻",
+        "#8D6E63",
+        "#6D4C41",
+        `高亮 ${toSafeNumber(photos.highlighted, 0)}`
+      ),
     ],
     bookingCardsPrimary: [
       createStatCard("bookings-total", "总预约数", toSafeNumber(bookings.total, 0), "📅", "#20B2AA", "#008B8B", ""),
       createStatCard("bookings-new", "今日新增", toSafeNumber(bookings.new_today, 0), "🆕", "#48D1CC", "#20B2AA", ""),
       createStatCard("bookings-pending", "待处理", toSafeNumber(bookings.pending, 0), "⏳", "#FFA500", "#FF8C00", ""),
-      createStatCard("bookings-upcoming", "即将到来", toSafeNumber(bookings.upcoming, 0), "📈", "#00CED1", "#00BFFF", ""),
+      createStatCard("bookings-confirmed", "已确认", toSafeNumber(bookings.confirmed, 0), "✅", "#32CD32", "#228B22", ""),
     ],
     bookingCardsSecondary: [
-      createStatCard("bookings-confirmed", "已确认", toSafeNumber(bookings.confirmed, 0), "✅", "#32CD32", "#228B22", ""),
       createStatCard("bookings-in-progress", "进行中", toSafeNumber(bookings.in_progress, 0), "⚡", "#1E90FF", "#4169E1", ""),
       createStatCard("bookings-finished", "已完成", toSafeNumber(bookings.finished, 0), "✔️", "#00FA9A", "#00FF7F", ""),
       createStatCard("bookings-cancelled", "已取消", toSafeNumber(bookings.cancelled, 0), "❌", "#DC143C", "#B22222", ""),
@@ -2197,6 +2205,7 @@ Page({
       return Object.assign({}, item, {
         selectedTag: selectedPoseTagIdSet.has(Number(item && item.id)),
         sortIndex: index + 1,
+        canMoveTop: !virtual && index > 0,
         canMoveUp: !virtual && index > 0,
         canMoveDown: !virtual && index < rawTagStats.length - 1,
       });
@@ -2684,6 +2693,10 @@ Page({
     void this.movePoseTagByDirection(e, "down");
   },
 
+  onMovePoseTagTop(e) {
+    void this.movePoseTagByDirection(e, "top");
+  },
+
   async movePoseTagByDirection(e, direction) {
     if (
       this.data.poseTagSelectionMode ||
@@ -2706,6 +2719,7 @@ Page({
     const currentIndex = rows.findIndex((item) => Number(item && item.id) === id && !(item && item.virtual));
     if (currentIndex < 0) return;
 
+    if (direction === "top" && currentIndex <= 0) return;
     if (direction === "up" && currentIndex <= 0) return;
     if (direction === "down" && currentIndex >= rows.length - 1) return;
 
@@ -2713,12 +2727,17 @@ Page({
     try {
       const result = await moveAdminPoseTag(id, direction);
       if (result && result.boundary) {
-        this.showNotice("info", direction === "up" ? "已经是第一个标签" : "已经是最后一个标签");
+        this.showNotice(
+          "info",
+          direction === "down" ? "已经是最后一个标签" : "已经是第一个标签"
+        );
         return;
       }
 
-      this.showNotice("success", direction === "up" ? "标签已上移" : "标签已下移");
-      await this.safeRefresh([this.loadPoseTags()], direction === "up" ? "标签已上移" : "标签已下移");
+      const successText =
+        direction === "top" ? "标签已置顶" : direction === "up" ? "标签已上移" : "标签已下移";
+      this.showNotice("success", successText);
+      await this.safeRefresh([this.loadPoseTags()], successText);
     } catch (error) {
       this.showNotice("error", readErrorMessage(error, "更新标签顺序失败"));
     } finally {

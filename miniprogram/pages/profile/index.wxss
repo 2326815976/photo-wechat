@@ -5,56 +5,6 @@
   background: #FFFBF0;
 }
 
-.profile-header {
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 900;
-  background: rgba(255, 251, 240, 0.95);
-  backdrop-filter: blur(12px);
-  border-bottom: 4rpx dashed rgba(93, 64, 55, 0.15);
-  box-shadow: 0 4rpx 24rpx rgba(93, 64, 55, 0.08);
-}
-
-.profile-header-inner {
-  padding: 24rpx 32rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-  box-sizing: border-box;
-}
-
-.profile-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 40rpx;
-  font-weight: 700;
-  color: #5D4037;
-  line-height: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
-}
-
-.profile-tag {
-  flex: none;
-  padding: 4rpx 20rpx;
-  background: rgba(255, 200, 87, 0.30);
-  border-radius: 999rpx;
-  transform: rotate(-1deg);
-}
-
-.profile-tag-text {
-  font-size: 20rpx;
-  font-weight: 700;
-  color: #8D6E63;
-  letter-spacing: 1rpx;
-  white-space: nowrap;
-}
-
 .content {
   /* Web: px-6 pt-6 pb-20 */
   flex: 1;

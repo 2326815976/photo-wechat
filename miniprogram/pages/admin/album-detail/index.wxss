@@ -445,42 +445,39 @@ button::after {
   border-top: 2rpx solid rgba(93, 64, 55, 0.1);
   padding: 10rpx 12rpx;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8rpx;
+  align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 4rpx 8rpx;
 }
 
-.photo-card__folder {
+.photo-card__shot-time {
   display: flex;
   align-items: center;
   gap: 4rpx;
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 100%;
+  min-width: 100%;
 }
 
-.photo-card__folder-icon {
-  width: 14rpx;
-  height: 14rpx;
-  flex: none;
+.photo-card__shot-time-icon {
+  font-size: 16rpx;
+  line-height: 1;
+  opacity: 0.72;
 }
 
-.photo-card__folder-name {
+.photo-card__shot-time-text {
   font-size: 18rpx;
+  line-height: 1.2;
   color: rgba(93, 64, 55, 0.72);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.photo-card__date {
-  font-size: 17rpx;
-  color: rgba(93, 64, 55, 0.55);
-  flex: none;
-}
-
-.photo-card__meta-right {
+.photo-card__meta-bottom {
   display: flex;
+  width: 100%;
   align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 6rpx;
 }
 
@@ -499,6 +496,18 @@ button::after {
 
 .photo-card__story-badge--highlight {
   background: rgba(93, 64, 55, 0.1);
+}
+
+.photo-card__stat {
+  min-height: 24rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2rpx solid rgba(93, 64, 55, 0.12);
+  padding: 0 8rpx;
+  font-size: 16rpx;
+  color: rgba(93, 64, 55, 0.76);
+  display: inline-flex;
+  align-items: center;
 }
 
 .photo-card__sort-actions {
@@ -1093,6 +1102,18 @@ button::after {
   align-items: center;
   color: #5d4037;
   font-size: 22rpx;
+}
+
+.shot-location-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 74rpx;
+  border-radius: 14rpx;
+  border: 2rpx solid rgba(93, 64, 55, 0.18);
+  background: #fffbf0;
+  padding: 0 14rpx;
+  font-size: 22rpx;
+  color: #5d4037;
 }
 
 .upload-box {

@@ -176,7 +176,7 @@ function normalizePhoto(photo, options) {
   const width = Number((photo && photo.width) || 0);
   const height = Number((photo && photo.height) || 0);
   const ratio = width > 0 && height > 0 ? height / width : 1;
-  const storyText = String((photo && photo.story_text) || "").trim();
+  const storyText = normalizeMaybeText(photo && photo.story_text);
   const hasStory = Boolean(storyText);
   const isHighlight = Boolean(photo && photo.is_highlight);
   const locationText = resolvePhotoLocationText(photo, options);

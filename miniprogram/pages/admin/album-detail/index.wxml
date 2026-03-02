@@ -140,14 +140,29 @@
         </view>
 
         <view class="photo-card__meta">
-          <view class="photo-card__folder">
-            <image class="photo-card__folder-icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
-            <text class="photo-card__folder-name">{{item.folderName}}</text>
+          <view class="photo-card__shot-time">
+            <text class="photo-card__shot-time-icon">📅</text>
+            <text class="photo-card__shot-time-text">{{item.dateText}}</text>
           </view>
-          <view class="photo-card__meta-right">
+          <view class="photo-card__meta-bottom">
+            <block wx:if="{{isSystemAlbum}}">
+              <view class="photo-card__stat">
+                <text>❤ {{item.likeCount}}</text>
+              </view>
+              <view class="photo-card__stat">
+                <text>👁 {{item.viewCount}}</text>
+              </view>
+            </block>
+            <block wx:else>
+              <view class="photo-card__stat">
+                <text>👁 {{item.viewCount}}</text>
+              </view>
+              <view class="photo-card__stat">
+                <text>⬇ {{item.downloadCount}}</text>
+              </view>
+            </block>
             <text class="photo-card__story-badge" wx:if="{{item.has_story}}">故事</text>
             <text class="photo-card__story-badge photo-card__story-badge--highlight" wx:elif="{{item.story_highlight}}">高亮</text>
-            <text class="photo-card__date">{{item.dateText}}</text>
           </view>
         </view>
 
@@ -290,6 +305,18 @@
           </view>
 
           <view class="booking-modal__field">
+            <text class="booking-modal__label">拍摄地点（单图可选）</text>
+            <input
+              class="shot-location-input"
+              type="text"
+              maxlength="255"
+              placeholder="例如：成都·人民公园"
+              value="{{singleShotLocation}}"
+              bindinput="onSingleShotLocationInput"
+            />
+          </view>
+
+          <view class="booking-modal__field">
             <text class="booking-modal__label">关于此刻（单图可选）</text>
             <textarea
               class="booking-modal__textarea"
@@ -327,6 +354,25 @@
           </scroll-view>
         </view>
 
+        <view class="single-date-row" wx:if="{{uploadMode === 'batch'}}">
+          <text class="single-date-row__label">拍摄日期（批量统一）</text>
+          <picker mode="date" value="{{batchShotDate}}" bindchange="onBatchShotDateChange">
+            <view class="single-date-row__value">{{batchShotDate}}</view>
+          </picker>
+        </view>
+
+        <view class="booking-modal__field" wx:if="{{uploadMode === 'batch'}}">
+          <text class="booking-modal__label">拍摄地点（批量统一，可选）</text>
+          <input
+            class="shot-location-input"
+            type="text"
+            maxlength="255"
+            placeholder="例如：成都·人民公园"
+            value="{{batchShotLocation}}"
+            bindinput="onBatchShotLocationInput"
+          />
+        </view>
+
         <view class="gallery-upload-progress" wx:if="{{uploading && uploadProgress.total > 0}}">
           <view class="gallery-upload-progress__head">
             <text class="gallery-upload-progress__title">上传进度</text>
@@ -349,8 +395,8 @@
           <text wx:else>批量上传 ({{batchImages.length}} 张)</text>
         </button>
 
-        <text class="upload-mode-tip" wx:if="{{uploadMode === 'batch'}}">批量上传默认拍摄日期为今天，不支持“关于此刻”，可在列表中后续编辑。</text>
-        <text class="upload-mode-tip" wx:elif="{{uploadMode === 'single'}}">单图上传可设置拍摄日期、“关于此刻”和高亮。</text>
+        <text class="upload-mode-tip" wx:if="{{uploadMode === 'batch'}}">批量上传可统一设置拍摄日期与地点，不支持“关于此刻”，可在列表中后续编辑。</text>
+        <text class="upload-mode-tip" wx:elif="{{uploadMode === 'single'}}">单图上传可设置拍摄日期、地点、“关于此刻”和高亮。</text>
       </view>
     </view>
   </view>
@@ -386,12 +432,28 @@
   <view wx:if="{{showShotDateModal}}" class="modal-mask" bindtap="onCloseShotDateModal">
     <view class="modal-container" catchtap="onStopPropagation">
       <view class="modal-header">
-        <text class="modal-title">修改拍摄日期</text>
+        <text class="modal-title">修改拍摄信息</text>
       </view>
       <view class="modal-body">
-        <picker mode="date" value="{{editingShotDateValue}}" bindchange="onEditingShotDateChange">
-          <view class="shot-date-picker">{{editingShotDateValue}}</view>
-        </picker>
+        <view class="booking-modal__field">
+          <text class="booking-modal__label">拍摄日期</text>
+          <picker mode="date" value="{{editingShotDateValue}}" bindchange="onEditingShotDateChange">
+            <view class="shot-date-picker">{{editingShotDateValue}}</view>
+          </picker>
+        </view>
+
+        <view class="booking-modal__field">
+          <text class="booking-modal__label">拍摄地点</text>
+          <input
+            class="shot-location-input"
+            type="text"
+            maxlength="255"
+            placeholder="拍摄地点（可留空）"
+            value="{{editingShotLocationValue}}"
+            bindinput="onEditingShotLocationInput"
+          />
+        </view>
+
       </view>
       <view class="modal-footer">
         <button class="modal-btn modal-btn--ghost" bindtap="onCloseShotDateModal" disabled="{{actionLoading}}">取消</button>

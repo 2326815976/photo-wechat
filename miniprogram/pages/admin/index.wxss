@@ -195,6 +195,8 @@ button::after {
 }
 
 .drawer-user {
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 16rpx;
@@ -243,6 +245,8 @@ button::after {
 .drawer-plain-btn,
 .drawer-danger-btn {
   width: 100%;
+  box-sizing: border-box;
+  display: flex;
   height: 76rpx;
   border-radius: 18rpx;
   font-size: 30rpx;

@@ -959,7 +959,7 @@ async function moveAdminPoseTag(tagId, directionInput) {
   }
 
   const direction = String(directionInput || "").trim().toLowerCase();
-  if (direction !== "up" && direction !== "down") {
+  if (direction !== "up" && direction !== "down" && direction !== "top") {
     throw new Error("排序方向不合法");
   }
 
@@ -993,8 +993,20 @@ async function moveAdminPoseTag(tagId, directionInput) {
       throw new Error("标签不存在或已删除");
     }
 
-    const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    const nextIndex =
+      direction === "top"
+        ? 0
+        : direction === "up"
+          ? currentIndex - 1
+          : currentIndex + 1;
     if (nextIndex < 0 || nextIndex >= list.length) {
+      return {
+        moved: false,
+        boundary: true,
+        updatedCount: 0,
+      };
+    }
+    if (nextIndex === currentIndex) {
       return {
         moved: false,
         boundary: true,
