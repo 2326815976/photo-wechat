@@ -383,16 +383,58 @@
 }
 
 .meta {
-  padding: 12rpx 14rpx;
+  padding: 12rpx 14rpx 14rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.meta-row {
+  width: 100%;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  min-height: 24rpx;
+}
+
+.meta-row--actions {
   justify-content: flex-start;
 }
 
+.location-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.location {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.location-icon {
+  flex: none;
+  width: 22rpx;
+  height: 22rpx;
+}
+
+.location-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 20rpx;
+  color: rgba(141, 110, 99, 0.88);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .date {
+  flex: none;
   font-size: 20rpx;
   color: rgba(141, 110, 99, 0.70);
-  margin-left: auto;
+  margin-left: 16rpx;
   text-align: right;
 }
 

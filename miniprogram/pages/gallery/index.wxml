@@ -20,8 +20,8 @@
         </view>
       </view>
       <view class="loading-text">
-        <text class="loading-title">加载中...</text>
-        <text class="loading-desc">正在加载照片墙</text>
+        <text class="loading-title">{{backendReconnecting ? '拾光中...' : '加载中...'}}</text>
+        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在加载照片墙'}}</text>
       </view>
     </view>
 
@@ -74,11 +74,21 @@
 
             </view>
             <view class="meta">
-              <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
-                <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
-                <text class="like-count">{{item.like_count}}</text>
+              <view class="meta-row">
+                <view class="location-spacer">
+                  <view class="location">
+                    <image class="location-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+                    <text class="location-text">{{item.location_text || '未知'}}</text>
+                  </view>
+                </view>
+                <text class="date">{{item.created_at_text}}</text>
               </view>
-              <text class="date">{{item.created_at_text}}</text>
+              <view class="meta-row meta-row--actions" wx:if="{{!hideAudit}}">
+                <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+                  <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
+                  <text class="like-count">{{item.like_count}}</text>
+                </view>
+              </view>
             </view>
           </view>
         </view>
@@ -110,11 +120,21 @@
 
             </view>
             <view class="meta">
-              <view class="like" wx:if="{{!hideAudit}}" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
-                <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
-                <text class="like-count">{{item.like_count}}</text>
+              <view class="meta-row">
+                <view class="location-spacer">
+                  <view class="location">
+                    <image class="location-icon" src="/images/icons/map-pin-yellow.svg" mode="aspectFit" />
+                    <text class="location-text">{{item.location_text || '未知'}}</text>
+                  </view>
+                </view>
+                <text class="date">{{item.created_at_text}}</text>
               </view>
-              <text class="date">{{item.created_at_text}}</text>
+              <view class="meta-row meta-row--actions" wx:if="{{!hideAudit}}">
+                <view class="like" hover-class="like--active" hover-stay-time="80" catchtap="toggleLike" data-id="{{item.id}}">
+                  <image class="like-icon" src="{{item.is_liked ? '/images/icons/heart-fill-yellow.svg' : '/images/icons/heart-outline-muted.svg'}}" mode="aspectFit" />
+                  <text class="like-count">{{item.like_count}}</text>
+                </view>
+              </view>
             </view>
           </view>
         </view>

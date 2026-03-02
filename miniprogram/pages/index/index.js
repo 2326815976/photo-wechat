@@ -69,6 +69,8 @@ Page({
 
     serviceMissing: false,
     hideAudit: false,
+    backendReady: false,
+    backendReconnecting: false,
 
     tags: [],
     displayTags: [],
@@ -114,6 +116,8 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
+    const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     const auditConfigReady = Boolean(globalData.auditConfigReady);
     const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
     this.homeBootstrapped = false;
@@ -121,6 +125,8 @@ Page({
       safeTop,
       serviceMissing,
       hideAudit,
+      backendReady,
+      backendReconnecting,
       auditChecking: !auditConfigReady,
     });
 
@@ -138,10 +144,24 @@ Page({
         this.startHomePageIfNeeded();
       });
     }
+    if (app && typeof app.subscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+        const ready = Boolean(status && status.backendReady);
+        const reconnecting = !ready && Boolean(status && status.backendReconnecting);
+        this.setData({
+          backendReady: ready,
+          backendReconnecting: reconnecting,
+        });
+        this.startHomePageIfNeeded();
+      });
+    }
 
     if (!auditConfigReady) {
       if (app && typeof app.ensureAuditConfig === "function") {
         app.ensureAuditConfig().catch(() => {});
+      }
+      if (!serviceMissing && !backendReady && app && typeof app.ensureBackendReady === "function") {
+        void app.ensureBackendReady();
       }
       return;
     }
@@ -151,6 +171,9 @@ Page({
       return;
     }
 
+    if (!serviceMissing && !backendReady && app && typeof app.ensureBackendReady === "function") {
+      void app.ensureBackendReady();
+    }
     this.startHomePageIfNeeded();
   },
 
@@ -170,6 +193,26 @@ Page({
     this.setData({
       hideAudit: enabled,
       auditChecking: false,
+    });
+    if (!this.data.serviceMissing && app && typeof app.ensureBackendReady === "function") {
+      if (!this.data.backendReady) {
+        this.setData({ backendReconnecting: true });
+      }
+      try {
+        await app.ensureBackendReady();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const nextBackendReady = this.data.serviceMissing
+      ? true
+      : Boolean(app && app.globalData && app.globalData.backendReady);
+    const nextBackendReconnecting = !nextBackendReady && Boolean(
+      app && app.globalData && app.globalData.backendReconnecting
+    );
+    this.setData({
+      backendReady: nextBackendReady,
+      backendReconnecting: nextBackendReconnecting,
     });
     if (enabled) {
       this.redirectToGallery();
@@ -216,6 +259,10 @@ Page({
       this._unsubscribeAuditConfig();
     }
     this._unsubscribeAuditConfig = null;
+    if (typeof this._unsubscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus();
+    }
+    this._unsubscribeBackendStatus = null;
   },
 
   syncTabBar(selectedPath) {
@@ -244,6 +291,7 @@ Page({
   startHomePageIfNeeded() {
     if (this.homeBootstrapped) return;
     if (this.data.hideAudit || this.data.auditChecking) return;
+    if (!this.data.serviceMissing && !this.data.backendReady) return;
     this.homeBootstrapped = true;
 
     this.loadCachedTags();

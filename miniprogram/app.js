@@ -4,6 +4,8 @@ const { requestJson } = require("./utils/cloudrun");
 
 const CLOUDRUN_HEALTH_ENDPOINT = "/api/auth/session";
 const AUDIT_CONFIG_ENDPOINT = "/api/miniprogram/runtime-config";
+const BACKEND_RETRY_INTERVAL_MS = 2500;
+const BACKEND_HEALTH_TIMEOUT_MS = 5000;
 const DEFAULT_SHARE_TITLE = "拾光谣小工具";
 const DEFAULT_SHARE_IMAGE = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE_BY_ROUTE = {
@@ -125,6 +127,14 @@ function ensureShareMenuEnabled() {
   }
 }
 
+function sleep(ms) {
+  const delay = Math.max(0, Number(ms || 0));
+  if (!delay) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
+}
+
 const NativePage = Page;
 if (typeof NativePage === "function") {
   Page = function patchedPage(definition) {
@@ -173,6 +183,8 @@ async function diagnoseCloudRunConnectivity() {
 App({
   auditConfigPromise: null,
   auditConfigListeners: [],
+  backendReadyPromise: null,
+  backendStatusListeners: [],
 
   globalData: {
     // env 参数说明：
@@ -186,6 +198,10 @@ App({
     debugRequests: Boolean(config.debugRequests),
     cloudRunReachable: null,
     cloudRunLastError: "",
+    backendReady: false,
+    backendReconnecting: false,
+    backendRetryCount: 0,
+    backendLastError: "",
     storageDomain: config.storageDomain,
 
     // 系统信息（用于自定义导航栏安全区）
@@ -195,6 +211,139 @@ App({
     // 审核开关（true: 隐藏约拍入口）
     hideAudit: false,
     auditConfigReady: false,
+  },
+
+  notifyBackendStatusChange() {
+    const listeners = Array.isArray(this.backendStatusListeners)
+      ? this.backendStatusListeners.slice()
+      : [];
+    const payload = {
+      backendReady: Boolean(this.globalData && this.globalData.backendReady),
+      backendReconnecting: Boolean(this.globalData && this.globalData.backendReconnecting),
+      backendRetryCount: Math.max(0, Number((this.globalData && this.globalData.backendRetryCount) || 0)),
+      backendLastError: String((this.globalData && this.globalData.backendLastError) || ""),
+    };
+    listeners.forEach((listener) => {
+      if (typeof listener !== "function") return;
+      try {
+        listener(payload);
+      } catch (error) {
+        // ignore listener errors
+      }
+    });
+  },
+
+  subscribeBackendStatus(listener) {
+    if (typeof listener !== "function") {
+      return () => {};
+    }
+    if (!Array.isArray(this.backendStatusListeners)) {
+      this.backendStatusListeners = [];
+    }
+    this.backendStatusListeners.push(listener);
+
+    try {
+      listener({
+        backendReady: Boolean(this.globalData && this.globalData.backendReady),
+        backendReconnecting: Boolean(this.globalData && this.globalData.backendReconnecting),
+        backendRetryCount: Math.max(0, Number((this.globalData && this.globalData.backendRetryCount) || 0)),
+        backendLastError: String((this.globalData && this.globalData.backendLastError) || ""),
+      });
+    } catch (error) {
+      // ignore listener errors
+    }
+
+    return () => {
+      const rows = Array.isArray(this.backendStatusListeners)
+        ? this.backendStatusListeners
+        : [];
+      this.backendStatusListeners = rows.filter((item) => item !== listener);
+    };
+  },
+
+  setBackendStatus(patch) {
+    const next = patch && typeof patch === "object" ? patch : {};
+    const backendReady = Object.prototype.hasOwnProperty.call(next, "backendReady")
+      ? Boolean(next.backendReady)
+      : Boolean(this.globalData.backendReady);
+    const backendReconnecting = Object.prototype.hasOwnProperty.call(next, "backendReconnecting")
+      ? Boolean(next.backendReconnecting)
+      : Boolean(this.globalData.backendReconnecting);
+    const backendRetryCount = Object.prototype.hasOwnProperty.call(next, "backendRetryCount")
+      ? Math.max(0, Number(next.backendRetryCount || 0))
+      : Math.max(0, Number(this.globalData.backendRetryCount || 0));
+    const backendLastError = Object.prototype.hasOwnProperty.call(next, "backendLastError")
+      ? String(next.backendLastError || "")
+      : String(this.globalData.backendLastError || "");
+
+    this.globalData.backendReady = backendReady;
+    this.globalData.backendReconnecting = backendReconnecting;
+    this.globalData.backendRetryCount = backendRetryCount;
+    this.globalData.backendLastError = backendLastError;
+    this.globalData.cloudRunReachable = backendReady;
+    this.globalData.cloudRunLastError = backendLastError;
+    this.notifyBackendStatusChange();
+  },
+
+  async ensureBackendReady() {
+    const service = String((this.globalData && this.globalData.cloudRunService) || "").trim();
+    if (!service) {
+      this.setBackendStatus({
+        backendReady: true,
+        backendReconnecting: false,
+        backendRetryCount: 0,
+        backendLastError: "",
+      });
+      return true;
+    }
+
+    if (this.globalData.backendReady) {
+      return true;
+    }
+
+    if (this.backendReadyPromise) {
+      return this.backendReadyPromise;
+    }
+
+    this.setBackendStatus({
+      backendReady: false,
+      backendReconnecting: true,
+    });
+
+    this.backendReadyPromise = (async () => {
+      let attempts = Math.max(0, Number(this.globalData.backendRetryCount || 0));
+      while (true) {
+        attempts += 1;
+        try {
+          await requestJson(CLOUDRUN_HEALTH_ENDPOINT, {
+            method: "GET",
+            timeout: BACKEND_HEALTH_TIMEOUT_MS,
+            disableBackendRecovery: true,
+            skipBackendReadyGate: true,
+          });
+          this.setBackendStatus({
+            backendReady: true,
+            backendReconnecting: false,
+            backendRetryCount: attempts,
+            backendLastError: "",
+          });
+          return true;
+        } catch (error) {
+          this.setBackendStatus({
+            backendReady: false,
+            backendReconnecting: true,
+            backendRetryCount: attempts,
+            backendLastError: String((error && error.message) || "服务器暂不可用"),
+          });
+          await sleep(BACKEND_RETRY_INTERVAL_MS);
+        }
+      }
+    })()
+      .finally(() => {
+        this.backendReadyPromise = null;
+      });
+
+    return this.backendReadyPromise;
   },
 
   notifyAuditConfigChange(hideAudit) {
@@ -311,18 +460,15 @@ App({
       );
     }
     if (this.globalData.cloudRunService) {
-      void diagnoseCloudRunConnectivity().then((result) => {
-        this.globalData.cloudRunReachable = Boolean(result && result.reachable);
-        this.globalData.cloudRunLastError = String((result && result.error) || "");
-
-        if (!this.globalData.cloudRunReachable) {
-          console.warn(
-            `[CloudRun 连通性检测失败] env=${this.globalData.env} service=${this.globalData.cloudRunService} error=${this.globalData.cloudRunLastError}`
-          );
-        }
+      void this.ensureBackendReady().then(() => this.ensureAuditConfig());
+    } else {
+      this.setBackendStatus({
+        backendReady: true,
+        backendReconnecting: false,
+        backendRetryCount: 0,
+        backendLastError: "",
       });
+      void this.ensureAuditConfig();
     }
-
-    void this.ensureAuditConfig();
   },
 });

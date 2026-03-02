@@ -23,8 +23,8 @@
         </view>
       </view>
       <view class="loading-text">
-        <text class="loading-title">时光中...</text>
-        <text class="loading-desc">正在为你打开专属回忆</text>
+        <text class="loading-title">{{backendReconnecting ? '拾光中...' : '时光中...'}}</text>
+        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在为你打开专属回忆'}}</text>
       </view>
     </view>
 

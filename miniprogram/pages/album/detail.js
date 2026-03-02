@@ -2,6 +2,7 @@ const { dbRpc } = require("../../services/photo-api");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
+const { getSessionId } = require("../../utils/session");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "「拾光谣」相册分享";
@@ -219,8 +220,8 @@ function computeToolbarStickyTop(safeTop) {
 
   const unit = Math.max(windowWidth, 320) / 750;
   const headerInnerHeight = 96 * unit; // app-header back-sub 高度
-  const headerBorder = 4 * unit; // app-header 下边框
-  const top = Number(safeTop || 0) + headerInnerHeight + headerBorder;
+  // 与页头无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝。
+  const top = Number(safeTop || 0) + headerInnerHeight;
   return Math.max(0, Math.round(top));
 }
 
@@ -336,6 +337,8 @@ Page({
     toolbarStickyTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    backendReady: false,
+    backendReconnecting: false,
 
     key: "",
     loading: true,
@@ -400,6 +403,8 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
+    const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
     this._lastAlbumAutoLoadAt = 0;
@@ -439,6 +444,8 @@ Page({
       toolbarStickyTop: computeToolbarStickyTop(safeTop),
       serviceMissing,
       hideAudit: Boolean(globalData.hideAudit),
+      backendReady,
+      backendReconnecting,
       key,
       welcomeStorageKey: `album_welcome_seen_${key}`,
       welcomeEggStorageKey: `album_welcome_egg_seen_${key}`,
@@ -456,8 +463,23 @@ Page({
         this.setData({ hideAudit: nextHideAudit });
       });
     }
+    if (app && typeof app.subscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+        const ready = Boolean(status && status.backendReady);
+        const reconnecting = !ready && Boolean(status && status.backendReconnecting);
+        this.setData({
+          backendReady: ready,
+          backendReconnecting: reconnecting,
+        });
+      });
+    }
     if (!serviceMissing) {
-      this.loadAlbum();
+      if (backendReady) {
+        this.loadAlbum();
+      } else if (app && typeof app.ensureBackendReady === "function") {
+        this.setData({ loading: true });
+        void app.ensureBackendReady();
+      }
     } else {
       this.setData({ loading: false });
     }
@@ -482,9 +504,33 @@ Page({
 
     if (this.data.serviceMissing) return;
     if (!String(this.data.key || "").trim()) return;
+    if (app && typeof app.ensureBackendReady === "function") {
+      if (!this.data.backendReady) {
+        this.setData({
+          loading: true,
+          backendReconnecting: true,
+        });
+      }
+      try {
+        await app.ensureBackendReady();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const nextBackendReady = Boolean(app && app.globalData && app.globalData.backendReady);
+    const nextBackendReconnecting = !nextBackendReady && Boolean(
+      app && app.globalData && app.globalData.backendReconnecting
+    );
+    this.setData({
+      backendReady: nextBackendReady,
+      backendReconnecting: nextBackendReconnecting,
+    });
+    if (!this.data.album) {
+      this.loadAlbum();
+      return;
+    }
     if (this.consumeSuppressRefreshOnShow()) return;
     if (this.data.loading || this.data.loadingMore) return;
-    if (!this.data.album) return;
 
     void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, 1, {
       reset: true,
@@ -517,6 +563,10 @@ Page({
       this._unsubscribeAuditConfig();
     }
     this._unsubscribeAuditConfig = null;
+    if (typeof this._unsubscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus();
+    }
+    this._unsubscribeBackendStatus = null;
   },
 
   noop() {},
@@ -1464,6 +1514,42 @@ Page({
     await wx.saveImageToPhotosAlbum({ filePath: localPath });
   },
 
+  async incrementPhotoViewCount(photoId) {
+    const id = String(photoId || "").trim();
+    if (!id) return;
+
+    try {
+      const sessionId = getSessionId();
+      const r = await dbRpc("increment_photo_view", {
+        p_photo_id: id,
+        p_session_id: sessionId,
+      });
+      const payload = r ? r.data : null;
+      if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
+        return;
+      }
+    } catch (error) {
+      // ignore count failure
+    }
+  },
+
+  async incrementPhotoDownloadCount(photoId) {
+    const id = String(photoId || "").trim();
+    if (!id) return;
+
+    try {
+      const r = await dbRpc("increment_photo_download", {
+        p_photo_id: id,
+      });
+      const payload = r ? r.data : null;
+      if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
+        return;
+      }
+    } catch (error) {
+      // ignore count failure
+    }
+  },
+
   async handleBatchDownload() {
     if (this.data.batchLoading) return;
 
@@ -1516,6 +1602,7 @@ Page({
       try {
         await this.savePhotoToAlbum(url);
         success += 1;
+        void this.incrementPhotoDownloadCount(photo.id);
         await new Promise((resolve) => setTimeout(resolve, 120));
       } catch (e) {
         try {
@@ -1666,6 +1753,7 @@ Page({
     }
 
     const idx = Math.max(0, images.findIndex((x) => String(x) === String(currentUrl)));
+    void this.incrementPhotoViewCount(id);
     this.markTransientForegroundReturn();
     wx.previewImage({
       current: images[idx],

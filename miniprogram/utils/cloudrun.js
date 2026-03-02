@@ -46,6 +46,30 @@ function getRuntime() {
   return { env, service, uploadBaseUrl, debugRequests };
 }
 
+async function ensureBackendReadyGate(options, runtime) {
+  const opts = options && typeof options === "object" ? options : {};
+  if (Boolean(opts.skipBackendReadyGate)) {
+    return;
+  }
+
+  const app = typeof getApp === "function" ? getApp() : null;
+  if (!app || typeof app.ensureBackendReady !== "function") {
+    return;
+  }
+
+  const globalData = app && app.globalData ? app.globalData : {};
+  const service = String(globalData.cloudRunService || (runtime && runtime.service) || "").trim();
+  if (!service) {
+    return;
+  }
+
+  if (Boolean(globalData.backendReady)) {
+    return;
+  }
+
+  await app.ensureBackendReady();
+}
+
 function refreshRuntimeSession(runtime) {
   const current = runtime && typeof runtime === "object" ? runtime : {};
   const nextFingerprint = `${normalizeRuntimeValue(current.env)}::${normalizeRuntimeValue(current.service)}`;
@@ -481,6 +505,8 @@ async function requestJson(path, init) {
   const disableBackendRecovery = Boolean(options.disableBackendRecovery);
   let recoveryAttempted = false;
 
+  await ensureBackendReadyGate(options, runtime);
+
   const sendRequest = async () => {
     const response = await callContainer({
       path,
@@ -897,6 +923,7 @@ async function requestUpload(path, init) {
   }
 
   const runtime = getRuntime();
+  await ensureBackendReadyGate(options, runtime);
   const uploadBaseUrl = String(options.uploadBaseUrl || runtime.uploadBaseUrl || "").trim();
   let uploadDomainBlockedError = null;
 

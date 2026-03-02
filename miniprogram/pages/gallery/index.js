@@ -78,6 +78,25 @@ function normalizeDateOnlyText(value) {
   return `${matched[1]}-${matched[2]}-${matched[3]}`;
 }
 
+function normalizeMaybeText(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  const lowered = raw.toLowerCase();
+  if (lowered === "null" || lowered === "undefined" || lowered === "none" || lowered === "nil") {
+    return "";
+  }
+  return raw;
+}
+
+function resolvePhotoLocationText(photo) {
+  const explicitLocation = normalizeMaybeText(
+    (photo && (photo.shot_location || photo.location || photo.place || photo.city_name || photo.address)) ||
+      (photo && photo.location_text)
+  );
+  if (explicitLocation) return explicitLocation;
+  return "未知";
+}
+
 function readGalleryMemoryCache() {
   if (!Array.isArray(galleryMemoryCache.photos) || galleryMemoryCache.photos.length === 0) {
     return null;
@@ -153,19 +172,21 @@ function writeGalleryStorageCache(photos, total) {
   }
 }
 
-function normalizePhoto(photo) {
+function normalizePhoto(photo, options) {
   const width = Number((photo && photo.width) || 0);
   const height = Number((photo && photo.height) || 0);
   const ratio = width > 0 && height > 0 ? height / width : 1;
   const storyText = String((photo && photo.story_text) || "").trim();
   const hasStory = Boolean(storyText);
   const isHighlight = Boolean(photo && photo.is_highlight);
+  const locationText = resolvePhotoLocationText(photo, options);
 
   return Object.assign({}, photo, {
     thumbnail_url_resolved: resolvePublicUrl(photo && photo.thumbnail_url),
     preview_url_resolved: resolvePublicUrl(photo && photo.preview_url),
     original_url_resolved: resolvePublicUrl(photo && photo.original_url),
     created_at_text: formatDateDisplayUTC8((photo && photo.shot_date) || (photo && photo.created_at)),
+    location_text: locationText,
     story_text: storyText,
     has_story: hasStory,
     is_highlight: isHighlight,
@@ -305,6 +326,8 @@ Page({
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    backendReady: false,
+    backendReconnecting: false,
 
     loading: true,
     loadingMore: false,
@@ -354,6 +377,8 @@ Page({
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const hideAudit = Boolean(globalData.hideAudit);
+    const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
+    const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
 
     this.photoRatioMap = Object.create(null);
     this.relayoutTimer = null;
@@ -361,7 +386,8 @@ Page({
     this.viewportHeight = 0;
     this.pageHeight = 0;
     this.loadingNextPage = false;
-    this.setData({ safeTop, serviceMissing, hideAudit });
+    this._galleryBootstrapped = false;
+    this.setData({ safeTop, serviceMissing, hideAudit, backendReady, backendReconnecting });
 
     try {
       const systemInfo = wx.getSystemInfoSync();
@@ -383,12 +409,29 @@ Page({
         });
       });
     }
-
-    this.loadCachedGallery();
-    this.scheduleScrollMetricsRefresh();
+    if (app && typeof app.subscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+        const ready = Boolean(status && status.backendReady);
+        const reconnecting = !ready && Boolean(status && status.backendReconnecting);
+        this.setData({
+          backendReady: ready,
+          backendReconnecting: reconnecting,
+        });
+        if (ready) {
+          this.startGalleryBootstrapIfReady();
+        }
+      });
+    }
 
     if (!serviceMissing) {
-      this.bootstrap();
+      if (backendReady) {
+        this.startGalleryBootstrapIfReady();
+      } else {
+        this.setData({ loading: true });
+        if (app && typeof app.ensureBackendReady === "function") {
+          void app.ensureBackendReady();
+        }
+      }
     } else {
       this.setData({ loading: false });
     }
@@ -412,6 +455,30 @@ Page({
 
     this.syncTabBar("pages/gallery/index");
     if (this.data.serviceMissing) return;
+    if (app && typeof app.ensureBackendReady === "function") {
+      if (!this.data.backendReady) {
+        this.setData({
+          loading: true,
+          backendReconnecting: true,
+        });
+      }
+      try {
+        await app.ensureBackendReady();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const nextBackendReady = this.data.serviceMissing
+      ? true
+      : Boolean(app && app.globalData && app.globalData.backendReady);
+    const nextBackendReconnecting = !nextBackendReady && Boolean(
+      app && app.globalData && app.globalData.backendReconnecting
+    );
+    this.setData({
+      backendReady: nextBackendReady,
+      backendReconnecting: nextBackendReconnecting,
+    });
+    this.startGalleryBootstrapIfReady();
     if (this.consumeSuppressRefreshOnShow()) return;
     if (this.data.loading || this.data.loadingMore) {
       void this.refreshLoginState();
@@ -434,10 +501,15 @@ Page({
     this.clearRelayoutTimer();
     this.clearScrollMetricsTimer();
     this.loadingNextPage = false;
+    this._galleryBootstrapped = false;
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
     }
     this._unsubscribeAuditConfig = null;
+    if (typeof this._unsubscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus();
+    }
+    this._unsubscribeBackendStatus = null;
   },
 
   syncTabBar(selectedPath) {
@@ -451,6 +523,16 @@ Page({
   },
 
   noop() {},
+
+  startGalleryBootstrapIfReady() {
+    if (this._galleryBootstrapped) return;
+    if (this.data.serviceMissing) return;
+    if (!this.data.backendReady) return;
+    this._galleryBootstrapped = true;
+    this.loadCachedGallery();
+    this.scheduleScrollMetricsRefresh();
+    this.bootstrap();
+  },
 
   onSelectFolder(e) {
     const id =
@@ -563,7 +645,7 @@ Page({
     const cached = memory || storage;
     if (!cached || !Array.isArray(cached.photos) || cached.photos.length === 0) return;
 
-    const photos = cached.photos.map(normalizePhoto);
+    const photos = cached.photos.map((row) => normalizePhoto(row));
     this.setData({
       loading: false,
       pageNo: 1,
@@ -1008,13 +1090,13 @@ Page({
         return;
       }
       const rows = extractGalleryRows(payload);
-      const photos = rows.map(normalizePhoto);
-      const total = readGalleryTotal(payload, photos.length);
       const rootFolderName = readRootFolderName(payload);
       const rpcFolders = readGalleryFolders(payload);
       const folders = [{ id: ROOT_FOLDER_ID, name: rootFolderName }].concat(
         rpcFolders.filter((item) => String(item.id) !== ROOT_FOLDER_ID)
       );
+      const photos = rows.map((row) => normalizePhoto(row));
+      const total = readGalleryTotal(payload, photos.length);
 
       const currentSource = Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos : [];
       let mergedSource = currentSource;

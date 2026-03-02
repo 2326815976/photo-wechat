@@ -1,6 +1,6 @@
 <view class="page">
   <app-header
-    wx:if="{{!auditChecking && !hideAudit}}"
+    wx:if="{{!auditChecking && !hideAudit && backendReady}}"
     title="拾光谣"
     subtitle="✨ 记录此刻的不期而遇 ✨"
     safeTop="{{safeTop}}"
@@ -8,7 +8,21 @@
     animateIn="{{pageReady}}"
   />
 
-  <view class="content" wx:if="{{!auditChecking && !hideAudit}}">
+  <view class="boot-loading motion-fade-up motion-delay-2" wx:if="{{!serviceMissing && !backendReady}}">
+    <view class="boot-loading-ring">
+      <view class="boot-ring boot-ring--outer"></view>
+      <view class="boot-ring boot-ring--inner"></view>
+      <view class="boot-ring-center">
+        <image class="boot-center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+      </view>
+    </view>
+    <view class="boot-loading-text">
+      <text class="boot-loading-title">拾光中...</text>
+      <text class="boot-loading-desc">重连服务器中，请等待</text>
+    </view>
+  </view>
+
+  <view class="content" wx:if="{{!auditChecking && !hideAudit && backendReady}}">
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
