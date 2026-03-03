@@ -112,6 +112,10 @@ const ADMIN_SECTION_META = {
     title: "发布版本 📦",
     desc: "管理应用安装包发布",
   },
+  beta: {
+    title: "内测管理 🧪",
+    desc: "管理功能内测路由与内测码",
+  },
 };
 
 const ADMIN_NAV_ITEMS = [
@@ -123,6 +127,7 @@ const ADMIN_NAV_ITEMS = [
   { key: "albums", label: "专属空间管理", desc: "返图空间", icon: "💝" },
   { key: "about", label: "关于设置", desc: "作者信息", icon: "ℹ️" },
   { key: "releases", label: "发布版本", desc: "安装包发布", icon: "📦" },
+  { key: "beta", label: "内测管理", desc: "功能灰度", icon: "🧪" },
 ];
 
 const BOOKING_PANEL_TABS = [
@@ -1602,6 +1607,13 @@ Page({
       fail: () => {
         wx.switchTab({ url: "/pages/profile/index" });
       },
+    });
+  },
+
+  goBetaManage() {
+    this.closeMobileMenu();
+    wx.navigateTo({
+      url: "/pages/admin/beta/index",
     });
   },
 

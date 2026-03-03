@@ -119,7 +119,15 @@
 
         <view class="audit-entry-card motion-fade-up motion-delay-5">
           <view class="audit-entry-card__actions">
-            <button class="btn-primary audit-entry-card__btn" hover-class="btn-primary--active" bindtap="goLogin">前往登录</button>
+            <button
+              class="audit-wechat-btn audit-entry-card__btn"
+              hover-class="audit-wechat-btn--active"
+              bindtap="onOpenAuditWechatLogin"
+              loading="{{auditWechatSubmitting}}"
+              disabled="{{auditWechatSubmitting || serviceMissing}}"
+            >
+              {{auditWechatSubmitting ? "微信登录中..." : "微信登录"}}
+            </button>
           </view>
         </view>
       </view>
@@ -162,6 +170,7 @@
           <view class="id-info">
             <text class="id-name">{{userName}}</text>
             <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
+            <text class="id-sub id-sub--register" wx:if="{{!userPhone && userRegisterDateText}}">{{userRegisterDateText}}</text>
           </view>
         </view>
 
@@ -196,7 +205,17 @@
             </view>
           </view>
 
-          <view class="menu-item motion-fade-up motion-delay-6" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
+          <view class="menu-item motion-fade-up motion-delay-6" hover-class="menu-item--active" bindtap="goBetaFeatures" wx:if="{{isWechatLogin}}">
+            <view class="menu-icon">
+              <image class="menu-icon-img" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+            </view>
+            <view class="menu-texts">
+              <text class="menu-title">功能内测</text>
+              <text class="menu-desc">输入内测码，解锁专属功能</text>
+            </view>
+          </view>
+
+          <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
             <view class="menu-icon">
               <image class="menu-icon-img" src="/images/icons/setting.svg" mode="aspectFit" />
             </view>
@@ -207,7 +226,7 @@
             </view>
           </view>
 
-          <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAbout">
+          <view class="menu-item motion-fade-up motion-delay-8" hover-class="menu-item--active" bindtap="goAbout">
             <view class="menu-icon">
               <image class="menu-icon-img" src="/images/icons/question.svg" mode="aspectFit" />
             </view>
@@ -217,7 +236,7 @@
             </view>
           </view>
 
-          <view class="menu-item menu-item--plain menu-item--danger motion-fade-up motion-delay-8" hover-class="menu-item--danger-active" bindtap="goDeleteAccount">
+          <view class="menu-item menu-item--plain menu-item--danger motion-fade-up motion-delay-9" hover-class="menu-item--danger-active" bindtap="goDeleteAccount">
             <view class="menu-icon menu-icon--danger">
               <image class="menu-icon-img" src="/images/icons/log-out-red.svg" mode="aspectFit" />
             </view>
@@ -227,7 +246,7 @@
             </view>
           </view>
 
-          <view class="menu-item menu-item--plain motion-fade-up motion-delay-9" hover-class="menu-item--plain-active" bindtap="logout">
+          <view class="menu-item menu-item--plain motion-fade-up motion-delay-10" hover-class="menu-item--plain-active" bindtap="logout">
             <view class="menu-icon menu-icon--logout">
               <image class="menu-icon-img" src="/images/icons/log-out-brown.svg" mode="aspectFit" />
             </view>
@@ -239,5 +258,71 @@
         </view>
       </view>
     </block>
+  </view>
+
+  <view
+    wx:if="{{showAuditAboutMode && showAuditLegalModal}}"
+    class="legal-modal-mask"
+    bindtap="onCloseAuditLegalModal"
+    catchtouchmove="onStopPropagation"
+  >
+    <view class="legal-modal" catchtap="onStopPropagation" catchtouchmove="onStopPropagation">
+      <view class="legal-modal__head">
+        <text class="legal-modal__title">{{auditActiveLegalTitle}}</text>
+        <view class="legal-modal__close" bindtap="onCloseAuditLegalModal">
+          <image class="legal-modal__close-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+        </view>
+      </view>
+
+      <scroll-view class="legal-modal__tabs" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
+        <view class="legal-modal__tabs-inner">
+          <view
+            wx:for="{{auditLegalDocTabs}}"
+            wx:for-item="tab"
+            wx:for-index="tabIndex"
+            wx:key="key"
+            class="legal-modal__tab {{auditActiveLegalKey === tab.key ? 'legal-modal__tab--active' : ''}}"
+            data-doc-key="{{tab.key}}"
+            bindtap="onSwitchAuditLegalDoc"
+          >
+            {{tab.shortTitle || tab.title}}
+          </view>
+        </view>
+      </scroll-view>
+
+      <scroll-view class="legal-modal__body" scroll-y="{{true}}" enable-flex="{{true}}">
+        <text class="legal-modal__version">{{auditActiveLegalVersion}}</text>
+
+        <view wx:for="{{auditActiveLegalSections}}" wx:for-item="section" wx:for-index="sectionIndex" wx:key="sectionIndex" class="legal-section">
+          <text class="legal-section__title">{{section.title}}</text>
+          <text
+            wx:for="{{section.paragraphs}}"
+            wx:for-item="line"
+            wx:for-index="lineIndex"
+            wx:key="lineIndex"
+            class="legal-section__paragraph"
+          >
+            {{line}}
+          </text>
+        </view>
+
+        <view class="legal-footer" wx:if="{{auditActiveLegalFooter.length > 0}}">
+          <text
+            wx:for="{{auditActiveLegalFooter}}"
+            wx:for-item="line"
+            wx:for-index="lineIndex"
+            wx:key="lineIndex"
+            class="legal-footer__line"
+          >
+            {{line}}
+          </text>
+        </view>
+      </scroll-view>
+
+      <view class="legal-modal__foot legal-modal__foot--dual">
+        <button class="legal-modal__btn legal-modal__btn--reject" hover-class="legal-modal__btn--reject-active" bindtap="onRejectAuditWechatLogin">拒绝</button>
+        <button class="legal-modal__btn legal-modal__btn--agree" hover-class="legal-modal__btn--agree-active" bindtap="onAgreeAuditWechatLogin">同意</button>
+      </view>
+    </view>
   </view>
 </view>

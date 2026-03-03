@@ -1,6 +1,13 @@
-const { getSession, dbQuery, logout, extractSessionUser } = require("../../services/photo-api");
+const {
+  getSession,
+  dbQuery,
+  logout,
+  extractSessionUser,
+  loginWithMiniProgram,
+} = require("../../services/photo-api");
 const { clearStoredCookie } = require("../../utils/auth");
 const { resolvePublicUrl } = require("../../utils/storage-url");
+const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜定格美好瞬间";
@@ -67,20 +74,84 @@ function isMissingColumnError(error, columnName) {
   );
 }
 
+function wxLogin() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success: (res) => resolve(res),
+      fail: (error) => reject(error),
+    });
+  });
+}
+
+function parseRegisterDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw}T00:00:00+08:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw.replace(" ", "T")}+08:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatRegisterDateText(value) {
+  const parsed = parseRegisterDate(value);
+  if (!parsed) return "";
+  const shifted = new Date(parsed.getTime() + 8 * 60 * 60 * 1000);
+  const year = shifted.getUTCFullYear();
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  return `注册日期：${year}-${month}-${day}`;
+}
+
+function extractAuthUserFromPayload(payload) {
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    if (current.user && typeof current.user === "object") return current.user;
+    if (
+      current.session &&
+      typeof current.session === "object" &&
+      current.session.user &&
+      typeof current.session.user === "object"
+    ) {
+      return current.session.user;
+    }
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return null;
+}
+
 Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
     showAuditAboutMode: false,
+    auditWechatSubmitting: false,
+    showAuditLegalModal: false,
+    auditLegalDocTabs: [],
+    auditActiveLegalKey: "",
+    auditActiveLegalTitle: "",
+    auditActiveLegalVersion: "",
+    auditActiveLegalSections: [],
+    auditActiveLegalFooter: [],
 
     loading: true,
     isLoggedIn: false,
+    isWechatLogin: false,
     isAdmin: false,
     userRole: "",
 
     userName: "",
     userPhone: "",
+    userRegisterDateText: "",
     canChangePassword: false,
 
     aboutLoading: true,
@@ -102,6 +173,7 @@ Page({
       hideAudit,
       showAuditAboutMode: hideAudit,
     });
+    this.initAuditLegalDocuments(hideAudit);
 
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
@@ -109,7 +181,9 @@ Page({
         this.setData({
           hideAudit: nextHideAudit,
           showAuditAboutMode: nextHideAudit ? this.data.showAuditAboutMode : false,
+          showAuditLegalModal: nextHideAudit ? this.data.showAuditLegalModal : false,
         });
+        this.initAuditLegalDocuments(nextHideAudit);
         this.refreshCurrentModeData();
       });
     }
@@ -131,6 +205,7 @@ Page({
       hideAudit,
       showAuditAboutMode: hideAudit ? this.data.showAuditAboutMode : false,
     });
+    this.initAuditLegalDocuments(hideAudit);
 
     this.syncTabBar("pages/profile/index");
     this.refreshCurrentModeData();
@@ -141,6 +216,10 @@ Page({
       this._unsubscribeAuditConfig();
     }
     this._unsubscribeAuditConfig = null;
+    if (this._auditLoginRefreshTimer) {
+      clearTimeout(this._auditLoginRefreshTimer);
+      this._auditLoginRefreshTimer = null;
+    }
   },
 
   syncTabBar(selectedPath) {
@@ -153,12 +232,190 @@ Page({
     }
   },
 
+  refreshTabBarLoginState() {
+    if (typeof this.getTabBar !== "function") return;
+    const tab = this.getTabBar();
+    if (tab && typeof tab.refreshLoginState === "function") {
+      tab.refreshLoginState();
+    }
+  },
+
   refreshCurrentModeData() {
     if (this.data.serviceMissing) {
       this.setData({ loading: false, aboutLoading: false });
       return;
     }
     this.loadUser();
+  },
+
+  initAuditLegalDocuments(hideAudit) {
+    const nextHideAudit =
+      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
+    if (!nextHideAudit) {
+      this.auditLegalDocMap = {};
+      this.setData({
+        auditLegalDocTabs: [],
+        showAuditLegalModal: false,
+        auditActiveLegalKey: "",
+        auditActiveLegalTitle: "",
+        auditActiveLegalVersion: "",
+        auditActiveLegalSections: [],
+        auditActiveLegalFooter: [],
+      });
+      return;
+    }
+
+    const docs = getLegalDocuments({ hideAudit: true });
+    this.auditLegalDocMap = {};
+    docs.forEach((doc) => {
+      const key = String((doc && doc.key) || "").trim();
+      if (!key) return;
+      this.auditLegalDocMap[key] = doc;
+    });
+
+    const tabs = docs.map((doc) => ({
+      key: String((doc && doc.key) || ""),
+      title: String((doc && doc.title) || ""),
+      shortTitle: String((doc && doc.shortTitle) || (doc && doc.title) || ""),
+    }));
+    const activeKey = String(this.data.auditActiveLegalKey || "").trim();
+    const hasActiveKey = tabs.some((tab) => String((tab && tab.key) || "") === activeKey);
+    const defaultKey = hasActiveKey ? activeKey : tabs.length > 0 ? String(tabs[0].key || "") : "";
+    this.setData({ auditLegalDocTabs: tabs });
+    if (defaultKey) {
+      this.applyAuditLegalDocument(defaultKey, true);
+    }
+  },
+
+  applyAuditLegalDocument(key, hideAudit) {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) return false;
+    const nextHideAudit =
+      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
+    if (!nextHideAudit) return false;
+
+    const doc =
+      (this.auditLegalDocMap && this.auditLegalDocMap[normalizedKey]) ||
+      getLegalDocumentByKey(normalizedKey, { hideAudit: true });
+    if (!doc) return false;
+
+    this.setData({
+      auditActiveLegalKey: String(doc.key || normalizedKey),
+      auditActiveLegalTitle: String(doc.title || ""),
+      auditActiveLegalVersion: String(doc.versionLine || ""),
+      auditActiveLegalSections: Array.isArray(doc.sections) ? doc.sections : [],
+      auditActiveLegalFooter: Array.isArray(doc.footer) ? doc.footer : [],
+    });
+    return true;
+  },
+
+  onOpenAuditWechatLogin() {
+    if (!this.data.hideAudit || !this.data.showAuditAboutMode || this.data.serviceMissing) return;
+    if (this.data.auditWechatSubmitting) return;
+    this.initAuditLegalDocuments(true);
+    this.applyAuditLegalDocument("terms", true);
+    this.setData({ showAuditLegalModal: true });
+  },
+
+  onSwitchAuditLegalDoc(e) {
+    const key =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.docKey || "")
+        : "";
+    this.applyAuditLegalDocument(key, true);
+  },
+
+  onCloseAuditLegalModal() {
+    if (!this.data.showAuditLegalModal) return;
+    this.setData({ showAuditLegalModal: false });
+  },
+
+  onRejectAuditWechatLogin() {
+    this.setData({
+      showAuditLegalModal: false,
+      auditWechatSubmitting: false,
+    });
+  },
+
+  onAgreeAuditWechatLogin() {
+    this.setData({ showAuditLegalModal: false });
+    this.submitAuditWechatLogin();
+  },
+
+  onStopPropagation() {},
+
+  scheduleAuditLoginStateRefresh() {
+    if (this._auditLoginRefreshTimer) {
+      clearTimeout(this._auditLoginRefreshTimer);
+      this._auditLoginRefreshTimer = null;
+    }
+    this._auditLoginRefreshTimer = setTimeout(() => {
+      this._auditLoginRefreshTimer = null;
+      this.loadUser();
+    }, 360);
+  },
+
+  async submitAuditWechatLogin() {
+    if (!this.data.hideAudit || !this.data.showAuditAboutMode || this.data.serviceMissing) return;
+    if (this.data.auditWechatSubmitting) return;
+
+    this.setData({ auditWechatSubmitting: true });
+    try {
+      const loginRes = await wxLogin();
+      const code = String((loginRes && loginRes.code) || "").trim();
+      if (!code) {
+        wx.showToast({ title: "未获取到微信登录凭证，请重试", icon: "none" });
+        return;
+      }
+
+      const result = await loginWithMiniProgram(code);
+      const user = extractAuthUserFromPayload(result);
+      if (!user) {
+        wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
+        return;
+      }
+
+      const userRole = String((user && user.role) || "").trim();
+      const userPhone = String((user && user.phone) || "").trim();
+      const defaultName = userPhone || (this.data.hideAudit ? "拾光者" : "用户");
+      const isAdmin = userRole === "admin";
+
+      this.setData({
+        loading: false,
+        isLoggedIn: true,
+        isWechatLogin: true,
+        isAdmin,
+        userRole,
+        userName: defaultName,
+        userPhone,
+        userRegisterDateText: formatRegisterDateText(user && user.created_at),
+        canChangePassword: !isWechatMiniProgramAccount(user),
+        showAuditAboutMode: false,
+      });
+      this.refreshTabBarLoginState();
+
+      // 微信登录后延迟做一次会话态校准，确保管理员入口与昵称等信息最终一致。
+      this.scheduleAuditLoginStateRefresh();
+
+      wx.showToast({ title: "登录成功", icon: "none" });
+    } catch (error) {
+      const message = String((error && error.message) || "");
+      if (message.includes("凭证无效") || message.includes("已过期")) {
+        wx.showToast({ title: "微信登录凭证已失效，请重试", icon: "none" });
+      } else if (message.includes("接口不存在") || message.includes("/api/auth/wechat/miniprogram/login")) {
+        wx.showToast({ title: "后端未部署微信登录接口", icon: "none" });
+      } else if (message.includes("云托管服务名称未配置")) {
+        wx.showToast({ title: "请先配置云托管服务", icon: "none" });
+      } else if (message.includes("服务：") && message.includes("环境：")) {
+        wx.showToast({ title: "云托管调用失败，请检查配置", icon: "none" });
+      } else if (message.includes("未配置")) {
+        wx.showToast({ title: "服务端暂未开启微信登录", icon: "none" });
+      } else {
+        wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
+      }
+    } finally {
+      this.setData({ auditWechatSubmitting: false });
+    }
   },
 
   async loadUser() {
@@ -170,29 +427,35 @@ Page({
         this.setData({
           loading: false,
           isLoggedIn: false,
+          isWechatLogin: false,
           isAdmin: false,
           userRole: "",
           userName: "",
           userPhone: "",
+          userRegisterDateText: "",
           canChangePassword: false,
           showAuditAboutMode: Boolean(this.data.hideAudit),
         });
+        this.refreshTabBarLoginState();
         if (this.data.hideAudit) {
           this.loadAbout();
         }
         return;
       }
 
-      let userName = String((user && user.phone) || "用户");
+      let userName = String((user && user.phone) || (this.data.hideAudit ? "拾光者" : "用户"));
       let userPhone = String((user && user.phone) || "");
-      const userRole = String((user && user.role) || "");
+      let userRegisterDateText = formatRegisterDateText(user && user.created_at);
+      const userRole = String((user && user.role) || "").trim();
+      let profileRole = "";
+      let isAdmin = false;
 
       // 尝试从 profiles 获取更友好的昵称
       try {
         const r = await dbQuery({
           table: "profiles",
           action: "select",
-          columns: "name,phone",
+          columns: "name,phone,role",
           filters: [{ column: "id", operator: "eq", value: user.id }],
           maybeSingle: true,
         });
@@ -204,31 +467,65 @@ Page({
         if (profile && profile.phone) {
           userPhone = String(profile.phone);
         }
+        if (profile) {
+          profileRole = String((profile && profile.role) || "").trim();
+        }
       } catch (e) {
         // ignore
       }
 
+      if (!userRegisterDateText) {
+        try {
+          const userResult = await dbQuery({
+            table: "users",
+            action: "select",
+            columns: "created_at",
+            filters: [{ column: "id", operator: "eq", value: user.id }],
+            maybeSingle: true,
+          });
+          const userRow = userResult ? userResult.data : null;
+          userRegisterDateText = formatRegisterDateText(userRow && userRow.created_at);
+        } catch (error) {
+          // ignore
+        }
+      }
+
+      if (this.data.hideAudit) {
+        const normalizedName = String(userName || "").trim();
+        if (!normalizedName || normalizedName === "微信用户" || normalizedName === "用户") {
+          userName = "拾光者";
+        }
+      }
+
+      isAdmin = userRole === "admin" && profileRole === "admin";
+
       this.setData({
         loading: false,
         isLoggedIn: true,
-        userRole,
-        isAdmin: userRole === "admin",
+        isWechatLogin: isWechatMiniProgramAccount(user),
+        userRole: isAdmin ? "admin" : "user",
+        isAdmin,
         userName,
         userPhone,
+        userRegisterDateText,
         canChangePassword: !isWechatMiniProgramAccount(user),
         showAuditAboutMode: false,
       });
+      this.refreshTabBarLoginState();
     } catch (e) {
       this.setData({
         loading: false,
         isLoggedIn: false,
+        isWechatLogin: false,
         isAdmin: false,
         userRole: "",
         userName: "",
         userPhone: "",
+        userRegisterDateText: "",
         canChangePassword: false,
         showAuditAboutMode: Boolean(this.data.hideAudit),
       });
+      this.refreshTabBarLoginState();
       if (this.data.hideAudit) {
         this.loadAbout();
       }
@@ -330,6 +627,20 @@ Page({
 
   goChangePassword() {
     wx.navigateTo({ url: "/pages/profile/change-password/index" });
+  },
+
+  goBetaFeatures() {
+    if (this._navigatingToBeta) return;
+    this._navigatingToBeta = true;
+    wx.navigateTo({
+      url: "/pages/profile/beta/index",
+      fail: () => {
+        wx.showToast({ title: "进入功能内测失败，请重试", icon: "none" });
+      },
+      complete: () => {
+        this._navigatingToBeta = false;
+      },
+    });
   },
 
   goDeleteAccount() {
@@ -463,15 +774,26 @@ Page({
     } catch (e) {
       // ignore
     } finally {
+      const hideAudit = Boolean(this.data.hideAudit);
       clearStoredCookie();
       this.setData({
         isLoggedIn: false,
+        isWechatLogin: false,
         isAdmin: false,
         userRole: "",
         userName: "",
         userPhone: "",
+        userRegisterDateText: "",
+        canChangePassword: false,
+        showAuditAboutMode: hideAudit,
       });
+      this.refreshTabBarLoginState();
       wx.showToast({ title: "已退出登录", icon: "none" });
+      if (hideAudit) {
+        this.loadAbout();
+        wx.switchTab({ url: "/pages/profile/index" });
+        return;
+      }
       wx.navigateTo({ url: "/pages/login/index" });
     }
   },

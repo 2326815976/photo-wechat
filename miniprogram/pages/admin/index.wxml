@@ -1522,6 +1522,27 @@
           </view>
         </block>
 
+        <block wx:if="{{activeSection === 'beta'}}">
+          <view class="beta-entry-panel motion-fade-up">
+            <view class="beta-entry-card">
+              <view class="beta-entry-card__icon-wrap">
+                <text class="beta-entry-card__icon">🧪</text>
+              </view>
+              <view class="beta-entry-card__main">
+                <text class="beta-entry-card__title">功能内测管理</text>
+                <text class="beta-entry-card__desc">配置内测路由、内测版本、内测码与有效期</text>
+              </view>
+              <button
+                class="beta-entry-card__btn"
+                bindtap="goBetaManage"
+                hover-class="beta-entry-card__btn--active"
+              >
+                进入管理
+              </button>
+            </view>
+          </view>
+        </block>
+
         <block wx:if="{{activeSection === 'releases'}}">
           <view class="release-page motion-fade-up">
             <block wx:if="{{releaseMode === 'list'}}">

@@ -120,6 +120,7 @@ Page({
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     const auditConfigReady = Boolean(globalData.auditConfigReady);
     const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
+    this.betaPoseBypassAllowed = this.consumeBetaPoseBypass();
     this.homeBootstrapped = false;
     this.setData({
       safeTop,
@@ -133,11 +134,17 @@ Page({
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
         const enabled = Boolean(nextHideAudit);
+        if (enabled && this.consumeBetaPoseBypass()) {
+          this.betaPoseBypassAllowed = true;
+        }
+        if (!enabled) {
+          this.betaPoseBypassAllowed = false;
+        }
         this.setData({
           hideAudit: enabled,
           auditChecking: false,
         });
-        if (enabled) {
+        if (enabled && !this.betaPoseBypassAllowed) {
           this.redirectToGallery();
           return;
         }
@@ -166,7 +173,7 @@ Page({
       return;
     }
 
-    if (hideAudit) {
+    if (hideAudit && !this.betaPoseBypassAllowed) {
       this.redirectToGallery();
       return;
     }
@@ -190,6 +197,12 @@ Page({
     }
 
     const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
+    if (enabled && this.consumeBetaPoseBypass()) {
+      this.betaPoseBypassAllowed = true;
+    }
+    if (!enabled) {
+      this.betaPoseBypassAllowed = false;
+    }
     this.setData({
       hideAudit: enabled,
       auditChecking: false,
@@ -214,7 +227,7 @@ Page({
       backendReady: nextBackendReady,
       backendReconnecting: nextBackendReconnecting,
     });
-    if (enabled) {
+    if (enabled && !this.betaPoseBypassAllowed) {
       this.redirectToGallery();
       return;
     }
@@ -250,6 +263,7 @@ Page({
   onUnload() {
     this.isPageAlive = false;
     this.homeBootstrapped = false;
+    this.betaPoseBypassAllowed = false;
     this.clearAnimationTimers();
     this.stopShake();
     this.stopTagsRefreshTimer();
@@ -277,6 +291,21 @@ Page({
 
   noop() {},
 
+  consumeBetaPoseBypass() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const globalData = app && app.globalData ? app.globalData : {};
+    const route = String(globalData.betaFeatureBypassRoute || "").trim().toLowerCase();
+    const expiresAt = Number(globalData.betaFeatureBypassExpiresAt || 0);
+    const isValid = (route === "/pose" || route === "/poses") && expiresAt > Date.now();
+    if (!isValid) {
+      return false;
+    }
+
+    globalData.betaFeatureBypassRoute = "";
+    globalData.betaFeatureBypassExpiresAt = 0;
+    return true;
+  },
+
   redirectToGallery() {
     if (this._redirectingToGallery) return;
     this._redirectingToGallery = true;
@@ -290,7 +319,7 @@ Page({
 
   startHomePageIfNeeded() {
     if (this.homeBootstrapped) return;
-    if (this.data.hideAudit || this.data.auditChecking) return;
+    if ((this.data.hideAudit && !this.betaPoseBypassAllowed) || this.data.auditChecking) return;
     if (!this.data.serviceMissing && !this.data.backendReady) return;
     this.homeBootstrapped = true;
 

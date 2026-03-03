@@ -1,0 +1,288 @@
+<view class="page">
+  <app-header
+    title="内测管理"
+    subtitle="🧪 功能灰度配置"
+    safeTop="{{safeTop}}"
+    showBack="{{true}}"
+    fallbackTab="pages/admin/index"
+  />
+
+  <scroll-view class="content" scroll-y="true" enable-flex="true">
+    <view class="loading" wx:if="{{loading}}">
+      <view class="loading-spinner"></view>
+      <text class="loading-text">正在加载内测数据...</text>
+    </view>
+
+    <view wx:else>
+      <view class="tabs">
+        <view
+          class="tab-item {{activeTab === 'routes' ? 'tab-item--active' : ''}}"
+          data-tab="routes"
+          bindtap="onSwitchTab"
+        >
+          <text>路由管理</text>
+        </view>
+        <view
+          class="tab-item {{activeTab === 'versions' ? 'tab-item--active' : ''}}"
+          data-tab="versions"
+          bindtap="onSwitchTab"
+        >
+          <text>版本管理</text>
+        </view>
+      </view>
+
+      <block wx:if="{{activeTab === 'routes'}}">
+        <view class="toolbar">
+          <button class="toolbar-btn toolbar-btn--primary" bindtap="onOpenCreateRoute">+ 新增路由</button>
+        </view>
+
+        <view class="empty" wx:if="{{!routeRows.length}}">
+          <text class="empty-icon">🧭</text>
+          <text class="empty-text">暂无内测路由</text>
+        </view>
+
+        <view class="cards" wx:else>
+          <view class="card" wx:for="{{routeRows}}" wx:key="id">
+            <view class="card-head">
+              <view class="card-main">
+                <text class="card-title">{{item.route_title}}</text>
+                <text class="card-path">{{item.route_path}}</text>
+              </view>
+              <view class="route-state {{item.stateClass}}">
+                <text>{{item.stateText}}</text>
+              </view>
+            </view>
+            <text class="card-desc" wx:if="{{item.route_description}}">{{item.route_description}}</text>
+            <view class="card-actions">
+              <button class="action-btn action-btn--edit" data-id="{{item.id}}" bindtap="onOpenEditRoute">编辑</button>
+              <button class="action-btn action-btn--delete" data-id="{{item.id}}" bindtap="onOpenRouteDeleteConfirm">删除</button>
+            </view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:elif="{{activeTab === 'versions'}}">
+        <view class="toolbar">
+          <button class="toolbar-btn toolbar-btn--primary" bindtap="onOpenCreateVersion">+ 新增版本</button>
+        </view>
+
+        <view class="empty" wx:if="{{!routeRows.length}}">
+          <text class="empty-icon">⚠️</text>
+          <text class="empty-text">请先在路由管理中创建路由</text>
+        </view>
+
+        <view class="empty" wx:elif="{{!versionRows.length}}">
+          <text class="empty-icon">🔑</text>
+          <text class="empty-text">暂无内测版本</text>
+        </view>
+
+        <view class="cards" wx:else>
+          <view class="card" wx:for="{{versionRows}}" wx:key="id">
+            <view class="card-head">
+              <view class="card-main">
+                <text class="card-title">{{item.feature_name}}</text>
+                <text class="card-path">{{item.route_title || '未绑定路由'}} · {{item.route_path || '未设置路径'}}</text>
+              </view>
+              <view class="version-state {{item.stateClass}}">
+                <text>{{item.stateText}}</text>
+              </view>
+            </view>
+
+            <text class="card-desc" wx:if="{{item.feature_description}}">{{item.feature_description}}</text>
+
+            <view class="version-code-row">
+              <text class="version-code">内测码：{{item.feature_code}}</text>
+              <button class="mini-btn" data-code="{{item.feature_code}}" bindtap="onCopyVersionCode">复制</button>
+            </view>
+
+            <text class="version-expire" wx:if="{{item.expires_text}}">有效期至：{{item.expires_text}}</text>
+            <text class="version-expire" wx:else>有效期：长期有效</text>
+
+            <view class="card-actions">
+              <button class="action-btn action-btn--edit" data-id="{{item.id}}" bindtap="onOpenEditVersion">编辑</button>
+              <button class="action-btn action-btn--delete" data-id="{{item.id}}" bindtap="onOpenVersionDeleteConfirm">删除</button>
+            </view>
+          </view>
+        </view>
+      </block>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{routeModalOpen}}" class="modal-mask" bindtap="onCloseRouteModal">
+    <view class="modal" catchtap="onStopPropagation">
+      <view class="modal-head">
+        <text class="modal-title">{{routeModalMode === 'edit' ? '编辑内测路由' : '新增内测路由'}}</text>
+      </view>
+
+      <view class="modal-body">
+        <view class="field">
+          <text class="field-label">功能路由</text>
+          <picker
+            mode="selector"
+            range="{{routePresetRows}}"
+            range-key="route_title"
+            value="{{routePresetIndex}}"
+            bindchange="onRoutePresetChange"
+          >
+            <view class="picker-value">{{routePresetPreviewTitle || '请选择功能路由'}}</view>
+          </picker>
+          <text class="picker-hint" wx:if="{{routePresetPreviewPath}}">{{routePresetPreviewPath}}</text>
+        </view>
+
+        <view class="field">
+          <text class="field-label">功能名称</text>
+          <input
+            class="field-input"
+            value="{{routeForm.route_title}}"
+            data-field="route_title"
+            bindinput="onRouteInput"
+            placeholder="例如：摆姿推荐"
+            placeholder-class="field-placeholder"
+            maxlength="128"
+          />
+        </view>
+
+        <view class="field">
+          <text class="field-label">功能简介（选填）</text>
+          <textarea
+            class="field-textarea"
+            value="{{routeForm.route_description}}"
+            data-field="route_description"
+            bindinput="onRouteInput"
+            placeholder="简要描述该内测功能"
+            placeholder-class="field-placeholder"
+            maxlength="255"
+          />
+        </view>
+
+        <view class="switch-row">
+          <text class="switch-row__label">启用状态</text>
+          <switch checked="{{routeForm.is_active}}" color="#FFC857" bindchange="onRouteActiveChange" />
+        </view>
+      </view>
+
+      <view class="modal-foot">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseRouteModal" disabled="{{routeSaving}}">取消</button>
+        <button
+          class="modal-btn modal-btn--primary"
+          bindtap="onSubmitRoute"
+          loading="{{routeSaving}}"
+          disabled="{{routeSaving}}"
+        >
+          {{routeSaving ? '保存中...' : '保存'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{versionModalOpen}}" class="modal-mask" bindtap="onCloseVersionModal">
+    <view class="modal" catchtap="onStopPropagation">
+      <view class="modal-head">
+        <text class="modal-title">{{versionModalMode === 'edit' ? '编辑内测版本' : '新增内测版本'}}</text>
+      </view>
+
+      <scroll-view class="modal-body modal-body--scroll" scroll-y="true" enable-flex="true">
+        <view class="field">
+          <text class="field-label">内测功能名称</text>
+          <input
+            class="field-input"
+            value="{{versionForm.feature_name}}"
+            data-field="feature_name"
+            bindinput="onVersionInput"
+            placeholder="例如：摆姿推荐"
+            placeholder-class="field-placeholder"
+            maxlength="128"
+          />
+        </view>
+
+        <view class="field">
+          <text class="field-label">内测功能简介（选填）</text>
+          <textarea
+            class="field-textarea"
+            value="{{versionForm.feature_description}}"
+            data-field="feature_description"
+            bindinput="onVersionInput"
+            placeholder="用于展示给用户的说明"
+            placeholder-class="field-placeholder"
+            maxlength="255"
+          />
+        </view>
+
+        <view class="field">
+          <text class="field-label">功能路由</text>
+          <picker mode="selector" range="{{routeRows}}" range-key="route_title" value="{{versionRoutePickerIndex}}" bindchange="onVersionRouteChange">
+            <view class="picker-value">{{versionRoutePreviewTitle || '请选择路由'}}</view>
+          </picker>
+          <text class="picker-hint" wx:if="{{versionRoutePreviewPath}}">{{versionRoutePreviewPath}}</text>
+        </view>
+
+        <view class="field field--code">
+          <text class="field-label">内测码</text>
+          <view class="code-input-row">
+            <input
+              class="field-input field-input--code"
+              value="{{versionForm.feature_code}}"
+              data-field="feature_code"
+              bindinput="onVersionInput"
+              placeholder="输入或生成内测码"
+              placeholder-class="field-placeholder"
+              maxlength="64"
+            />
+            <button class="mini-btn" bindtap="onGenerateVersionCode">随机生成</button>
+          </view>
+        </view>
+
+        <view class="switch-row">
+          <text class="switch-row__label">启用状态</text>
+          <switch checked="{{versionForm.is_active}}" color="#FFC857" bindchange="onVersionActiveChange" />
+        </view>
+
+        <view class="switch-row">
+          <text class="switch-row__label">设置有效期</text>
+          <switch checked="{{versionForm.has_expiry}}" color="#FFC857" bindchange="onVersionExpirySwitch" />
+        </view>
+
+        <view class="field" wx:if="{{versionForm.has_expiry}}">
+          <text class="field-label">有效期日期</text>
+          <picker mode="date" value="{{versionForm.expires_date}}" bindchange="onVersionExpiryDateChange">
+            <view class="picker-value">{{versionForm.expires_date || '请选择日期'}}</view>
+          </picker>
+        </view>
+      </scroll-view>
+
+      <view class="modal-foot">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseVersionModal" disabled="{{versionSaving}}">取消</button>
+        <button
+          class="modal-btn modal-btn--primary"
+          bindtap="onSubmitVersion"
+          loading="{{versionSaving}}"
+          disabled="{{versionSaving}}"
+        >
+          {{versionSaving ? '保存中...' : '保存'}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{routeDeleteConfirmOpen}}" class="modal-mask" bindtap="onCloseRouteDeleteConfirm">
+    <view class="confirm-modal" catchtap="onStopPropagation">
+      <text class="confirm-title">删除内测路由</text>
+      <text class="confirm-desc">确认删除「{{routeDeletingTitle}}」吗？</text>
+      <view class="confirm-actions">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseRouteDeleteConfirm" disabled="{{routeDeleting}}">取消</button>
+        <button class="modal-btn modal-btn--danger" bindtap="onConfirmRouteDelete" loading="{{routeDeleting}}" disabled="{{routeDeleting}}">删除</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{versionDeleteConfirmOpen}}" class="modal-mask" bindtap="onCloseVersionDeleteConfirm">
+    <view class="confirm-modal" catchtap="onStopPropagation">
+      <text class="confirm-title">删除内测版本</text>
+      <text class="confirm-desc">确认删除「{{versionDeletingName}}」吗？</text>
+      <view class="confirm-actions">
+        <button class="modal-btn modal-btn--ghost" bindtap="onCloseVersionDeleteConfirm" disabled="{{versionDeleting}}">取消</button>
+        <button class="modal-btn modal-btn--danger" bindtap="onConfirmVersionDelete" loading="{{versionDeleting}}" disabled="{{versionDeleting}}">删除</button>
+      </view>
+    </view>
+  </view>
+</view>

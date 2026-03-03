@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "功能内测",
+  "usingComponents": {
+    "app-header": "/components/app-header/index"
+  }
+}

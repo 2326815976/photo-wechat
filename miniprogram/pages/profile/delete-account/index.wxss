@@ -237,7 +237,8 @@
 }
 
 .btn-next {
-  width: 100%;
+  width: calc(100% + 24rpx);
+  margin-left: -12rpx;
   height: 112rpx;
   border-radius: 999rpx;
   background: #EF4444;

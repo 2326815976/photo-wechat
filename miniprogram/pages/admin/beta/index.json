@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "内测管理",
+  "usingComponents": {
+    "app-header": "/components/app-header/index"
+  }
+}

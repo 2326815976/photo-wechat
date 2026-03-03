@@ -1,4 +1,7 @@
+const { getSession, extractSessionUser } = require("../services/photo-api");
+
 const BOOKING_PAGE_PATH = "pages/booking/index";
+const PROFILE_PAGE_PATH = "pages/profile/index";
 const DEFAULT_TAB_LIST = [
   {
     pagePath: "pages/index/index",
@@ -25,7 +28,7 @@ const DEFAULT_TAB_LIST = [
     selectedIconPath: "/images/tab/calendar-active.svg",
   },
   {
-    pagePath: "pages/profile/index",
+    pagePath: PROFILE_PAGE_PATH,
     text: "我的",
     iconPath: "/images/tab/user.svg",
     selectedIconPath: "/images/tab/user-active.svg",
@@ -45,12 +48,23 @@ const HIDE_AUDIT_TAB_LIST = [
     selectedIconPath: "/images/tab/lock-active.svg",
   },
   {
-    pagePath: "pages/profile/index",
+    pagePath: PROFILE_PAGE_PATH,
     text: "关于",
     iconPath: "/images/tab/user.svg",
     selectedIconPath: "/images/tab/user-active.svg",
   },
 ];
+
+function buildHideAuditTabList(isLoggedIn) {
+  const loggedIn = Boolean(isLoggedIn);
+  return HIDE_AUDIT_TAB_LIST.map((item) => {
+    const row = Object.assign({}, item);
+    if (row.pagePath === PROFILE_PAGE_PATH) {
+      row.text = loggedIn ? "我的" : "关于";
+    }
+    return row;
+  });
+}
 
 Component({
   data: {
@@ -58,6 +72,7 @@ Component({
     selectedPath: "pages/index/index",
     visible: false,
     hideAudit: false,
+    isLoggedIn: false,
     list: DEFAULT_TAB_LIST.slice(),
   },
   lifetimes: {
@@ -80,6 +95,8 @@ Component({
           this.applyAuditConfig(Boolean(nextHideAudit));
         });
       }
+
+      this.refreshLoginState();
     },
     detached() {
       if (typeof this._unsubscribeAuditConfig === "function") {
@@ -88,12 +105,21 @@ Component({
       this._unsubscribeAuditConfig = null;
     },
   },
+  pageLifetimes: {
+    show() {
+      this.refreshLoginState();
+    },
+  },
   methods: {
+    buildTabList(hideAudit, isLoggedIn) {
+      return hideAudit
+        ? buildHideAuditTabList(isLoggedIn)
+        : DEFAULT_TAB_LIST.slice();
+    },
+
     applyAuditConfig(hideAudit) {
       const nextHideAudit = Boolean(hideAudit);
-      const nextList = nextHideAudit
-        ? HIDE_AUDIT_TAB_LIST.slice()
-        : DEFAULT_TAB_LIST.slice();
+      const nextList = this.buildTabList(nextHideAudit, this.data.isLoggedIn);
 
       const selectedPath = String(this.data.selectedPath || "")
         .trim()
@@ -122,6 +148,48 @@ Component({
         selected: nextSelected,
         selectedPath: nextSelectedPath,
       });
+    },
+
+    applyLoginState(isLoggedIn) {
+      const nextLoggedIn = Boolean(isLoggedIn);
+      const currentLoggedIn = Boolean(this.data.isLoggedIn);
+      if (nextLoggedIn === currentLoggedIn && !this.data.hideAudit) {
+        return;
+      }
+
+      const nextList = this.buildTabList(this.data.hideAudit, nextLoggedIn);
+      const selectedPath = String(this.data.selectedPath || "")
+        .trim()
+        .replace(/^\/+/, "");
+      let nextSelected = nextList.findIndex((item) => item.pagePath === selectedPath);
+      if (nextSelected < 0) {
+        const safeIndex = Number(this.data.selected);
+        if (Number.isInteger(safeIndex) && safeIndex >= 0 && safeIndex < nextList.length) {
+          nextSelected = safeIndex;
+        } else {
+          nextSelected = 0;
+        }
+      }
+      const nextSelectedPath = nextList[nextSelected]
+        ? String(nextList[nextSelected].pagePath || "")
+        : selectedPath;
+
+      this.setData({
+        isLoggedIn: nextLoggedIn,
+        list: nextList,
+        selected: nextSelected,
+        selectedPath: nextSelectedPath,
+      });
+    },
+
+    async refreshLoginState() {
+      try {
+        const session = await getSession();
+        const user = extractSessionUser(session);
+        this.applyLoginState(Boolean(user && user.id));
+      } catch (error) {
+        this.applyLoginState(false);
+      }
     },
 
     switchTab(e) {

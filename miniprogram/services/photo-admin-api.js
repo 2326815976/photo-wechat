@@ -28,6 +28,7 @@ const ADMIN_RELEASE_ALLOWED_EXTENSIONS = [
 ];
 const ADMIN_PHOTO_WALL_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const ADMIN_SESSION_CACHE_TTL_MS = 1200;
+const BETA_FEATURE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 let cachedAdminSessionUser = null;
 let cachedAdminSessionAt = 0;
@@ -302,6 +303,56 @@ function generateRandomAlbumAccessKey() {
     key += chars.charAt(idx);
   }
   return key;
+}
+
+function generatePseudoUuid() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = Math.floor(Math.random() * 16);
+    const v = ch === "x" ? r : ((r & 0x3) | 0x8);
+    return v.toString(16);
+  });
+}
+
+function normalizeBetaRoutePath(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return normalized.slice(0, 255);
+}
+
+function normalizeBetaFeatureCode(input) {
+  return String(input || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "")
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 64);
+}
+
+function generateRandomBetaFeatureCode(length) {
+  const size = Math.max(6, Math.min(24, Number(length || 10) || 10));
+  let code = "";
+  for (let i = 0; i < size; i += 1) {
+    const idx = Math.floor(Math.random() * BETA_FEATURE_CODE_CHARS.length);
+    code += BETA_FEATURE_CODE_CHARS.charAt(idx);
+  }
+  return code;
+}
+
+function normalizeBetaExpiresAt(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return `${raw} 23:59:59`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}$/.test(raw)) {
+    return `${raw}:00`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/.test(raw)) {
+    return raw;
+  }
+  throw new Error("内测有效期格式不正确");
 }
 
 function isDuplicateEntryError(error) {
@@ -2200,6 +2251,233 @@ async function clearAdminAboutDonationQr() {
   };
 }
 
+async function listAdminBetaRoutes(limit) {
+  await requireAdminSession();
+  const pageLimit = Math.max(1, Math.min(500, Number(limit || 200)));
+  const result = await dbQuery({
+    table: "feature_beta_routes",
+    action: "select",
+    columns: "id,route_path,route_title,route_description,is_active,created_at,updated_at",
+    orders: [
+      { column: "is_active", ascending: false },
+      { column: "id", ascending: false },
+    ],
+    limit: pageLimit,
+  });
+  const data = assertDbSuccess(result, "获取内测路由失败");
+  return Array.isArray(data) ? data : [];
+}
+
+async function saveAdminBetaRoute(payload) {
+  await requireAdminSession();
+  const input = payload && typeof payload === "object" ? payload : {};
+  const id = Number(input.id || 0);
+  const routePath = normalizeBetaRoutePath(input.route_path);
+  const routeTitle = String(input.route_title || "").trim().slice(0, 128);
+  const routeDescription = String(input.route_description || "").trim().slice(0, 255);
+  const isActive = normalizeDbBoolean(input.is_active, true);
+
+  if (!routePath) {
+    throw new Error("功能路由不能为空");
+  }
+  if (!routeTitle) {
+    throw new Error("功能名称不能为空");
+  }
+
+  const values = {
+    route_path: routePath,
+    route_title: routeTitle,
+    route_description: routeDescription || null,
+    is_active: isActive,
+  };
+
+  if (id > 0) {
+    const updateResult = await dbQuery({
+      table: "feature_beta_routes",
+      action: "update",
+      values,
+      filters: [{ column: "id", operator: "eq", value: id }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id,route_path,route_title,route_description,is_active,created_at,updated_at",
+    });
+    const updated = assertDbSuccess(updateResult, "更新内测路由失败");
+    if (!updated) {
+      throw new Error("目标内测路由不存在或更新失败");
+    }
+    return updated;
+  }
+
+  const insertResult = await dbQuery({
+    table: "feature_beta_routes",
+    action: "insert",
+    values,
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns: "id,route_path,route_title,route_description,is_active,created_at,updated_at",
+  });
+  return assertDbSuccess(insertResult, "新增内测路由失败");
+}
+
+async function deleteAdminBetaRoute(routeId) {
+  await requireAdminSession();
+  const id = Number(routeId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("路由 ID 不合法");
+  }
+
+  try {
+    const result = await dbQuery({
+      table: "feature_beta_routes",
+      action: "delete",
+      filters: [{ column: "id", operator: "eq", value: id }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id",
+    });
+    const deleted = assertDbSuccess(result, "删除内测路由失败");
+    if (!deleted) {
+      throw new Error("目标内测路由不存在或删除失败");
+    }
+    return deleted;
+  } catch (error) {
+    const message = toErrorMessage(error, "删除内测路由失败");
+    const normalized = message.toLowerCase();
+    if (normalized.includes("foreign key") || normalized.includes("cannot delete or update a parent row")) {
+      throw new Error("该路由已被内测版本使用，暂不可删除");
+    }
+    throw new Error(message);
+  }
+}
+
+async function listAdminBetaVersions(limit) {
+  await requireAdminSession();
+  const pageLimit = Math.max(1, Math.min(500, Number(limit || 200)));
+  const [versionResult, routeRows] = await Promise.all([
+    dbQuery({
+      table: "feature_beta_versions",
+      action: "select",
+      columns:
+        "id,feature_name,feature_description,feature_code,route_id,is_active,expires_at,created_by,created_at,updated_at",
+      orders: [
+        { column: "is_active", ascending: false },
+        { column: "created_at", ascending: false },
+      ],
+      limit: pageLimit,
+    }),
+    listAdminBetaRoutes(1000).catch(() => []),
+  ]);
+  const versions = assertDbSuccess(versionResult, "获取内测版本失败");
+  const rows = Array.isArray(versions) ? versions : [];
+  const routeMap = new Map();
+  (Array.isArray(routeRows) ? routeRows : []).forEach((item) => {
+    const routeId = Number(item && item.id);
+    if (!Number.isInteger(routeId) || routeId <= 0) return;
+    routeMap.set(routeId, {
+      route_title: String((item && item.route_title) || "").trim(),
+      route_path: String((item && item.route_path) || "").trim(),
+    });
+  });
+
+  return rows.map((item) => {
+    const routeId = Number(item && item.route_id);
+    const routeMeta = routeMap.get(routeId) || { route_title: "", route_path: "" };
+    return Object.assign({}, item, {
+      route_title: routeMeta.route_title,
+      route_path: routeMeta.route_path,
+    });
+  });
+}
+
+async function saveAdminBetaVersion(payload) {
+  const adminUser = await requireAdminSession();
+  const input = payload && typeof payload === "object" ? payload : {};
+  const id = String(input.id || "").trim();
+  const featureName = String(input.feature_name || "").trim().slice(0, 128);
+  const featureDescription = String(input.feature_description || "").trim().slice(0, 255);
+  const routeId = Number(input.route_id || 0);
+  const isActive = normalizeDbBoolean(input.is_active, true);
+  const expiresAt = normalizeBetaExpiresAt(input.expires_at);
+  const featureCodeInput = normalizeBetaFeatureCode(input.feature_code);
+  const featureCode = featureCodeInput || generateRandomBetaFeatureCode(10);
+
+  if (!featureName) {
+    throw new Error("内测功能名称不能为空");
+  }
+  if (!routeId || !Number.isInteger(routeId) || routeId <= 0) {
+    throw new Error("请选择有效的功能路由");
+  }
+  if (!featureCode) {
+    throw new Error("内测码不能为空");
+  }
+
+  const values = {
+    feature_name: featureName,
+    feature_description: featureDescription || null,
+    feature_code: featureCode,
+    route_id: routeId,
+    is_active: isActive,
+    expires_at: expiresAt,
+  };
+
+  if (id) {
+    const updateResult = await dbQuery({
+      table: "feature_beta_versions",
+      action: "update",
+      values,
+      filters: [{ column: "id", operator: "eq", value: id }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns:
+        "id,feature_name,feature_description,feature_code,route_id,is_active,expires_at,created_by,created_at,updated_at",
+    });
+    const updated = assertDbSuccess(updateResult, "更新内测版本失败");
+    if (!updated) {
+      throw new Error("目标内测版本不存在或更新失败");
+    }
+    return updated;
+  }
+
+  const insertResult = await dbQuery({
+    table: "feature_beta_versions",
+    action: "insert",
+    values: Object.assign({}, values, {
+      id: generatePseudoUuid(),
+      created_by: String((adminUser && adminUser.id) || "").trim() || null,
+    }),
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns:
+      "id,feature_name,feature_description,feature_code,route_id,is_active,expires_at,created_by,created_at,updated_at",
+  });
+  return assertDbSuccess(insertResult, "新增内测版本失败");
+}
+
+async function deleteAdminBetaVersion(versionId) {
+  await requireAdminSession();
+  const id = String(versionId || "").trim();
+  if (!id) {
+    throw new Error("内测版本 ID 不合法");
+  }
+  const result = await dbQuery({
+    table: "feature_beta_versions",
+    action: "delete",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns: "id",
+  });
+  const deleted = assertDbSuccess(result, "删除内测版本失败");
+  if (!deleted) {
+    throw new Error("目标内测版本不存在或删除失败");
+  }
+  return deleted;
+}
+
+function generateAdminBetaFeatureCode(length) {
+  return generateRandomBetaFeatureCode(length);
+}
+
 module.exports = {
   clearAdminSessionCache,
   requireAdminSession,
@@ -2247,4 +2525,11 @@ module.exports = {
   saveAdminAboutSettings,
   uploadAdminAboutDonationQr,
   clearAdminAboutDonationQr,
+  listAdminBetaRoutes,
+  saveAdminBetaRoute,
+  deleteAdminBetaRoute,
+  listAdminBetaVersions,
+  saveAdminBetaVersion,
+  deleteAdminBetaVersion,
+  generateAdminBetaFeatureCode,
 };

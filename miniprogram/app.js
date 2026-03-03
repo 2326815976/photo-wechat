@@ -211,6 +211,8 @@ App({
     // 审核开关（true: 隐藏约拍入口）
     hideAudit: false,
     auditConfigReady: false,
+    betaFeatureBypassRoute: "",
+    betaFeatureBypassExpiresAt: 0,
   },
 
   notifyBackendStatusChange() {
