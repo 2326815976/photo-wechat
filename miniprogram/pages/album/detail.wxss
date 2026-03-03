@@ -228,6 +228,10 @@ button::after {
   min-width: 0;
 }
 
+.toolbar-folders-wrap--with-guide {
+  padding-top: 72rpx;
+}
+
 .folders-row {
   display: inline-flex;
   align-items: center;
@@ -238,7 +242,7 @@ button::after {
 .folder-guide-tip {
   position: absolute;
   left: 0;
-  top: -66rpx;
+  top: 0;
   z-index: 3;
   max-width: 380rpx;
   height: 52rpx;

@@ -101,6 +101,11 @@
   min-height: 0;
 }
 
+.content--audit-compact {
+  padding-top: 12rpx;
+  padding-bottom: 8rpx;
+}
+
 .config-tip {
   background: rgba(255, 255, 255, 0.75);
   border: 4rpx dashed rgba(93, 64, 55, 0.15);
@@ -124,10 +129,17 @@
 }
 
 .tagbar {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 880;
   display: flex;
   align-items: center;
-  gap: 16rpx; /* gap-2 */
-  margin-bottom: 32rpx; /* mb-4 */
+  gap: 16rpx;
+  padding: 8rpx 0 12rpx;
+  background: #FFFBF0;
+  border-bottom: 2rpx solid rgba(93, 64, 55, 0.05);
+  margin-bottom: 14rpx;
 }
 
 .tagbar--enter {
@@ -135,6 +147,7 @@
 }
 
 .tagbar-scroll {
+  width: 100%;
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -144,16 +157,15 @@
 .tagbar-row {
   display: inline-flex;
   align-items: center;
-  gap: 16rpx; /* gap-2 */
-  padding-bottom: 8rpx; /* pb-1 */
+  gap: 10rpx;
+  padding-bottom: 4rpx;
 }
 
 .tag-btn {
   flex: none;
-  /* Web 实际移动端（responsive.css 覆盖）：py-2 px-3.5 */
-  padding: 16rpx 28rpx;
+  padding: 14rpx 24rpx;
   border-radius: 999rpx;
-  font-size: 24rpx; /* text-xs */
+  font-size: 22rpx;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.60);
   color: rgba(93, 64, 55, 0.60);
@@ -181,10 +193,9 @@
 
 .tag-all-btn {
   flex: none;
-  /* Web 实际移动端（responsive.css 覆盖）：与 tag-button 同尺寸 */
-  padding: 16rpx 28rpx;
+  padding: 14rpx 24rpx;
   border-radius: 999rpx;
-  font-size: 24rpx;
+  font-size: 22rpx;
   font-weight: 700;
   background: #5D4037;
   color: #FFFFFF;
@@ -352,6 +363,11 @@
   transform-origin: center;
 }
 
+.content--audit-compact .pose-wrap,
+.content--audit-compact .skeleton-pose {
+  margin-bottom: 12rpx;
+}
+
 .tape {
   position: absolute;
   top: -24rpx; /* -top-3 */
@@ -457,6 +473,11 @@
   flex-direction: column;
   align-items: center;
   gap: 24rpx;
+}
+
+.content--audit-compact .bottom {
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
+  gap: 18rpx;
 }
 
 .bottom--enter {

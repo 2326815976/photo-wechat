@@ -26,23 +26,29 @@
     </view>
 
     <view wx:if="{{!loading}}">
-      <view class="tagbar motion-fade-up motion-delay-2">
-        <scroll-view class="tagbar-scroll" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
-          <view class="tagbar-row">
-            <view
-              class="tag-btn {{selectedFolder === item.id ? 'tag-btn--active' : ''}}"
-              wx:for="{{folders}}"
-              wx:key="id"
-              data-id="{{item.id}}"
-              bindtap="onSelectFolder"
-            >
-              <text>{{item.name}}</text>
-            </view>
+      <view class="tagbar {{tagbarPinned ? 'tagbar--pinned' : ''}} {{showTagGuide ? 'tagbar--with-guide' : ''}} motion-fade-up motion-delay-2" style="top: {{tagbarStickyTop}}px;">
+        <view class="tagbar-main {{showTagGuide ? 'tagbar-main--with-guide' : ''}}">
+          <view class="tag-guide-tip motion-pop-in" wx:if="{{showTagGuide}}" bindtap="dismissTagGuide">
+            <text class="tag-guide-tip__text">左右滑动 / 点击标签可切换</text>
+            <view class="tag-guide-tip__arrow"></view>
           </view>
-        </scroll-view>
-        <view class="tag-all-btn" hover-class="tag-all-btn--active" hover-stay-time="80" bindtap="onTapFilter">
-          <text>全部</text>
+          <scroll-view class="tagbar-scroll" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
+            <view class="tagbar-row">
+              <button
+                class="tag-btn {{selectedFolder === item.id ? 'tag-btn--active' : ''}} {{tagWaveActiveIndex === index ? (tagWaveTick === 1 ? 'tag-btn--wave-a' : 'tag-btn--wave-b') : ''}}"
+                hover-class="tag-btn--touch"
+                hover-stay-time="80"
+                wx:for="{{folders}}"
+                wx:key="id"
+                data-id="{{item.id}}"
+                bindtap="onSelectFolder"
+              >
+                {{item.name}}
+              </button>
+            </view>
+          </scroll-view>
         </view>
+        <button class="tag-all-btn" hover-class="tag-all-btn--active" hover-stay-time="80" bindtap="onTapFilter">全部</button>
       </view>
 
       <view class="masonry {{right.length === 0 ? 'masonry--single' : ''}} motion-fade-up motion-delay-2" wx:if="{{left.length > 0 || right.length > 0}}">

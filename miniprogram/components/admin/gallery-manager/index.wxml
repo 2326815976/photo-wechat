@@ -25,11 +25,11 @@
         <button class="toolbar-btn toolbar-btn--ghost toolbar-btn--select-toggle" bindtap="onSelectAll">
           {{selectedPhotoIds.length === filteredPhotos.length && filteredPhotos.length > 0 ? '取消全选' : ('全选(' + selectedPhotoIds.length + '/' + filteredPhotos.length + ')')}}
         </button>
-        <button class="toolbar-btn toolbar-btn--primary" bindtap="onShowMoveModal" disabled="{{selectedPhotoIds.length === 0}}">
+        <button class="toolbar-btn toolbar-btn--primary {{selectedPhotoIds.length === 0 ? 'toolbar-btn--disabled' : ''}}" bindtap="onShowMoveModal" disabled="{{selectedPhotoIds.length === 0}}">
           <image class="toolbar-btn__icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">迁移({{selectedPhotoIds.length}})</text>
         </button>
-        <button class="toolbar-btn toolbar-btn--danger" bindtap="onBatchDelete" disabled="{{selectedPhotoIds.length === 0}}">
+        <button class="toolbar-btn toolbar-btn--danger {{selectedPhotoIds.length === 0 ? 'toolbar-btn--disabled' : ''}}" bindtap="onBatchDelete" disabled="{{selectedPhotoIds.length === 0}}">
           <image class="toolbar-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">删除({{selectedPhotoIds.length}})</text>
         </button>
@@ -165,19 +165,19 @@
         </view>
 
         <view class="photo-card__sort-actions" wx:if="{{!isSelectionMode}}">
-          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" catchtap="onMovePhotoTop" disabled="{{actionLoading}}">置顶</button>
-          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{index === 0 || actionLoading}}">上移</button>
-          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{index === filteredPhotos.length - 1 || actionLoading}}">下移</button>
+          <button class="photo-card__sort-btn {{actionLoading ? 'photo-card__sort-btn--disabled' : ''}}" data-photo-id="{{item.id}}" catchtap="onMovePhotoTop" disabled="{{actionLoading}}">置顶</button>
+          <button class="photo-card__sort-btn {{(index === 0 || actionLoading) ? 'photo-card__sort-btn--disabled' : ''}}" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{index === 0 || actionLoading}}">上移</button>
+          <button class="photo-card__sort-btn {{(index === filteredPhotos.length - 1 || actionLoading) ? 'photo-card__sort-btn--disabled' : ''}}" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{index === filteredPhotos.length - 1 || actionLoading}}">下移</button>
         </view>
       </view>
     </view>
 
     <view class="pagination">
-      <button class="pagination__btn" bindtap="onPrevPage" disabled="{{currentPage === 1}}">
+      <button class="pagination__btn {{currentPage === 1 ? 'pagination__btn--disabled' : ''}}" bindtap="onPrevPage" disabled="{{currentPage === 1}}">
         上一页
       </button>
       <text class="pagination__info">第 {{currentPage}} 页 / 共 {{totalPages}} 页</text>
-      <button class="pagination__btn" bindtap="onNextPage" disabled="{{currentPage >= totalPages}}">
+      <button class="pagination__btn {{currentPage >= totalPages ? 'pagination__btn--disabled' : ''}}" bindtap="onNextPage" disabled="{{currentPage >= totalPages}}">
         下一页
       </button>
     </view>
@@ -200,7 +200,7 @@
       </view>
       <view class="modal-footer">
         <button class="modal-btn modal-btn--ghost" bindtap="onCloseNewFolderModal">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onCreateFolder" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--primary {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCreateFolder" disabled="{{actionLoading}}">
           {{actionLoading ? '创建中...' : '创建'}}
         </button>
       </view>
@@ -224,8 +224,8 @@
         <text class="modal-hint">建议 2-12 个字，最多 30 个字符</text>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCloseEditRootModal" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onUpdateRootFolderName" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCloseEditRootModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onUpdateRootFolderName" disabled="{{actionLoading}}">
           {{actionLoading ? '保存中...' : '保存'}}
         </button>
       </view>
@@ -249,8 +249,8 @@
         <text class="modal-hint">建议 2-12 个字，最多 50 个字符</text>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCloseEditFolderModal" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onUpdateFolderName" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCloseEditFolderModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onUpdateFolderName" disabled="{{actionLoading}}">
           {{actionLoading ? '保存中...' : '保存'}}
         </button>
       </view>
@@ -382,7 +382,7 @@
         </view>
 
         <button
-          class="booking-modal__submit"
+          class="booking-modal__submit {{(uploading || (uploadMode === 'single' ? !singleImage : !batchImages.length)) ? 'booking-modal__submit--disabled' : ''}}"
           catchtap="onUploadPhotos"
           hover-class="booking-modal__submit--active"
           loading="{{uploading}}"
@@ -419,8 +419,8 @@
         </view>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCloseStoryModal" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onSaveStory" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCloseStoryModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onSaveStory" disabled="{{actionLoading}}">
           {{actionLoading ? '保存中...' : '保存'}}
         </button>
       </view>
@@ -452,8 +452,8 @@
         </view>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCloseShotDateModal" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onSaveShotDate" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCloseShotDateModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onSaveShotDate" disabled="{{actionLoading}}">
           {{actionLoading ? '保存中...' : '保存'}}
         </button>
       </view>
@@ -501,8 +501,8 @@
       </view>
 
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCloseMoveModal" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--primary" bindtap="onConfirmMove" disabled="{{actionLoading || movingPhotoIds.length === 0}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCloseMoveModal" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--primary {{(actionLoading || movingPhotoIds.length === 0) ? 'modal-btn--disabled' : ''}}" bindtap="onConfirmMove" disabled="{{actionLoading || movingPhotoIds.length === 0}}">
           {{actionLoading ? '迁移中...' : '确认迁移'}}
         </button>
       </view>
@@ -524,8 +524,8 @@
         </view>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCancelDeleteFolder" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--danger" bindtap="onConfirmDeleteFolder" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCancelDeleteFolder" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--danger {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onConfirmDeleteFolder" disabled="{{actionLoading}}">
           {{actionLoading ? '删除中...' : '确认删除'}}
         </button>
       </view>
@@ -542,8 +542,8 @@
         <text class="modal-subtitle">确定要删除这张照片吗？此操作不可撤销。</text>
       </view>
       <view class="modal-footer">
-        <button class="modal-btn modal-btn--ghost" bindtap="onCancelDeletePhoto" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--danger" bindtap="onConfirmDeletePhoto" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCancelDeletePhoto" disabled="{{actionLoading}}">取消</button>
+        <button class="modal-btn modal-btn--danger {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onConfirmDeletePhoto" disabled="{{actionLoading}}">
           {{actionLoading ? '删除中...' : '确认删除'}}
         </button>
       </view>

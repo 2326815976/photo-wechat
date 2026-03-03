@@ -386,6 +386,7 @@ Page({
     showDeleteConfirm: false,
     showWelcomeLetter: false,
     showWelcomeEasterEgg: false,
+    welcomeOpenedFromEgg: false,
     pendingFolderWaveAfterLetterClose: false,
     showDonationModal: false,
     welcomeStorageKey: "",
@@ -466,11 +467,7 @@ Page({
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
         const nextHideAudit = Boolean(hideAudit);
-        if (nextHideAudit && this.data.confirmPhotoId) {
-          this.setData({ hideAudit: nextHideAudit, confirmPhotoId: "" });
-          return;
-        }
-        this.setData({ hideAudit: nextHideAudit });
+        this.setData(this.buildHideAuditPatch(nextHideAudit));
       });
     }
     if (app && typeof app.subscribeBackendStatus === "function") {
@@ -506,11 +503,7 @@ Page({
     }
 
     const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    if (hideAudit && this.data.confirmPhotoId) {
-      this.setData({ hideAudit, confirmPhotoId: "" });
-    } else {
-      this.setData({ hideAudit });
-    }
+    this.setData(this.buildHideAuditPatch(hideAudit));
 
     if (this.data.serviceMissing) return;
     if (!String(this.data.key || "").trim()) return;
@@ -541,6 +534,7 @@ Page({
     }
     if (this.consumeSuppressRefreshOnShow()) return;
     if (this.data.loading || this.data.loadingMore) return;
+    this.triggerFolderGuideForEntry();
 
     void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, 1, {
       reset: true,
@@ -577,6 +571,68 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
+  },
+
+  buildHideAuditPatch(nextHideAudit) {
+    const hideAuditEnabled = Boolean(nextHideAudit);
+    const patch = {
+      hideAudit: hideAuditEnabled,
+    };
+
+    if (!hideAuditEnabled) {
+      return patch;
+    }
+
+    if (this.data.confirmPhotoId) {
+      patch.confirmPhotoId = "";
+    }
+
+    const shouldRepairAutoEnvelope =
+      Boolean(this.data.showWelcomeLetter) &&
+      !Boolean(this.data.welcomeOpenedFromEgg);
+    if (!shouldRepairAutoEnvelope) {
+      return patch;
+    }
+
+    const welcomeEnabled = Boolean(
+      this.data.album && this.data.album.enable_welcome_letter !== false
+    );
+    const storageKey = String(this.data.welcomeStorageKey || "").trim();
+    let hasSeenWelcome = false;
+    if (storageKey) {
+      try {
+        hasSeenWelcome = Boolean(wx.getStorageSync(storageKey));
+      } catch (error) {
+        hasSeenWelcome = false;
+      }
+    }
+    const eggStorageKey = String(this.data.welcomeEggStorageKey || "").trim();
+    let hasSeenWelcomeEgg = false;
+    if (eggStorageKey) {
+      try {
+        hasSeenWelcomeEgg = Boolean(wx.getStorageSync(eggStorageKey));
+      } catch (error) {
+        hasSeenWelcomeEgg = false;
+      }
+    }
+
+    // 兼容旧逻辑：历史版本可能在未点击彩蛋时就写入了“已看过彩蛋”。
+    // 若出现“欢迎信未看过，但彩蛋已看过”，重置彩蛋标记，允许再次展示一次彩蛋。
+    if (hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
+      try {
+        wx.removeStorageSync(eggStorageKey);
+        hasSeenWelcomeEgg = false;
+      } catch (error) {
+        // ignore
+      }
+    }
+    const shouldShowEgg = welcomeEnabled && !hasSeenWelcomeEgg;
+
+    patch.showWelcomeLetter = false;
+    patch.showWelcomeEasterEgg = shouldShowEgg;
+    patch.welcomeOpenedFromEgg = false;
+    patch.letterStage = "envelope";
+    return patch;
   },
 
   noop() {},
@@ -693,7 +749,27 @@ Page({
     this.clearFolderGuideTimer();
     this.folderGuideTimer = setTimeout(() => {
       this.dismissFolderGuide();
-    }, 7000);
+    }, 15000);
+  },
+
+  triggerFolderGuideForEntry() {
+    const folderCount = Array.isArray(this.data.folders) ? this.data.folders.length : 0;
+    if (folderCount <= 1) {
+      this.clearFolderGuideTimer();
+      if (this.data.showFolderGuide) {
+        this.setData({ showFolderGuide: false });
+      }
+      return;
+    }
+
+    if (this.data.showFolderGuide) {
+      this.startFolderGuideAutoDismiss();
+      return;
+    }
+
+    this.setData({ showFolderGuide: true }, () => {
+      this.startFolderGuideAutoDismiss();
+    });
   },
 
   dismissFolderGuide() {
@@ -740,6 +816,7 @@ Page({
       {
         showWelcomeLetter: false,
         showWelcomeEasterEgg: false,
+        welcomeOpenedFromEgg: false,
         letterStage: "envelope",
       },
       () => {
@@ -759,10 +836,19 @@ Page({
 
   onOpenWelcomeEasterEgg() {
     if (!this.data.showWelcomeEasterEgg) return;
-    // 审核模式：点击彩蛋直接展示欢迎信内容，跳过“拆信”阶段
+    const eggStorageKey = String(this.data.welcomeEggStorageKey || "").trim();
+    if (eggStorageKey) {
+      try {
+        wx.setStorageSync(eggStorageKey, "1");
+      } catch (e) {
+        // ignore
+      }
+    }
     this.setData({
       showWelcomeEasterEgg: false,
       showWelcomeLetter: true,
+      welcomeOpenedFromEgg: true,
+      // 审核模式下点击彩蛋后直接展示信纸内容，不展示信封拆封阶段
       letterStage: "letter",
     });
   },
@@ -805,6 +891,20 @@ Page({
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
     try {
+      const app = typeof getApp === "function" ? getApp() : null;
+      let effectiveHideAudit = Boolean(this.data.hideAudit);
+      if (app && typeof app.ensureAuditConfig === "function") {
+        try {
+          await app.ensureAuditConfig();
+          effectiveHideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
+        } catch (error) {
+          effectiveHideAudit = Boolean(this.data.hideAudit);
+        }
+      }
+      if (effectiveHideAudit !== Boolean(this.data.hideAudit)) {
+        this.setData({ hideAudit: effectiveHideAudit });
+      }
+
       const r = await dbRpc("get_album_content", {
         input_key: this.data.key,
         include_photos: false,
@@ -845,7 +945,7 @@ Page({
       const folders = [{ id: ROOT_FOLDER_ID, name: rootFolderName }].concat(
         Array.isArray(payload.folders) ? payload.folders : []
       );
-      const showFolderGuide = folders.length > 1 && !this.hasSeenFolderGuide();
+      const showFolderGuide = folders.length > 1;
       const storageKey = String(this.data.welcomeStorageKey || "").trim();
       let hasSeenWelcome = false;
       if (storageKey) {
@@ -864,17 +964,23 @@ Page({
           hasSeenWelcomeEgg = false;
         }
       }
-
-      const showWelcomeLetter =
-        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) && !hasSeenWelcome;
-      const showWelcomeEasterEgg = Boolean(this.data.hideAudit) && showWelcomeLetter && !hasSeenWelcomeEgg;
-      if (showWelcomeEasterEgg && eggStorageKey) {
+      // 兼容旧逻辑：历史版本可能在未点击彩蛋时就提前写入彩蛋已看标记。
+      if (effectiveHideAudit && hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
         try {
-          wx.setStorageSync(eggStorageKey, "1");
+          wx.removeStorageSync(eggStorageKey);
+          hasSeenWelcomeEgg = false;
         } catch (e) {
           // ignore
         }
       }
+
+      const canShowWelcome =
+        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) && !hasSeenWelcome;
+      const showWelcomeEasterEgg =
+        effectiveHideAudit &&
+        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) &&
+        !hasSeenWelcomeEgg;
+      const showWelcomeLetter = effectiveHideAudit ? false : canShowWelcome;
       await new Promise((resolve) => {
         this.setData(
           {
@@ -905,8 +1011,9 @@ Page({
             hasMore: true,
             pageNo: 0,
             total: 0,
-            showWelcomeLetter: showWelcomeEasterEgg ? false : showWelcomeLetter,
+            showWelcomeLetter,
             showWelcomeEasterEgg,
+            welcomeOpenedFromEgg: false,
             pendingFolderWaveAfterLetterClose: false,
             letterStage: "envelope",
             showDonationModal: false,
@@ -952,10 +1059,10 @@ Page({
         ? String(e.currentTarget.dataset.id || ROOT_FOLDER_ID)
         : ROOT_FOLDER_ID;
     const previousId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
+    if (id === previousId) return;
     if (this.data.showFolderGuide) {
       this.dismissFolderGuide();
     }
-    if (id === previousId) return;
 
     const folder = (this.data.folders || []).find((item) => String(item.id || "") === id) || null;
     this.setData({

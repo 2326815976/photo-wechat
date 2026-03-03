@@ -115,6 +115,31 @@ function sleep(ms) {
   });
 }
 
+function syncAppBackendStatus(patch) {
+  const next = patch && typeof patch === "object" ? patch : {};
+  const app = typeof getApp === "function" ? getApp() : null;
+  if (!app || !app.globalData) return;
+
+  if (typeof app.setBackendStatus === "function") {
+    app.setBackendStatus(next);
+    return;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(next, "backendReady")) {
+    app.globalData.backendReady = Boolean(next.backendReady);
+  }
+  if (Object.prototype.hasOwnProperty.call(next, "backendReconnecting")) {
+    app.globalData.backendReconnecting = Boolean(next.backendReconnecting);
+  }
+  if (Object.prototype.hasOwnProperty.call(next, "backendLastError")) {
+    app.globalData.backendLastError = String(next.backendLastError || "");
+    app.globalData.cloudRunLastError = app.globalData.backendLastError;
+  }
+  if (Object.prototype.hasOwnProperty.call(next, "backendReady")) {
+    app.globalData.cloudRunReachable = Boolean(next.backendReady);
+  }
+}
+
 function isBackendUnavailableStatus(statusCode) {
   const code = normalizeStatusCode(statusCode);
   if (!code) return false;
@@ -583,15 +608,36 @@ async function requestJson(path, init) {
       return null;
     }
     recoveryAttempted = true;
+    syncAppBackendStatus({
+      backendReady: false,
+      backendReconnecting: true,
+      backendLastError: String((triggerError && triggerError.message) || "服务器暂不可用"),
+    });
 
     const recoveryResult = await waitForBackendRecovery(runtime, triggerError);
     if (!recoveryResult || !recoveryResult.recovered) {
+      syncAppBackendStatus({
+        backendReady: false,
+        backendReconnecting: true,
+        backendLastError: String((triggerError && triggerError.message) || "服务器暂不可用"),
+      });
       throw appendRecoveryHint(triggerError, recoveryResult, false);
     }
 
     try {
-      return await sendRequestWithCookieRetry();
+      const retried = await sendRequestWithCookieRetry();
+      syncAppBackendStatus({
+        backendReady: true,
+        backendReconnecting: false,
+        backendLastError: "",
+      });
+      return retried;
     } catch (retryError) {
+      syncAppBackendStatus({
+        backendReady: false,
+        backendReconnecting: true,
+        backendLastError: String((retryError && retryError.message) || "服务器暂不可用"),
+      });
       throw appendRecoveryHint(retryError, recoveryResult, true);
     }
   };
@@ -623,6 +669,12 @@ async function requestJson(path, init) {
     const httpError = buildHttpError(res, statusCode, parsedData);
     throw httpError;
   }
+
+  syncAppBackendStatus({
+    backendReady: true,
+    backendReconnecting: false,
+    backendLastError: "",
+  });
 
   return parsedData;
 }

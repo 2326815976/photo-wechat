@@ -1,5 +1,5 @@
-const { dbQuery, dbRpc } = require("../../services/photo-api");
-const { resolvePublicUrl } = require("../../utils/storage-url");
+const { dbQuery, dbRpc } = require("../../../../services/photo-api");
+const { resolvePublicUrl } = require("../../../../utils/storage-url");
 
 const TAGS_CACHE_KEY = "pose-tags-cache-v2";
 const TAGS_CACHE_TTL = 2 * 60 * 60 * 1000;
@@ -64,9 +64,30 @@ function extractPoseRows(payload) {
   return [];
 }
 
+function computeTagbarStickyTop(safeTop) {
+  let windowWidth = 375;
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    } else if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  const unit = Math.max(windowWidth, 320) / 750;
+  const headerInnerHeight = 88 * unit; // 与照片墙保持一致
+  const top = Number(safeTop || 0) + headerInnerHeight;
+  return Math.max(0, Math.round(top));
+}
+
 Page({
   data: {
     safeTop: 0,
+    tagbarStickyTop: 0,
 
     serviceMissing: false,
     hideAudit: false,
@@ -125,6 +146,7 @@ Page({
     this.homeBootstrapped = false;
     this.setData({
       safeTop,
+      tagbarStickyTop: computeTagbarStickyTop(safeTop),
       serviceMissing,
       hideAudit,
       betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),

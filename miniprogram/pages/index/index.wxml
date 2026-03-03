@@ -30,7 +30,7 @@
     </view>
 
     <!-- 标签栏 -->
-    <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}">
+    <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}" style="top: {{tagbarStickyTop}}px;">
       <scroll-view class="tagbar-scroll" scroll-x show-scrollbar="{{false}}">
         <view class="tagbar-row">
           <view

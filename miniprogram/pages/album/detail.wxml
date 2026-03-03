@@ -42,7 +42,7 @@
       </view>
 
       <view class="toolbar motion-fade-up motion-delay-3" style="top: {{toolbarStickyTop}}px;">
-        <view class="toolbar-folders-wrap">
+        <view class="toolbar-folders-wrap {{showFolderGuide ? 'toolbar-folders-wrap--with-guide' : ''}}">
           <view class="folder-guide-tip motion-pop-in" wx:if="{{showFolderGuide}}" bindtap="dismissFolderGuide">
             <text class="folder-guide-tip__text">左右滑动 / 点击标签可切换</text>
             <view class="folder-guide-tip__arrow"></view>

@@ -8,12 +8,18 @@
   />
 
   <scroll-view class="content" scroll-y="true" enable-flex="true">
-    <view class="loading" wx:if="{{loading}}">
-      <view class="loading-spinner"></view>
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+        </view>
+      </view>
       <text class="loading-text">正在加载内测功能...</text>
     </view>
 
-    <view wx:elif="{{!isLoggedIn}}" class="empty-card">
+    <view wx:elif="{{!isLoggedIn}}" class="empty-card motion-fade-up motion-delay-2">
       <view class="empty-icon-wrap">
         <image class="empty-icon" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
       </view>
@@ -22,8 +28,9 @@
       <button class="primary-btn" bindtap="onGoLogin">{{hideAudit ? '返回关于' : '前往登录'}}</button>
     </view>
 
-    <view wx:else>
-      <view class="bind-card">
+    <view wx:else class="beta-shell">
+      <view class="bind-card motion-fade-up motion-delay-2">
+        <view class="bind-accent"></view>
         <view class="bind-head">
           <view class="bind-icon-wrap">
             <image class="bind-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
@@ -57,14 +64,20 @@
             {{submitting ? '绑定中...' : '绑定'}}
           </button>
         </view>
+        <text class="bind-hint">仅支持 8 位大写字母或数字</text>
       </view>
 
-      <view class="section-head">
-        <text class="section-title">已解锁功能</text>
-        <text class="section-sub">共 {{featureRows.length}} 个</text>
+      <view class="section-head motion-fade-up motion-delay-3">
+        <view class="section-main">
+          <view class="section-icon-wrap">
+            <image class="section-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+          </view>
+          <text class="section-title">已解锁功能</text>
+        </view>
+        <view class="section-count">共 {{featureRows.length}} 个</view>
       </view>
 
-      <view class="empty-card" wx:if="{{!featureRows.length}}">
+      <view class="empty-card motion-fade-up motion-delay-4" wx:if="{{!featureRows.length}}">
         <view class="empty-icon-wrap">
           <image class="empty-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
         </view>
@@ -73,17 +86,28 @@
       </view>
 
       <view class="feature-list" wx:else>
-        <view class="feature-card" wx:for="{{featureRows}}" wx:key="id">
+        <view
+          class="feature-card motion-fade-up"
+          wx:for="{{featureRows}}"
+          wx:key="id"
+          style="animation-delay: {{100 + (index % 8) * 35}}ms;"
+        >
           <view class="feature-head">
             <view class="feature-main">
-              <text class="feature-title">{{item.feature_name}}</text>
+              <view class="feature-title-row">
+                <text class="feature-title">{{item.feature_name}}</text>
+                <view class="feature-badge">内测</view>
+              </view>
+              <text class="feature-desc">{{item.feature_description}}</text>
             </view>
-            <view class="feature-badge">内测</view>
           </view>
 
-          <text class="feature-desc">{{item.feature_description}}</text>
+          <view class="feature-divider"></view>
           <view class="feature-foot">
-            <text class="feature-meta">{{item.expires_text}}</text>
+            <view class="feature-meta-wrap">
+              <image class="feature-meta-icon" src="/images/icons/calendar-muted.svg" mode="aspectFit" />
+              <text class="feature-meta">{{item.expires_text}}</text>
+            </view>
             <view class="feature-actions">
               <button
                 class="submit-btn submit-btn--feature"

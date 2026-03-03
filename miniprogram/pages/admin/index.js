@@ -79,6 +79,7 @@ const RELEASE_ALLOWED_EXTENSIONS = [
 ];
 const MAX_RELEASE_FILE_SIZE = 100 * 1024 * 1024;
 const ALBUM_COVER_TARGET_SIZE = 900 * 1024;
+const ALBUM_COVER_MAX_LONG_EDGE = 1920;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
@@ -121,7 +122,7 @@ const ADMIN_SECTION_META = {
   },
   beta: {
     title: "内测管理 🧪",
-    desc: "管理功能内测路由与内测码",
+    desc: "管理功能内测版本与内测码",
   },
 };
 
@@ -519,21 +520,79 @@ function getLocalFileSize(path) {
   });
 }
 
-function compressImageFile(path, quality) {
+function readImageInfo(path) {
+  const src = String(path || "").trim();
+  if (!src) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    wx.getImageInfo({
+      src,
+      success: (res) => resolve(res || null),
+      fail: () => resolve(null),
+    });
+  });
+}
+
+function buildCompressedSize(width, height, maxLongEdge) {
+  const w = Number(width || 0);
+  const h = Number(height || 0);
+  const maxEdge = Number(maxLongEdge || 0);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || maxEdge <= 0) {
+    return null;
+  }
+  const longEdge = Math.max(w, h);
+  if (longEdge <= maxEdge) {
+    return null;
+  }
+  const ratio = maxEdge / longEdge;
+  return {
+    width: Math.max(1, Math.round(w * ratio)),
+    height: Math.max(1, Math.round(h * ratio)),
+  };
+}
+
+function compressImageFile(path, quality, maxLongEdge) {
   const src = String(path || "").trim();
   const q = Math.max(1, Math.min(100, Number(quality || 0) || 80));
   if (!src) return Promise.resolve("");
-  return new Promise((resolve) => {
-    wx.compressImage({
-      src,
-      quality: q,
-      success: (res) => {
-        const nextPath = String((res && res.tempFilePath) || "").trim();
-        resolve(nextPath || "");
-      },
-      fail: () => resolve(""),
+  const maxEdge = Math.max(0, Number(maxLongEdge || 0));
+  return readImageInfo(src)
+    .then((info) => {
+      const options = {
+        src,
+        quality: q,
+      };
+      const compressedSize = buildCompressedSize(info && info.width, info && info.height, maxEdge);
+      if (compressedSize) {
+        options.compressedWidth = compressedSize.width;
+        options.compressedHeight = compressedSize.height;
+      }
+      return new Promise((resolve) => {
+        wx.compressImage({
+          ...options,
+          success: (res) => {
+            const nextPath = String((res && res.tempFilePath) || "").trim();
+            resolve(nextPath || "");
+          },
+          fail: () => resolve(""),
+        });
+      });
+    })
+    .then((resultPath) => {
+      if (resultPath) {
+        return resultPath;
+      }
+      return new Promise((resolve) => {
+        wx.compressImage({
+          src,
+          quality: q,
+          success: (res) => {
+            const nextPath = String((res && res.tempFilePath) || "").trim();
+            resolve(nextPath || "");
+          },
+          fail: () => resolve(""),
+        });
+      });
     });
-  });
 }
 
 async function optimizeAlbumCoverPath(path) {
@@ -552,7 +611,11 @@ async function optimizeAlbumCoverPath(path) {
   for (let i = 0; i < ALBUM_COVER_COMPRESS_QUALITIES.length; i += 1) {
     // 从原图压缩，避免多次有损叠加导致画质劣化。
     // eslint-disable-next-line no-await-in-loop
-    const compressedPath = await compressImageFile(filePath, ALBUM_COVER_COMPRESS_QUALITIES[i]);
+    const compressedPath = await compressImageFile(
+      filePath,
+      ALBUM_COVER_COMPRESS_QUALITIES[i],
+      ALBUM_COVER_MAX_LONG_EDGE
+    );
     if (!compressedPath) continue;
 
     // eslint-disable-next-line no-await-in-loop
@@ -808,6 +871,17 @@ function buildDefaultBetaVersionForm(routes) {
     has_expiry: false,
     expires_date: "",
   };
+}
+
+function isBetaRouteDuplicateMessage(message) {
+  const text = String(message || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("duplicate") ||
+    text.includes("already exists") ||
+    text.includes("unique") ||
+    text.includes("已存在")
+  );
 }
 
 function toSafeNumber(value, fallback) {
@@ -1440,7 +1514,7 @@ Page({
     releaseDeletingId: 0,
     releases: [],
 
-    betaPanelTab: "routes",
+    betaPanelTab: "versions",
     betaRoutesLoading: false,
     betaVersionsLoading: false,
     betaRouteRows: [],
@@ -1548,6 +1622,9 @@ Page({
     patch.releaseDeleteTargetId = 0;
     patch.releaseDeleteTargetVersion = "";
     patch.releaseDeleteTargetPlatform = "";
+    if (key === "beta") {
+      patch.betaPanelTab = "versions";
+    }
     if (key !== "gallery") {
       patch.galleryAlbumFilterId = "";
       patch.galleryAlbumFilterTitle = "";
@@ -2280,6 +2357,39 @@ Page({
     }
   },
 
+  async ensureBetaPresetRoutes() {
+    const routeRows = Array.isArray(this.data.betaRouteRows) ? this.data.betaRouteRows : [];
+    const routePathSet = new Set(
+      routeRows.map((item) => normalizeBetaRoutePath(item && item.route_path)).filter(Boolean)
+    );
+    const presetRows = buildBetaRoutePresetRows("");
+    const missingRows = presetRows.filter((item) => {
+      const routePath = normalizeBetaRoutePath(item && item.route_path);
+      return routePath && !routePathSet.has(routePath);
+    });
+    if (!missingRows.length) return routeRows;
+
+    for (let i = 0; i < missingRows.length; i += 1) {
+      const routeItem = missingRows[i];
+      try {
+        await saveAdminBetaRoute({
+          route_path: normalizeBetaRoutePath(routeItem.route_path),
+          route_title: String(routeItem.route_title || "").trim() || "未命名页面",
+          route_description: "",
+          is_active: true,
+        });
+      } catch (error) {
+        const message = readErrorMessage(error, "新增内测路由失败");
+        if (!isBetaRouteDuplicateMessage(message)) {
+          throw error;
+        }
+      }
+    }
+
+    await this.loadBetaRoutes();
+    return Array.isArray(this.data.betaRouteRows) ? this.data.betaRouteRows : [];
+  },
+
   onBetaPanelTabChange(e) {
     const key =
       e && e.currentTarget && e.currentTarget.dataset
@@ -2489,10 +2599,16 @@ Page({
     }
   },
 
-  onOpenCreateBetaVersion() {
-    const routes = this.data.betaRouteRows || [];
+  async onOpenCreateBetaVersion() {
+    let routes = [];
+    try {
+      routes = await this.ensureBetaPresetRoutes();
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "初始化内测路由失败"));
+      return;
+    }
     if (!routes.length) {
-      wx.showToast({ title: "请先新增内测路由", icon: "none" });
+      this.showNotice("error", "内测路由初始化失败，请稍后重试");
       return;
     }
     this.setData({
@@ -2506,7 +2622,7 @@ Page({
     });
   },
 
-  onOpenEditBetaVersion(e) {
+  async onOpenEditBetaVersion(e) {
     const versionId =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
@@ -2515,7 +2631,17 @@ Page({
     const target = (this.data.betaVersionRows || []).find((item) => item.id === versionId);
     if (!target) return;
 
-    const routes = this.data.betaRouteRows || [];
+    let routes = [];
+    try {
+      routes = await this.ensureBetaPresetRoutes();
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "加载功能路由失败"));
+      return;
+    }
+    if (!routes.length) {
+      this.showNotice("error", "暂无可用功能路由");
+      return;
+    }
     const routeIndex = Math.max(
       0,
       routes.findIndex((item) => item.id === Number(target.route_id || 0))
@@ -4259,6 +4385,17 @@ Page({
       const cleanup = result && result.cleanup_result ? result.cleanup_result : {};
       const deletedPhotos = Number(cleanup.deleted_photos || 0);
       const deletedAlbums = Number(cleanup.deleted_albums || 0);
+      const cleanedSessions = Number(result && result.sessions_cleaned ? result.sessions_cleaned : 0);
+      const cleanedIpAttempts = Number(result && result.ip_attempts_cleaned ? result.ip_attempts_cleaned : 0);
+      const cleanedBetaBindings = Number(
+        result && result.beta_feature_bindings_cleaned ? result.beta_feature_bindings_cleaned : 0
+      );
+      const cleanedPhotoViews = Number(result && result.photo_views_cleaned ? result.photo_views_cleaned : 0);
+      const cleanedResetTokens = Number(
+        result && result.password_reset_tokens_cleaned ? result.password_reset_tokens_cleaned : 0
+      );
+      const cleanedActiveLogs = Number(result && result.user_active_logs_cleaned ? result.user_active_logs_cleaned : 0);
+      const maintenanceSummary = `清理照片${deletedPhotos}张，清理相册${deletedAlbums}个，会话${cleanedSessions}条，IP尝试${cleanedIpAttempts}条，浏览历史${cleanedPhotoViews}条，内测绑定${cleanedBetaBindings}条，重置令牌${cleanedResetTokens}条，活跃日志${cleanedActiveLogs}条`;
       const refreshResults = await Promise.all(
         [
           this.loadStats(),
@@ -4287,10 +4424,10 @@ Page({
         const firstMessage = readErrorMessage(firstReason, "数据刷新失败");
         this.showNotice(
           "warning",
-          `维护已完成：清理照片${deletedPhotos}张，清理相册${deletedAlbums}个；但有 ${failedRefresh.length} 项数据刷新失败（${firstMessage}）`
+          `维护已完成：${maintenanceSummary}；但有 ${failedRefresh.length} 项数据刷新失败（${firstMessage}）`
         );
       } else {
-        this.showNotice("success", `维护完成：清理照片${deletedPhotos}张，清理相册${deletedAlbums}个`);
+        this.showNotice("success", `维护完成：${maintenanceSummary}`);
       }
     } catch (error) {
       this.showNotice("error", readErrorMessage(error, "维护任务执行失败"));

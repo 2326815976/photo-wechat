@@ -21,7 +21,7 @@
     </view>
   </view>
 
-  <view class="content" wx:if="{{backendReady}}">
+  <view class="content {{hideAudit ? 'content--audit-compact' : ''}}" wx:if="{{backendReady}}">
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
@@ -29,7 +29,7 @@
     </view>
 
     <!-- 标签栏 -->
-    <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}">
+    <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}" style="top: {{tagbarStickyTop}}px;">
       <scroll-view class="tagbar-scroll" scroll-x show-scrollbar="{{false}}">
         <view class="tagbar-row">
           <view

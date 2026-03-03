@@ -3,9 +3,25 @@
   background: #FFFBF0;
 }
 
+/* 对齐专属空间：仅重置标签按钮默认样式，不影响其他按钮 */
+.tag-btn,
+.tag-all-btn {
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  background: transparent;
+  border: none;
+}
+
+/* 仅移除 button 默认外框，避免覆盖标签本身背景/边框样式 */
+.tag-btn::after,
+.tag-all-btn::after {
+  border: none;
+}
+
 .content {
-  /* Web: px-2 pt-3 pb-20 */
-  padding: 24rpx 16rpx calc(160rpx + env(safe-area-inset-bottom));
+  /* 与专属空间顶部留白对齐：去掉额外 pt，避免标签上边距偏大 */
+  padding: 0 16rpx calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -110,71 +126,158 @@
 }
 
 .tagbar {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+  z-index: 880;
+  min-height: 92rpx;
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  margin-bottom: 14rpx;
+  gap: 8rpx;
+  padding: 0 6rpx;
+  background: #FFFBF0;
+  border-bottom: 2rpx solid rgba(93, 64, 55, 0.05);
+  margin-bottom: 16rpx;
+}
+
+.tagbar--pinned {
+  min-height: 92rpx;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.tagbar--with-guide {
+  min-height: 92rpx;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.tagbar-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #FFFBF0;
+  border-left: 2rpx solid #FFFBF0;
+  border-right: 2rpx solid #FFFBF0;
+}
+
+.tagbar-main--with-guide {
+  padding-top: 72rpx;
 }
 
 .tagbar-scroll {
+  width: 100%;
   flex: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
 }
 
+.tag-guide-tip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  max-width: 380rpx;
+  height: 52rpx;
+  padding: 0 18rpx;
+  border-radius: 14rpx;
+  display: inline-flex;
+  align-items: center;
+  background: #5d4037;
+  box-shadow: 0 10rpx 24rpx rgba(93, 64, 55, 0.28);
+}
+
+.tag-guide-tip__text {
+  font-size: 19rpx;
+  font-weight: 600;
+  color: #fffaf0;
+  white-space: nowrap;
+}
+
+.tag-guide-tip__arrow {
+  position: absolute;
+  left: 22rpx;
+  bottom: -8rpx;
+  width: 16rpx;
+  height: 16rpx;
+  background: #5d4037;
+  transform: rotate(45deg);
+}
+
 .tagbar-row {
   display: inline-flex;
   align-items: center;
   gap: 10rpx;
-  padding-bottom: 4rpx;
+  padding-bottom: 2rpx;
 }
 
 .tag-btn {
   flex: none;
-  padding: 14rpx 24rpx;
+  min-height: 60rpx;
+  width: auto !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
   border-radius: 999rpx;
   font-size: 22rpx;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.60);
   color: rgba(93, 64, 55, 0.60);
-  border: 4rpx dashed rgba(93, 64, 55, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 3rpx dashed rgba(93, 64, 55, 0.15);
   line-height: 1;
-  min-height: auto;
-  min-width: auto;
   white-space: nowrap;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .tag-btn--active {
   background: #FFC857;
   color: #5D4037;
-  border: 4rpx solid rgba(93, 64, 55, 0.20);
-  box-shadow: 4rpx 4rpx 0 rgba(93, 64, 55, 0.15);
+  border: 3rpx solid rgba(93, 64, 55, 0.20);
+  box-shadow: 3rpx 3rpx 0 rgba(93, 64, 55, 0.15);
 }
 
 .tag-btn--touch {
   border-color: rgba(93, 64, 55, 0.30);
 }
 
+.tag-btn--wave-a,
+.tag-btn--wave-b {
+  animation: folder-btn-wave 360ms ease-out 1;
+  will-change: transform;
+}
+
+@keyframes folder-btn-wave {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    transform: translateY(-10rpx) scale(1.02);
+  }
+  70% {
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
 .tag-all-btn {
   flex: none;
-  padding: 14rpx 24rpx;
+  min-height: 60rpx;
+  width: auto !important;
+  padding: 0 24rpx;
   border-radius: 999rpx;
   font-size: 22rpx;
   font-weight: 700;
   background: #5D4037;
   color: #FFFFFF;
-  border: 4rpx solid #5D4037;
-  display: flex;
+  border: 3rpx solid #5D4037;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  min-height: auto;
-  min-width: auto;
   white-space: nowrap;
   transition: background-color 0.2s ease, opacity 0.2s ease;
 }

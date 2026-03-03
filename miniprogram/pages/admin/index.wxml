@@ -1242,114 +1242,32 @@
           <view class="beta-page motion-fade-up">
             <view class="pose-header">
               <text class="pose-header__title">内测管理 🧪</text>
-              <text class="pose-header__desc">管理功能内测路由与内测码</text>
+              <text class="pose-header__desc">管理功能内测版本与内测码</text>
             </view>
 
-            <view class="pose-tabs">
-              <view
-                class="pose-tab-item {{betaPanelTab === 'routes' ? 'pose-tab-item--active' : ''}}"
-                data-key="routes"
-                bindtap="onBetaPanelTabChange"
-              >
-                <text class="pose-tab-item__text">路由管理</text>
-                <view class="pose-tab-item__line" wx:if="{{betaPanelTab === 'routes'}}"></view>
-              </view>
-              <view
-                class="pose-tab-item {{betaPanelTab === 'versions' ? 'pose-tab-item--active' : ''}}"
-                data-key="versions"
-                bindtap="onBetaPanelTabChange"
-              >
-                <text class="pose-tab-item__text">内测版本</text>
-                <view class="pose-tab-item__line" wx:if="{{betaPanelTab === 'versions'}}"></view>
+            <view class="beta-toolbar">
+              <view class="beta-toolbar-actions">
+                <button
+                  class="beta-toolbar-btn beta-toolbar-btn--primary"
+                  bindtap="onOpenCreateBetaVersion"
+                  disabled="{{betaRouteSaving || betaRouteDeleting || betaVersionSaving || betaVersionDeleting}}"
+                >
+                  新增版本
+                </button>
               </view>
             </view>
 
-            <block wx:if="{{betaPanelTab === 'routes'}}">
-              <view class="beta-toolbar">
-                <view class="beta-toolbar-actions">
-                  <button
-                    class="beta-toolbar-btn beta-toolbar-btn--primary"
-                    bindtap="onOpenCreateBetaRoute"
-                    disabled="{{betaRouteSaving || betaRouteDeleting || betaVersionSaving || betaVersionDeleting}}"
-                  >
-                    新增路由
-                  </button>
-                </view>
-              </view>
-
-              <view class="pose-loading" wx:if="{{betaRoutesLoading}}">
+            <view class="pose-loading" wx:if="{{betaVersionsLoading}}">
                 <view class="pose-loading__spinner"></view>
                 <text class="pose-loading__text">加载中...</text>
               </view>
 
-              <view class="empty pose-empty-card" wx:elif="{{!betaRouteRows.length}}">
-                <text class="pose-empty-card__icon">🧭</text>
-                <text>暂无内测路由</text>
-              </view>
-
-              <view class="beta-card-list" wx:else>
-                <view class="beta-card" wx:for="{{betaRouteRows}}" wx:key="id">
-                  <view class="beta-card__head">
-                    <view class="beta-card__main">
-                      <text class="beta-card__title">{{item.route_title}}</text>
-                      <text class="beta-card__path">{{item.route_path}}</text>
-                    </view>
-                    <view class="beta-state-badge {{item.stateClass}}">
-                      <text>{{item.stateText}}</text>
-                    </view>
-                  </view>
-                  <text class="beta-card__desc" wx:if="{{item.route_description}}">{{item.route_description}}</text>
-                  <view class="beta-card__actions">
-                    <button
-                      class="beta-mini-btn beta-mini-btn--ghost"
-                      data-id="{{item.id}}"
-                      bindtap="onOpenEditBetaRoute"
-                      disabled="{{betaRouteSaving || betaRouteDeleting}}"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      class="beta-mini-btn beta-mini-btn--danger"
-                      data-id="{{item.id}}"
-                      bindtap="onOpenBetaRouteDeleteConfirm"
-                      disabled="{{betaRouteSaving || betaRouteDeleting}}"
-                    >
-                      {{betaRouteDeletingId === item.id ? "删除中" : "删除"}}
-                    </button>
-                  </view>
-                </view>
-              </view>
-            </block>
-
-            <block wx:elif="{{betaPanelTab === 'versions'}}">
-              <view class="beta-toolbar">
-                <view class="beta-toolbar-actions">
-                  <button
-                    class="beta-toolbar-btn beta-toolbar-btn--primary"
-                    bindtap="onOpenCreateBetaVersion"
-                    disabled="{{betaRouteSaving || betaRouteDeleting || betaVersionSaving || betaVersionDeleting || !betaRouteRows.length}}"
-                  >
-                    新增版本
-                  </button>
-                </view>
-              </view>
-
-              <view class="empty pose-empty-card" wx:if="{{!betaRouteRows.length}}">
-                <text class="pose-empty-card__icon">⚠️</text>
-                <text>请先创建至少一个内测路由</text>
-              </view>
-
-              <view class="pose-loading" wx:elif="{{betaVersionsLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
-              </view>
-
-              <view class="empty pose-empty-card" wx:elif="{{!betaVersionRows.length}}">
+            <view class="empty pose-empty-card" wx:elif="{{!betaVersionRows.length}}">
                 <text class="pose-empty-card__icon">🔑</text>
                 <text>暂无内测版本</text>
               </view>
 
-              <view class="beta-card-list" wx:else>
+            <view class="beta-card-list" wx:else>
                 <view class="beta-card" wx:for="{{betaVersionRows}}" wx:key="id">
                   <view class="beta-card__head">
                     <view class="beta-card__main">
@@ -1363,7 +1281,7 @@
                   <text class="beta-card__desc" wx:if="{{item.feature_description}}">{{item.feature_description}}</text>
                   <view class="beta-code-row">
                     <text class="beta-code">内测码：{{item.feature_code}}</text>
-                    <button class="beta-mini-btn beta-mini-btn--ghost" data-code="{{item.feature_code}}" bindtap="onCopyBetaVersionCode">复制</button>
+                    <button class="beta-mini-btn beta-mini-btn--ghost beta-code-copy-btn" data-code="{{item.feature_code}}" bindtap="onCopyBetaVersionCode">复制</button>
                   </view>
                   <text class="beta-expire" wx:if="{{item.expires_text}}">有效期至：{{item.expires_text}}</text>
                   <text class="beta-expire" wx:else>有效期：长期有效</text>
@@ -1386,8 +1304,7 @@
                     </button>
                   </view>
                 </view>
-              </view>
-            </block>
+            </view>
           </view>
         </block>
 

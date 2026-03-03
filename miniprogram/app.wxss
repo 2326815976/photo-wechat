@@ -1,17 +1,26 @@
 /** app.wxss **/
 @font-face {
   font-family: "ZQKNNY";
-  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/ZQKNNY-Medium-2.ttf") format("truetype");
+  src:
+    url("https://736c-slogan-3gf3tz4nf12fa5ef-1403937484.tcb.qcloud.la/fonts/ZQKNNY-Medium-2.woff2?v=20260303") format("woff2"),
+    url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/ZQKNNY-Medium-2.ttf?v=20260303") format("truetype");
+  font-display: swap;
 }
 
 @font-face {
   font-family: "Letter Font";
-  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf") format("truetype");
+  src:
+    url("https://736c-slogan-3gf3tz4nf12fa5ef-1403937484.tcb.qcloud.la/fonts/AaZhuNiWoMingMeiXiangChunTian-2.woff2?v=20260303") format("woff2"),
+    url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf?v=20260303") format("truetype");
+  font-display: swap;
 }
 
 @font-face {
   font-family: "LetterFont";
-  src: url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf") format("truetype");
+  src:
+    url("https://736c-slogan-3gf3tz4nf12fa5ef-1403937484.tcb.qcloud.la/fonts/AaZhuNiWoMingMeiXiangChunTian-2.woff2?v=20260303") format("woff2"),
+    url("https://slogan-225462-8-1403937484.sh.run.tcloudbase.com/fonts/AaZhuNiWoMingMeiXiangChunTian-2.ttf?v=20260303") format("truetype");
+  font-display: swap;
 }
 
 page {

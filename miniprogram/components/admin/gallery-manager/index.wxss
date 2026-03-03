@@ -4,7 +4,12 @@
   padding: 0;
 }
 
-button {
+.toolbar-btn,
+.folder-current-action-btn,
+.photo-card__sort-btn,
+.pagination__btn,
+.modal-btn,
+.booking-modal__submit {
   margin: 0;
   padding: 0;
   border: none;
@@ -15,7 +20,12 @@ button {
   justify-content: center;
 }
 
-button::after {
+.toolbar-btn::after,
+.folder-current-action-btn::after,
+.photo-card__sort-btn::after,
+.pagination__btn::after,
+.modal-btn::after,
+.booking-modal__submit::after {
   border: none;
 }
 
@@ -143,7 +153,7 @@ button::after {
   border: 2rpx solid #fecaca;
 }
 
-.toolbar-btn[disabled] {
+.toolbar-btn--disabled {
   opacity: 0.45;
 }
 
@@ -236,7 +246,7 @@ button::after {
   transform: scale(0.96);
 }
 
-.folder-current-action-btn[disabled] {
+.folder-current-action-btn--disabled {
   opacity: 0.45;
 }
 
@@ -526,7 +536,7 @@ button::after {
   font-size: 18rpx;
 }
 
-.photo-card__sort-btn[disabled] {
+.photo-card__sort-btn--disabled {
   opacity: 0.45;
 }
 
@@ -551,7 +561,7 @@ button::after {
   padding: 0 14rpx;
 }
 
-.pagination__btn[disabled] {
+.pagination__btn--disabled {
   opacity: 0.46;
 }
 
@@ -721,7 +731,7 @@ button::after {
   width: 100%;
 }
 
-.modal-btn[disabled] {
+.modal-btn--disabled {
   opacity: 0.45;
 }
 
@@ -834,7 +844,7 @@ button::after {
   opacity: 0.92;
 }
 
-.booking-modal__submit[disabled] {
+.booking-modal__submit--disabled {
   opacity: 0.5;
 }
 

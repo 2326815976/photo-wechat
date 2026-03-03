@@ -213,6 +213,15 @@ App({
     auditConfigReady: false,
     betaFeatureBypassRoute: "",
     betaFeatureBypassExpiresAt: 0,
+    appEnterSeq: 0,
+    appEnteredAt: 0,
+  },
+
+  onShow() {
+    const currentSeq = Math.max(0, Number((this.globalData && this.globalData.appEnterSeq) || 0));
+    const nextSeq = currentSeq + 1;
+    this.globalData.appEnterSeq = nextSeq;
+    this.globalData.appEnteredAt = Date.now();
   },
 
   notifyBackendStatusChange() {

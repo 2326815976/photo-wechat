@@ -197,7 +197,7 @@
               <image class="menu-icon-img" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
             </view>
             <view class="menu-texts">
-              <text class="menu-title">功能内测</text>
+              <text class="menu-title">解锁内测功能</text>
               <text class="menu-desc">输入内测码，解锁专属功能</text>
             </view>
           </view>

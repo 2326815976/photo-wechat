@@ -321,9 +321,58 @@ function readFieldFromPayloadChain(payload, fields) {
   return undefined;
 }
 
+function computeTagbarStickyTop(safeTop) {
+  let windowWidth = 375;
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    } else if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      windowWidth = Number(info && info.windowWidth) || windowWidth;
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  const unit = Math.max(windowWidth, 320) / 750;
+  const headerInnerHeight = 88 * unit; // app-header 默认内层高度（无返回按钮）
+  const top = Number(safeTop || 0) + headerInnerHeight;
+  return Math.max(0, Math.round(top));
+}
+
+function readWindowHeight() {
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      const windowHeight = Number(info && info.windowHeight);
+      if (Number.isFinite(windowHeight) && windowHeight > 0) {
+        return windowHeight;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      const windowHeight = Number(info && info.windowHeight);
+      if (Number.isFinite(windowHeight) && windowHeight > 0) {
+        return windowHeight;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  return 0;
+}
+
 Page({
   data: {
     safeTop: 0,
+    tagbarStickyTop: 0,
     serviceMissing: false,
     hideAudit: false,
     backendReady: false,
@@ -340,6 +389,9 @@ Page({
     selectedFolder: ROOT_FOLDER_ID,
     rootFolderName: "根目录",
     folders: [{ id: ROOT_FOLDER_ID, name: "根目录" }],
+    showTagGuide: false,
+    tagWaveActiveIndex: -1,
+    tagWaveTick: 0,
 
     sourcePhotos: [],
     photos: [],
@@ -359,6 +411,7 @@ Page({
 
     previewPhoto: null,
     showLoginPrompt: false,
+    tagbarPinned: false,
 
   },
 
@@ -370,6 +423,9 @@ Page({
   viewportHeight: 0,
   pageHeight: 0,
   loadingNextPage: false,
+  tagGuideTimer: null,
+  tagWaveTimer: null,
+  tagWaveRunToken: 0,
 
   onLoad() {
     const app = getApp();
@@ -387,17 +443,20 @@ Page({
     this.pageHeight = 0;
     this.loadingNextPage = false;
     this._galleryBootstrapped = false;
-    this.setData({ safeTop, serviceMissing, hideAudit, backendReady, backendReconnecting });
+    const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
+    // 首次进入页面时也需要展示一次引导：将“已见序号”回退一位，确保首帧可触发。
+    this._lastSeenAppEnterSeq = Math.max(0, currentAppEnterSeq - 1);
+    this._pendingTagGuideOnAppEntry = true;
+    this.setData({
+      safeTop,
+      tagbarStickyTop: computeTagbarStickyTop(safeTop),
+      serviceMissing,
+      hideAudit,
+      backendReady,
+      backendReconnecting,
+    });
 
-    try {
-      const systemInfo = wx.getSystemInfoSync();
-      const windowHeight = Number(systemInfo && systemInfo.windowHeight);
-      if (Number.isFinite(windowHeight) && windowHeight > 0) {
-        this.viewportHeight = windowHeight;
-      }
-    } catch (error) {
-      this.viewportHeight = 0;
-    }
+    this.viewportHeight = readWindowHeight();
 
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
@@ -453,6 +512,18 @@ Page({
       showLoginPrompt: hideAudit ? false : this.data.showLoginPrompt,
     });
 
+    const appEnterSeq = Math.max(
+      0,
+      Number(app && app.globalData ? app.globalData.appEnterSeq : 0)
+    );
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasPendingGuide = Boolean(this._pendingTagGuideOnAppEntry);
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq || hasPendingGuide;
+    if (hasNewAppEntry) {
+      this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+      this._pendingTagGuideOnAppEntry = true;
+    }
+
     this.syncTabBar("pages/gallery/index");
     if (this.data.serviceMissing) return;
     if (app && typeof app.ensureBackendReady === "function") {
@@ -479,6 +550,9 @@ Page({
       backendReconnecting: nextBackendReconnecting,
     });
     this.startGalleryBootstrapIfReady();
+    if (hasNewAppEntry || this._pendingTagGuideOnAppEntry) {
+      this.triggerTagGuideForEntry();
+    }
     if (this.consumeSuppressRefreshOnShow()) return;
     if (this.data.loading || this.data.loadingMore) {
       void this.refreshLoginState();
@@ -500,6 +574,8 @@ Page({
   onUnload() {
     this.clearRelayoutTimer();
     this.clearScrollMetricsTimer();
+    this.clearTagGuideTimer();
+    this.clearTagWaveTimer();
     this.loadingNextPage = false;
     this._galleryBootstrapped = false;
     if (typeof this._unsubscribeAuditConfig === "function") {
@@ -524,6 +600,141 @@ Page({
 
   noop() {},
 
+  clearTagGuideTimer() {
+    if (!this.tagGuideTimer) return;
+    clearTimeout(this.tagGuideTimer);
+    this.tagGuideTimer = null;
+  },
+
+  clearTagWaveTimer() {
+    this.tagWaveRunToken += 1;
+    if (!this.tagWaveTimer) return;
+    clearTimeout(this.tagWaveTimer);
+    this.tagWaveTimer = null;
+  },
+
+  startTagWaveAnimation() {
+    this.clearTagWaveTimer();
+    const folderCount = Array.isArray(this.data.folders) ? this.data.folders.length : 0;
+    if (folderCount <= 0) {
+      if (this.data.tagWaveActiveIndex !== -1 || this.data.tagWaveTick !== 0) {
+        this.setData({ tagWaveActiveIndex: -1, tagWaveTick: 0 });
+      }
+      return;
+    }
+
+    const waveRounds = 3;
+    const stepDelayMs = 380;
+    const roundGapMs = 240;
+    const runToken = this.tagWaveRunToken;
+    let round = 0;
+    let index = 0;
+    let tick = Number(this.data.tagWaveTick || 0) === 1 ? 1 : 0;
+
+    const schedule = (delay, task) => {
+      this.tagWaveTimer = setTimeout(() => {
+        if (runToken !== this.tagWaveRunToken) return;
+        task();
+      }, delay);
+    };
+
+    const triggerNext = () => {
+      if (runToken !== this.tagWaveRunToken) return;
+      if (round >= waveRounds) {
+        this.setData({ tagWaveActiveIndex: -1, tagWaveTick: 0 });
+        this.tagWaveTimer = null;
+        return;
+      }
+
+      tick = tick === 1 ? 0 : 1;
+      const nextIndex = index;
+      index += 1;
+
+      let nextDelay = stepDelayMs;
+      if (index >= folderCount) {
+        index = 0;
+        round += 1;
+        if (round < waveRounds) {
+          nextDelay += roundGapMs;
+        }
+      }
+
+      this.setData(
+        {
+          tagWaveActiveIndex: nextIndex,
+          tagWaveTick: tick,
+        },
+        () => {
+          if (runToken !== this.tagWaveRunToken) return;
+          schedule(nextDelay, triggerNext);
+        }
+      );
+    };
+
+    this.setData({ tagWaveActiveIndex: -1 }, () => {
+      if (runToken !== this.tagWaveRunToken) return;
+      schedule(120, () => {
+        if (runToken !== this.tagWaveRunToken) return;
+        wx.nextTick(() => {
+          if (runToken !== this.tagWaveRunToken) return;
+          triggerNext();
+        });
+      });
+    });
+  },
+
+  startTagGuideAutoDismiss() {
+    this.clearTagGuideTimer();
+    this.tagGuideTimer = setTimeout(() => {
+      this.dismissTagGuide();
+    }, 15000);
+  },
+
+  triggerTagGuideForEntry() {
+    const folderCount = Array.isArray(this.data.folders) ? this.data.folders.length : 0;
+    if (folderCount <= 1) {
+      this.clearTagGuideTimer();
+      this.clearTagWaveTimer();
+      if (this.data.showTagGuide) {
+        this.setData({ showTagGuide: false });
+      }
+      if (this.data.tagWaveActiveIndex !== -1 || this.data.tagWaveTick !== 0) {
+        this.setData({ tagWaveActiveIndex: -1, tagWaveTick: 0 });
+      }
+      // 仍在加载时保留待触发状态，待分组数据到位后再次尝试展示
+      this._pendingTagGuideOnAppEntry = Boolean(this.data.loading || this.data.loadingMore);
+      return;
+    }
+
+    if (this.data.loading || this.data.loadingMore) {
+      this._pendingTagGuideOnAppEntry = true;
+      return;
+    }
+
+    this._pendingTagGuideOnAppEntry = false;
+    if (this.data.showTagGuide) {
+      this.startTagGuideAutoDismiss();
+      this.startTagWaveAnimation();
+      return;
+    }
+
+    this.setData({ showTagGuide: true }, () => {
+      this.startTagGuideAutoDismiss();
+      this.startTagWaveAnimation();
+    });
+  },
+
+  dismissTagGuide() {
+    this.clearTagGuideTimer();
+    this.clearTagWaveTimer();
+    if (!this.data.showTagGuide) return;
+    this.setData({
+      showTagGuide: false,
+      tagWaveActiveIndex: -1,
+      tagWaveTick: 0,
+    });
+  },
+
   startGalleryBootstrapIfReady() {
     if (this._galleryBootstrapped) return;
     if (this.data.serviceMissing) return;
@@ -545,6 +756,10 @@ Page({
 
   switchFolder(nextId) {
     if (nextId === String(this.data.selectedFolder || ROOT_FOLDER_ID)) return;
+    if (this.data.showTagGuide) {
+      this.dismissTagGuide();
+    }
+    this.clearTagWaveTimer();
 
     clearGalleryMemoryCache();
     clearGalleryStorageCache();
@@ -568,6 +783,8 @@ Page({
       right: [],
       showFilterModal: false,
       previewPhoto: null,
+      tagWaveActiveIndex: -1,
+      tagWaveTick: 0,
     });
 
     void this.loadPage(1, { silent: false });
@@ -906,15 +1123,7 @@ Page({
         this.pageHeight = nextPageHeight;
       }
       if (!(this.viewportHeight > 0)) {
-        try {
-          const systemInfo = wx.getSystemInfoSync();
-          const windowHeight = Number(systemInfo && systemInfo.windowHeight);
-          if (Number.isFinite(windowHeight) && windowHeight > 0) {
-            this.viewportHeight = windowHeight;
-          }
-        } catch (error) {
-          // ignore
-        }
+        this.viewportHeight = readWindowHeight();
       }
     });
   },
@@ -937,6 +1146,8 @@ Page({
   },
 
   onPageScroll(e) {
+    this.syncTagbarPinnedByScrollTop(e && e.scrollTop);
+
     if (this.data.serviceMissing) return;
     if (this.data.loading) return;
     if (this.data.loadingMore) return;
@@ -952,6 +1163,14 @@ Page({
     if (scrollProgress >= 0.8) {
       this.loadNextPage("scroll-80");
     }
+  },
+
+  syncTagbarPinnedByScrollTop(scrollTop) {
+    const numericTop = Number(scrollTop || 0);
+    if (!Number.isFinite(numericTop)) return;
+    const nextPinned = numericTop > 2;
+    if (nextPinned === Boolean(this.data.tagbarPinned)) return;
+    this.setData({ tagbarPinned: nextPinned });
   },
 
   scheduleRelayout() {
@@ -1116,14 +1335,21 @@ Page({
         ? photos.length >= PAGE_SIZE && loadedCount < total
         : photos.length >= PAGE_SIZE;
 
-      this.setData({
-        pageNo,
-        total,
-        hasMore,
-        rootFolderName,
-        folders,
-        sourcePhotos: mergedSource,
-      });
+      this.setData(
+        {
+          pageNo,
+          total,
+          hasMore,
+          rootFolderName,
+          folders,
+          sourcePhotos: mergedSource,
+        },
+        () => {
+          if (this._pendingTagGuideOnAppEntry) {
+            this.triggerTagGuideForEntry();
+          }
+        }
+      );
 
       this.persistGalleryCache({ writeStorage: pageNo === 1 }, mergedSource, total);
     } catch (e) {
@@ -1131,7 +1357,11 @@ Page({
         wx.showToast({ title: "加载失败", icon: "none" });
       }
     } finally {
-      this.setData({ loading: false, loadingMore: false });
+      this.setData({ loading: false, loadingMore: false }, () => {
+        if (this._pendingTagGuideOnAppEntry) {
+          this.triggerTagGuideForEntry();
+        }
+      });
     }
   },
 
