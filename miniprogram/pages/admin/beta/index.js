@@ -147,12 +147,20 @@ function buildDefaultVersionForm(routes) {
     id: "",
     feature_name: "",
     feature_description: "",
-    feature_code: generateAdminBetaFeatureCode(10),
+    feature_code: generateAdminBetaFeatureCode(),
     route_id: firstRoute ? Number(firstRoute.id || 0) : 0,
     is_active: true,
     has_expiry: false,
     expires_date: "",
   };
+}
+
+function normalizeBetaFeatureCode(input) {
+  return String(input || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
 }
 
 Page({
@@ -364,8 +372,8 @@ Page({
     });
   },
 
-  onCloseRouteModal() {
-    if (this.data.routeSaving) return;
+  onCloseRouteModal(forceClose = false) {
+    if (this.data.routeSaving && !forceClose) return;
     this.setData({
       routeModalOpen: false,
       routeModalMode: "create",
@@ -454,7 +462,7 @@ Page({
         title: this.data.routeModalMode === "edit" ? "路由已更新" : "路由已创建",
         icon: "none",
       });
-      this.onCloseRouteModal();
+      this.onCloseRouteModal(true);
       await this.bootstrap();
     } catch (error) {
       wx.showToast({ title: toErrorMessage(error, "保存内测路由失败"), icon: "none" });
@@ -479,8 +487,8 @@ Page({
     });
   },
 
-  onCloseRouteDeleteConfirm() {
-    if (this.data.routeDeleting) return;
+  onCloseRouteDeleteConfirm(forceClose = false) {
+    if (this.data.routeDeleting && !forceClose) return;
     this.setData({
       routeDeleteConfirmOpen: false,
       routeDeletingId: 0,
@@ -496,7 +504,7 @@ Page({
     try {
       await deleteAdminBetaRoute(routeId);
       wx.showToast({ title: "路由已删除", icon: "none" });
-      this.onCloseRouteDeleteConfirm();
+      this.onCloseRouteDeleteConfirm(true);
       await this.bootstrap();
     } catch (error) {
       wx.showToast({ title: toErrorMessage(error, "删除内测路由失败"), icon: "none" });
@@ -554,8 +562,8 @@ Page({
     });
   },
 
-  onCloseVersionModal() {
-    if (this.data.versionSaving) return;
+  onCloseVersionModal(forceClose = false) {
+    if (this.data.versionSaving && !forceClose) return;
     this.setData({
       versionModalOpen: false,
       versionModalMode: "create",
@@ -572,7 +580,10 @@ Page({
         ? String(e.currentTarget.dataset.field || "")
         : "";
     if (!field) return;
-    const value = e && e.detail ? String(e.detail.value || "") : "";
+    let value = e && e.detail ? String(e.detail.value || "") : "";
+    if (field === "feature_code") {
+      value = normalizeBetaFeatureCode(value);
+    }
     this.setData({
       [`versionForm.${field}`]: value,
     });
@@ -617,7 +628,7 @@ Page({
 
   onGenerateVersionCode() {
     this.setData({
-      "versionForm.feature_code": generateAdminBetaFeatureCode(10),
+      "versionForm.feature_code": generateAdminBetaFeatureCode(),
     });
   },
 
@@ -625,7 +636,7 @@ Page({
     if (this.data.versionSaving) return;
     const form = this.data.versionForm || buildDefaultVersionForm(this.data.routeRows || []);
     const featureName = String(form.feature_name || "").trim();
-    const featureCode = String(form.feature_code || "").trim().toUpperCase();
+    const featureCode = normalizeBetaFeatureCode(form.feature_code);
     const routeId = Number(form.route_id || 0);
 
     if (!featureName) {
@@ -638,6 +649,10 @@ Page({
     }
     if (!featureCode) {
       wx.showToast({ title: "请输入内测码", icon: "none" });
+      return;
+    }
+    if (featureCode.length !== 8) {
+      wx.showToast({ title: "内测码必须是 8 位大写字母或数字", icon: "none" });
       return;
     }
     if (Boolean(form.has_expiry) && !String(form.expires_date || "").trim()) {
@@ -664,7 +679,7 @@ Page({
         title: this.data.versionModalMode === "edit" ? "版本已更新" : "版本已创建",
         icon: "none",
       });
-      this.onCloseVersionModal();
+      this.onCloseVersionModal(true);
       await this.bootstrap();
     } catch (error) {
       wx.showToast({ title: toErrorMessage(error, "保存内测版本失败"), icon: "none" });
@@ -690,8 +705,8 @@ Page({
     });
   },
 
-  onCloseVersionDeleteConfirm() {
-    if (this.data.versionDeleting) return;
+  onCloseVersionDeleteConfirm(forceClose = false) {
+    if (this.data.versionDeleting && !forceClose) return;
     this.setData({
       versionDeleteConfirmOpen: false,
       versionDeletingId: "",
@@ -707,7 +722,7 @@ Page({
     try {
       await deleteAdminBetaVersion(versionId);
       wx.showToast({ title: "版本已删除", icon: "none" });
-      this.onCloseVersionDeleteConfirm();
+      this.onCloseVersionDeleteConfirm(true);
       await this.bootstrap();
     } catch (error) {
       wx.showToast({ title: toErrorMessage(error, "删除内测版本失败"), icon: "none" });

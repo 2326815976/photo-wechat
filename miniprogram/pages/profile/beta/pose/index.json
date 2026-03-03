@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "app-header": "/components/app-header/index",
+    "toggle-switch": "/components/toggle-switch/index"
+  }
+}

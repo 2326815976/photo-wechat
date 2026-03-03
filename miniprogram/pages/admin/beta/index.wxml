@@ -226,7 +226,7 @@
               bindinput="onVersionInput"
               placeholder="输入或生成内测码"
               placeholder-class="field-placeholder"
-              maxlength="64"
+              maxlength="8"
             />
             <button class="mini-btn" bindtap="onGenerateVersionCode">随机生成</button>
           </view>

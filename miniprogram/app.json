@@ -6,6 +6,7 @@
     "pages/booking/index",
     "pages/profile/index",
     "pages/profile/beta/index",
+    "pages/profile/beta/pose/index",
     "pages/admin/index",
     "pages/admin/beta/index",
     "pages/admin/album-detail/index",

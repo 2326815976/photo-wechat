@@ -1,5 +1,7 @@
 const { dbRpc, getSession, extractSessionUser } = require("../../../services/photo-api");
 
+const BETA_POSE_BYPASS_STORAGE_KEY = "beta_pose_bypass_until";
+
 const TAB_PAGE_SET = new Set([
   "/pages/index/index",
   "/pages/album/index",
@@ -9,8 +11,8 @@ const TAB_PAGE_SET = new Set([
 ]);
 
 const ROUTE_ALIAS_MAP = {
-  "/pose": "/pages/index/index",
-  "/poses": "/pages/index/index",
+  "/pose": "/pages/profile/beta/pose/index",
+  "/poses": "/pages/profile/beta/pose/index",
   "/gallery": "/pages/gallery/index",
   "/album": "/pages/album/index",
   "/extract": "/pages/album/index",
@@ -23,22 +25,38 @@ const ROUTE_ALIAS_MAP = {
 function toErrorMessage(error, fallback) {
   if (error && typeof error === "object") {
     const message = String(error.message || "").trim();
-    if (message) return message;
+    if (message) return normalizeRpcErrorMessage(message);
   }
   if (typeof error === "string" && error.trim()) {
-    return error.trim();
+    return normalizeRpcErrorMessage(error.trim());
   }
   return String(fallback || "操作失败");
+}
+
+function normalizeRpcErrorMessage(message) {
+  const text = String(message || "").trim();
+  if (!text) return "";
+  if (text.includes("未实现的 RPC")) {
+    return "后端服务版本过旧，请先发布 photo 服务最新版本";
+  }
+  if (
+    text.includes("does not support the IS keyword") ||
+    text.includes("IS keyword with the prepared statement setting turned ON") ||
+    text.includes("InvalidParameter")
+  ) {
+    return "后端服务仍是旧版本（SQL 兼容逻辑未生效），请先发布 photo 最新后端到云托管 service：slogan";
+  }
+  return text;
 }
 
 function readRpcResultError(result, fallback) {
   if (!result || !result.error) return "";
   if (typeof result.error === "string" && result.error.trim()) {
-    return result.error.trim();
+    return normalizeRpcErrorMessage(result.error.trim());
   }
   if (result.error && typeof result.error === "object") {
     const message = String(result.error.message || "").trim();
-    if (message) return message;
+    if (message) return normalizeRpcErrorMessage(message);
   }
   return String(fallback || "请求失败");
 }
@@ -97,14 +115,53 @@ function parseRoutePathAndQuery(url) {
 }
 
 function isPoseFeatureRoute(rawRoutePath) {
-  const raw = String(rawRoutePath || "").trim();
+  const raw = String(rawRoutePath || "")
+    .trim()
+    .split("?")[0]
+    .replace(/\/+$/, "");
   if (!raw) return false;
   const lowered = raw.toLowerCase();
   if (lowered === "/pose" || lowered === "/poses") {
     return true;
   }
-  const normalized = normalizeFeatureRoutePath(raw).toLowerCase();
-  return normalized === "/pages/index/index";
+  const normalized = normalizeFeatureRoutePath(raw)
+    .toLowerCase()
+    .split("?")[0]
+    .replace(/\/+$/, "");
+  return normalized === "/pages/index/index" || normalized === "/pages/profile/beta/pose/index";
+}
+
+function normalizeBetaFeatureCode(input) {
+  return String(input || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
+}
+
+function formatFeatureExpiresAt(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+
+  const normalized = raw
+    .replace("T", " ")
+    .replace(/\.\d+Z$/i, "")
+    .replace(/Z$/i, "")
+    .replace(/([+-]\d{2}:\d{2})$/i, "")
+    .replace(/\.\d+$/i, "")
+    .trim();
+
+  const directDate = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (directDate) {
+    return `${directDate[1]}-${directDate[2]}-${directDate[3]}`;
+  }
+
+  const parsed = new Date(normalized || raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function setPoseBypassIfNeeded(rawRoutePath) {
@@ -116,7 +173,12 @@ function setPoseBypassIfNeeded(rawRoutePath) {
   if (!app || !app.globalData) return;
 
   app.globalData.betaFeatureBypassRoute = "/pose";
-  app.globalData.betaFeatureBypassExpiresAt = Date.now() + 90 * 1000;
+  app.globalData.betaFeatureBypassExpiresAt = Date.now() + 5 * 60 * 1000;
+  try {
+    wx.setStorageSync(BETA_POSE_BYPASS_STORAGE_KEY, app.globalData.betaFeatureBypassExpiresAt);
+  } catch (error) {
+    // ignore storage write errors
+  }
 }
 
 function openRoute(url) {
@@ -251,10 +313,12 @@ Page({
       const id = String((row && row.feature_id) || "").trim();
       const routePathRaw = String((row && row.route_path) || "").trim();
       const expiresAt = String((row && row.expires_at) || "").trim();
+      const expiresAtText = formatFeatureExpiresAt(expiresAt);
+      const featureDescription = String((row && row.feature_description) || "").trim();
       return {
         id,
         feature_name: String((row && row.feature_name) || "").trim(),
-        feature_description: String((row && row.feature_description) || "").trim(),
+        feature_description: featureDescription || "暂无功能简介",
         feature_code: String((row && row.feature_code) || "").trim(),
         route_path_raw: routePathRaw,
         route_path: normalizeFeatureRoutePath(routePathRaw),
@@ -262,7 +326,7 @@ Page({
         route_description: String((row && row.route_description) || "").trim(),
         bound_at: String((row && row.bound_at) || "").trim(),
         expires_at: expiresAt,
-        expires_text: expiresAt ? `有效期至：${expiresAt}` : "有效期：长期有效",
+        expires_text: expiresAtText ? `有效期至：${expiresAtText}` : "有效期：长期有效",
       };
     }).filter((row) => row.id);
 
@@ -273,14 +337,14 @@ Page({
   },
 
   onCodeInput(e) {
-    const value = e && e.detail ? String(e.detail.value || "") : "";
+    const value = normalizeBetaFeatureCode(e && e.detail ? String(e.detail.value || "") : "");
     this.setData({ codeInput: value });
   },
 
   onPasteCode() {
     wx.getClipboardData({
       success: (res) => {
-        const text = String((res && res.data) || "").trim().slice(0, 64);
+        const text = normalizeBetaFeatureCode((res && res.data) || "");
         if (!text) {
           wx.showToast({ title: "剪贴板为空", icon: "none" });
           return;
@@ -296,9 +360,13 @@ Page({
 
   async onBindCode() {
     if (this.data.submitting) return;
-    const code = String(this.data.codeInput || "").trim();
+    const code = normalizeBetaFeatureCode(this.data.codeInput || "");
     if (!code) {
       wx.showToast({ title: "请输入内测码", icon: "none" });
+      return;
+    }
+    if (code.length !== 8) {
+      wx.showToast({ title: "内测码必须是 8 位大写字母或数字", icon: "none" });
       return;
     }
 
@@ -361,6 +429,11 @@ Page({
       const normalizedRoute = normalizeFeatureRoutePath(routePathRaw);
       if (!normalizedRoute) {
         throw new Error("该功能未配置可访问路由");
+      }
+
+      if (isPoseFeatureRoute(routePathRaw)) {
+        await openRoute("/pages/profile/beta/pose/index");
+        return;
       }
 
       setPoseBypassIfNeeded(routePathRaw);

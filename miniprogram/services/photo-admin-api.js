@@ -29,6 +29,7 @@ const ADMIN_RELEASE_ALLOWED_EXTENSIONS = [
 const ADMIN_PHOTO_WALL_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const ADMIN_SESSION_CACHE_TTL_MS = 1200;
 const BETA_FEATURE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const BETA_FEATURE_CODE_LENGTH = 8;
 
 let cachedAdminSessionUser = null;
 let cachedAdminSessionAt = 0;
@@ -324,13 +325,12 @@ function normalizeBetaFeatureCode(input) {
   return String(input || "")
     .trim()
     .toUpperCase()
-    .replace(/\s+/g, "")
-    .replace(/[^A-Z0-9_-]/g, "")
-    .slice(0, 64);
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, BETA_FEATURE_CODE_LENGTH);
 }
 
 function generateRandomBetaFeatureCode(length) {
-  const size = Math.max(6, Math.min(24, Number(length || 10) || 10));
+  const size = BETA_FEATURE_CODE_LENGTH;
   let code = "";
   for (let i = 0; i < size; i += 1) {
     const idx = Math.floor(Math.random() * BETA_FEATURE_CODE_CHARS.length);
@@ -2383,6 +2383,7 @@ async function listAdminBetaVersions(limit) {
     const routeId = Number(item && item.route_id);
     const routeMeta = routeMap.get(routeId) || { route_title: "", route_path: "" };
     return Object.assign({}, item, {
+      feature_code: normalizeBetaFeatureCode(item && item.feature_code),
       route_title: routeMeta.route_title,
       route_path: routeMeta.route_path,
     });
@@ -2399,7 +2400,7 @@ async function saveAdminBetaVersion(payload) {
   const isActive = normalizeDbBoolean(input.is_active, true);
   const expiresAt = normalizeBetaExpiresAt(input.expires_at);
   const featureCodeInput = normalizeBetaFeatureCode(input.feature_code);
-  const featureCode = featureCodeInput || generateRandomBetaFeatureCode(10);
+  const featureCode = featureCodeInput || generateRandomBetaFeatureCode();
 
   if (!featureName) {
     throw new Error("内测功能名称不能为空");
@@ -2409,6 +2410,9 @@ async function saveAdminBetaVersion(payload) {
   }
   if (!featureCode) {
     throw new Error("内测码不能为空");
+  }
+  if (featureCode.length !== BETA_FEATURE_CODE_LENGTH) {
+    throw new Error(`内测码必须是 ${BETA_FEATURE_CODE_LENGTH} 位大写字母或数字`);
   }
 
   const values = {

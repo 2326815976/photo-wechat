@@ -1,11 +1,10 @@
 <view class="page">
   <app-header
-    wx:if="{{!auditChecking && (!hideAudit || betaPoseBypassAllowed) && backendReady}}"
-    title="拾光谣"
-    subtitle="✨ 记录此刻的不期而遇 ✨"
+    wx:if="{{backendReady}}"
+    title="摆姿推荐"
     safeTop="{{safeTop}}"
-    isHomePage="{{true}}"
-    animateIn="{{pageReady}}"
+    showBack="{{true}}"
+    fallbackTab="pages/profile/index"
   />
 
   <view class="boot-loading motion-fade-up motion-delay-2" wx:if="{{!serviceMissing && !backendReady}}">
@@ -22,7 +21,7 @@
     </view>
   </view>
 
-  <view class="content" wx:if="{{!auditChecking && (!hideAudit || betaPoseBypassAllowed) && backendReady}}">
+  <view class="content" wx:if="{{backendReady}}">
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
@@ -168,7 +167,5 @@
       </view>
     </view>
   </view>
-
-  <view class="audit-guard" wx:if="{{auditChecking}}"></view>
 
 </view>

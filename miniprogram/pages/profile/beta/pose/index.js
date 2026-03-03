@@ -120,9 +120,8 @@ Page({
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
-    const auditConfigReady = Boolean(globalData.auditConfigReady);
-    const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
-    this.betaPoseBypassAllowed = this.consumeBetaPoseBypass();
+    const hideAudit = Boolean(globalData.hideAudit);
+    this.betaPoseBypassAllowed = true;
     this.homeBootstrapped = false;
     this.setData({
       safeTop,
@@ -131,27 +130,18 @@ Page({
       betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
       backendReady,
       backendReconnecting,
-      auditChecking: !auditConfigReady,
+      auditChecking: false,
     });
 
     if (app && typeof app.subscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
         const enabled = Boolean(nextHideAudit);
-        if (enabled && this.consumeBetaPoseBypass()) {
-          this.betaPoseBypassAllowed = true;
-        }
-        if (!enabled) {
-          this.betaPoseBypassAllowed = false;
-        }
+        this.betaPoseBypassAllowed = true;
         this.setData({
           hideAudit: enabled,
           betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
           auditChecking: false,
         });
-        if (enabled && !this.betaPoseBypassAllowed) {
-          this.redirectToGallery();
-          return;
-        }
         this.startHomePageIfNeeded();
       });
     }
@@ -167,21 +157,6 @@ Page({
       });
     }
 
-    if (!auditConfigReady) {
-      if (app && typeof app.ensureAuditConfig === "function") {
-        app.ensureAuditConfig().catch(() => {});
-      }
-      if (!serviceMissing && !backendReady && app && typeof app.ensureBackendReady === "function") {
-        void app.ensureBackendReady();
-      }
-      return;
-    }
-
-    if (hideAudit && !this.betaPoseBypassAllowed) {
-      this.redirectToGallery();
-      return;
-    }
-
     if (!serviceMissing && !backendReady && app && typeof app.ensureBackendReady === "function") {
       void app.ensureBackendReady();
     }
@@ -190,28 +165,9 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
-    const bypassFromToken = this.consumeBetaPoseBypass();
-    if (bypassFromToken) {
-      this.betaPoseBypassAllowed = true;
-    }
-
-    const hasAuditReady = Boolean(app && app.globalData && app.globalData.auditConfigReady);
-    if (!hasAuditReady && !bypassFromToken && app && typeof app.ensureAuditConfig === "function") {
-      this.setData({ auditChecking: true });
-      try {
-        await app.ensureAuditConfig();
-      } catch (error) {
-        // ignore
-      }
-    }
+    this.betaPoseBypassAllowed = true;
 
     const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
-    if (enabled && bypassFromToken) {
-      this.betaPoseBypassAllowed = true;
-    }
-    if (!enabled) {
-      this.betaPoseBypassAllowed = false;
-    }
     this.setData({
       hideAudit: enabled,
       betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
@@ -237,13 +193,8 @@ Page({
       backendReady: nextBackendReady,
       backendReconnecting: nextBackendReconnecting,
     });
-    if (enabled && !this.betaPoseBypassAllowed) {
-      this.redirectToGallery();
-      return;
-    }
 
     this.startHomePageIfNeeded();
-    this.syncTabBar("pages/index/index");
     if (!this.data.pageReady) {
       this.markPageReady();
     }

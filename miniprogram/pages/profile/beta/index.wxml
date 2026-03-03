@@ -42,7 +42,7 @@
               bindinput="onCodeInput"
               placeholder="请输入管理员提供的内测码"
               placeholder-class="bind-input-placeholder"
-              maxlength="64"
+              maxlength="8"
             />
             <view class="paste-btn" hover-class="paste-btn--active" hover-stay-time="80" bindtap="onPasteCode">
               <image class="paste-icon" src="/images/icons/clipboard-brown.svg" mode="aspectFit" />
@@ -77,27 +77,27 @@
           <view class="feature-head">
             <view class="feature-main">
               <text class="feature-title">{{item.feature_name}}</text>
-              <text class="feature-route">{{item.route_title || '功能入口'}} · {{item.route_path || '未配置路径'}}</text>
             </view>
             <view class="feature-badge">内测</view>
           </view>
 
-          <text class="feature-desc" wx:if="{{item.feature_description}}">{{item.feature_description}}</text>
-          <text class="feature-meta">{{item.expires_text}}</text>
-
-          <view class="feature-actions">
-            <button
-              class="submit-btn"
-              data-id="{{item.id}}"
-              bindtap="onEnterFeature"
-              loading="{{enteringFeatureId === item.id}}"
-              disabled="{{enteringFeatureId === item.id}}"
-            >
-              <view class="submit-row">
-                <image class="submit-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                <text>{{enteringFeatureId === item.id ? '进入中...' : '进入功能'}}</text>
-              </view>
-            </button>
+          <text class="feature-desc">{{item.feature_description}}</text>
+          <view class="feature-foot">
+            <text class="feature-meta">{{item.expires_text}}</text>
+            <view class="feature-actions">
+              <button
+                class="submit-btn submit-btn--feature"
+                data-id="{{item.id}}"
+                bindtap="onEnterFeature"
+                loading="{{enteringFeatureId === item.id}}"
+                disabled="{{enteringFeatureId === item.id}}"
+              >
+                <view class="submit-row">
+                  <image class="submit-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                  <text>{{enteringFeatureId === item.id ? '进入中...' : '进入功能'}}</text>
+                </view>
+              </button>
+            </view>
           </view>
         </view>
       </view>

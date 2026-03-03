@@ -84,6 +84,7 @@
   font-size: 30rpx;
   font-weight: 800;
   color: #5d4037;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .bind-desc {
@@ -117,10 +118,13 @@
   font-size: 24rpx;
   padding: 0 56rpx 0 16rpx;
   box-sizing: border-box;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .bind-input-placeholder {
   color: rgba(93, 64, 55, 0.42);
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 24rpx;
 }
 
 .paste-btn {
@@ -264,13 +268,24 @@
 
 .feature-meta {
   display: block;
-  margin-top: 8rpx;
   font-size: 21rpx;
   color: rgba(93, 64, 55, 0.52);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-foot {
+  margin-top: 10rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
 }
 
 .feature-actions {
-  margin-top: 14rpx;
+  flex: none;
 }
 
 .submit-btn {
@@ -298,6 +313,15 @@
   height: 56rpx;
   border-radius: 14rpx;
   font-size: 21rpx;
+  font-weight: 700;
+}
+
+.submit-btn--feature {
+  width: 136rpx;
+  min-width: 136rpx;
+  height: 52rpx;
+  border-radius: 14rpx;
+  font-size: 19rpx;
   font-weight: 700;
 }
 

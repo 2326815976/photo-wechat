@@ -44,6 +44,13 @@ const {
   saveAdminAboutSettings,
   uploadAdminAboutDonationQr,
   clearAdminAboutDonationQr,
+  listAdminBetaRoutes,
+  saveAdminBetaRoute,
+  deleteAdminBetaRoute,
+  listAdminBetaVersions,
+  saveAdminBetaVersion,
+  deleteAdminBetaVersion,
+  generateAdminBetaFeatureCode,
   clearAdminSessionCache,
 } = require("../../services/photo-admin-api");
 const { logout, requestJson } = require("../../services/photo-api");
@@ -142,6 +149,15 @@ const BOOKING_FILTER_OPTIONS = [
   { key: "in_progress", label: "进行中" },
   { key: "finished", label: "已完成" },
   { key: "cancelled", label: "已取消" },
+];
+const BETA_PRESET_ROUTE_OPTIONS = [
+  { route_path: "/pages/index/index", route_title: "摆姿推荐" },
+  { route_path: "/pages/gallery/index", route_title: "照片墙" },
+  { route_path: "/pages/album/index", route_title: "相册提取" },
+  { route_path: "/pages/profile/index", route_title: "我的" },
+  { route_path: "/pages/profile/about/index", route_title: "关于页面" },
+  { route_path: "/pages/booking/index", route_title: "约拍" },
+  { route_path: "/pages/admin/index", route_title: "后台管理" },
 ];
 
 function readErrorMessage(error, fallback) {
@@ -720,6 +736,78 @@ function normalizeDbBoolean(value, fallback) {
     return true;
   }
   return false;
+}
+
+function normalizeBetaRoutePath(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return normalized.slice(0, 255);
+}
+
+function buildBetaRoutePresetRows(currentRoutePath) {
+  const normalizedCurrent = normalizeBetaRoutePath(currentRoutePath);
+  const rows = BETA_PRESET_ROUTE_OPTIONS.map((item) => ({
+    route_path: normalizeBetaRoutePath(item && item.route_path),
+    route_title: String((item && item.route_title) || "").trim(),
+  })).filter((item) => item.route_path);
+
+  if (normalizedCurrent && !rows.some((item) => item.route_path === normalizedCurrent)) {
+    rows.unshift({
+      route_path: normalizedCurrent,
+      route_title: "历史路由（请核对）",
+    });
+  }
+  return rows;
+}
+
+function resolveBetaRoutePresetState(routePath, presetRows) {
+  const rows = Array.isArray(presetRows) ? presetRows : [];
+  if (!rows.length) {
+    return {
+      index: 0,
+      previewTitle: "",
+      previewPath: "",
+      presetTitle: "",
+    };
+  }
+  const normalizedPath = normalizeBetaRoutePath(routePath);
+  const matchedIndex = rows.findIndex((item) => item.route_path === normalizedPath);
+  const nextIndex = matchedIndex >= 0 ? matchedIndex : 0;
+  const selected = rows[nextIndex] || rows[0];
+  return {
+    index: nextIndex,
+    previewTitle: String((selected && selected.route_title) || ""),
+    previewPath: String((selected && selected.route_path) || ""),
+    presetTitle: String((selected && selected.route_title) || ""),
+  };
+}
+
+function buildDefaultBetaRouteForm() {
+  const presetRows = buildBetaRoutePresetRows("");
+  const firstRoute = presetRows[0] || null;
+  return {
+    id: 0,
+    route_path: firstRoute ? firstRoute.route_path : "",
+    route_title: firstRoute ? firstRoute.route_title : "",
+    route_description: "",
+    is_active: true,
+  };
+}
+
+function buildDefaultBetaVersionForm(routes) {
+  const rows = Array.isArray(routes) ? routes : [];
+  const firstRoute = rows.length > 0 ? rows[0] : null;
+  return {
+    id: "",
+    feature_name: "",
+    feature_description: "",
+    feature_code: generateAdminBetaFeatureCode(),
+    route_id: firstRoute ? Number(firstRoute.id || 0) : 0,
+    is_active: true,
+    has_expiry: false,
+    expires_date: "",
+  };
 }
 
 function toSafeNumber(value, fallback) {
@@ -1352,6 +1440,38 @@ Page({
     releaseDeletingId: 0,
     releases: [],
 
+    betaPanelTab: "routes",
+    betaRoutesLoading: false,
+    betaVersionsLoading: false,
+    betaRouteRows: [],
+    betaVersionRows: [],
+    betaRouteModalOpen: false,
+    betaRouteModalMode: "create",
+    betaRouteSaving: false,
+    betaRouteForm: buildDefaultBetaRouteForm(),
+    betaRoutePresetRows: buildBetaRoutePresetRows(""),
+    betaRoutePresetIndex: 0,
+    betaRoutePresetPreviewTitle: "",
+    betaRoutePresetPreviewPath: "",
+    betaRoutePresetLastTitle: "",
+    betaRoutePresetOpen: false,
+    betaRouteDeleteConfirmOpen: false,
+    betaRouteDeletingId: 0,
+    betaRouteDeletingTitle: "",
+    betaRouteDeleting: false,
+    betaVersionModalOpen: false,
+    betaVersionModalMode: "create",
+    betaVersionSaving: false,
+    betaVersionForm: buildDefaultBetaVersionForm([]),
+    betaVersionRoutePickerIndex: 0,
+    betaVersionRoutePreviewTitle: "",
+    betaVersionRoutePreviewPath: "",
+    betaVersionRouteOpen: false,
+    betaVersionDeleteConfirmOpen: false,
+    betaVersionDeletingId: "",
+    betaVersionDeletingName: "",
+    betaVersionDeleting: false,
+
     noticeType: "",
     noticeText: "",
     todayDateText: getTodayDateText(),
@@ -1534,6 +1654,18 @@ Page({
     if (key !== "about") {
       patch.aboutDonationModalOpen = false;
     }
+    if (key !== "beta") {
+      patch.betaRouteModalOpen = false;
+      patch.betaRouteDeleteConfirmOpen = false;
+      patch.betaRouteDeletingId = 0;
+      patch.betaRouteDeletingTitle = "";
+      patch.betaRoutePresetOpen = false;
+      patch.betaVersionModalOpen = false;
+      patch.betaVersionRouteOpen = false;
+      patch.betaVersionDeleteConfirmOpen = false;
+      patch.betaVersionDeletingId = "";
+      patch.betaVersionDeletingName = "";
+    }
     this.syncSectionMeta(key);
     this.closeMobileMenu();
     if (Object.keys(patch).length) {
@@ -1542,11 +1674,19 @@ Page({
           void this.loadAboutSettings().catch((error) => {
             this.showNotice("error", readErrorMessage(error, "加载关于信息失败"));
           });
+        } else if (key === "beta") {
+          void Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]).catch((error) => {
+            this.showNotice("error", readErrorMessage(error, "加载内测数据失败"));
+          });
         }
       });
     } else if (key === "about") {
       void this.loadAboutSettings().catch((error) => {
         this.showNotice("error", readErrorMessage(error, "加载关于信息失败"));
+      });
+    } else if (key === "beta") {
+      void Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]).catch((error) => {
+        this.showNotice("error", readErrorMessage(error, "加载内测数据失败"));
       });
     }
   },
@@ -1607,13 +1747,6 @@ Page({
       fail: () => {
         wx.switchTab({ url: "/pages/profile/index" });
       },
-    });
-  },
-
-  goBetaManage() {
-    this.closeMobileMenu();
-    wx.navigateTo({
-      url: "/pages/admin/beta/index",
     });
   },
 
@@ -1734,6 +1867,8 @@ Page({
         this.loadReleases(),
         this.loadAboutSettings(),
         this.loadRecentBookings(),
+        this.loadBetaRoutes().catch(() => {}),
+        this.loadBetaVersions().catch(() => {}),
       ]);
     } catch (error) {
       const message = readErrorMessage(error, "管理后台加载失败");
@@ -2043,6 +2178,567 @@ Page({
     } finally {
       this.setData({ aboutSaving: false });
     }
+  },
+
+  async loadBetaRoutes() {
+    this.setData({ betaRoutesLoading: true });
+    try {
+      const rows = await listAdminBetaRoutes(500);
+      const list = (Array.isArray(rows) ? rows : [])
+        .map((row) => {
+          const routeId = Number(row && row.id);
+          const isActive = normalizeDbBoolean(row && row.is_active, true);
+          return {
+            id: Number.isInteger(routeId) ? routeId : 0,
+            route_path: normalizeBetaRoutePath(row && row.route_path),
+            route_title: String((row && row.route_title) || "").trim(),
+            route_description: String((row && row.route_description) || "").trim(),
+            is_active: isActive,
+            stateText: isActive ? "启用中" : "已停用",
+            stateClass: isActive ? "beta-state--active" : "beta-state--inactive",
+          };
+        })
+        .filter((item) => item.id > 0);
+
+      const currentRouteId = Number(this.data.betaVersionForm && this.data.betaVersionForm.route_id);
+      const matchedIndex = list.findIndex((item) => item.id === currentRouteId);
+      const safeIndex = list.length > 0 ? (matchedIndex >= 0 ? matchedIndex : 0) : 0;
+      const selectedRoute = list[safeIndex] || null;
+
+      const patch = {
+        betaRoutesLoading: false,
+        betaRouteRows: list,
+        betaVersionRoutePickerIndex: safeIndex,
+        betaVersionRoutePreviewTitle: selectedRoute ? selectedRoute.route_title : "",
+        betaVersionRoutePreviewPath: selectedRoute ? selectedRoute.route_path : "",
+        betaVersionRouteOpen: false,
+      };
+      if (selectedRoute && matchedIndex < 0) {
+        patch["betaVersionForm.route_id"] = Number(selectedRoute.id || 0);
+      }
+      if (!selectedRoute) {
+        patch["betaVersionForm.route_id"] = 0;
+      }
+      this.setData(patch);
+    } catch (error) {
+      this.setData({ betaRoutesLoading: false });
+      throw error;
+    }
+  },
+
+  async loadBetaVersions() {
+    this.setData({ betaVersionsLoading: true });
+    try {
+      const rows = await listAdminBetaVersions(500);
+      const now = Date.now();
+      const list = (Array.isArray(rows) ? rows : [])
+        .map((row) => {
+          const versionId = String((row && row.id) || "").trim();
+          if (!versionId) return null;
+          const routeId = Number(row && row.route_id);
+          const isActive = normalizeDbBoolean(row && row.is_active, true);
+          const expiresAt = String((row && row.expires_at) || "").trim();
+          const expiresAtDate = parseDateTimeUTC8(expiresAt);
+          const isExpired = Boolean(expiresAtDate && expiresAtDate.getTime() < now);
+
+          let stateText = "生效中";
+          let stateClass = "beta-state--active";
+          if (!isActive) {
+            stateText = "已停用";
+            stateClass = "beta-state--inactive";
+          } else if (isExpired) {
+            stateText = "已过期";
+            stateClass = "beta-state--expired";
+          }
+
+          return {
+            id: versionId,
+            feature_name: String((row && row.feature_name) || "").trim(),
+            feature_description: String((row && row.feature_description) || "").trim(),
+            feature_code: String((row && row.feature_code) || "").trim(),
+            route_id: Number.isInteger(routeId) ? routeId : 0,
+            route_path: normalizeBetaRoutePath(row && row.route_path),
+            route_title: String((row && row.route_title) || "").trim(),
+            is_active: isActive,
+            expires_at: expiresAt,
+            expires_date: extractDateText(expiresAt),
+            expires_text: expiresAt ? formatDateTime(expiresAt) : "",
+            is_expired: isExpired,
+            stateText,
+            stateClass,
+          };
+        })
+        .filter(Boolean);
+
+      this.setData({
+        betaVersionsLoading: false,
+        betaVersionRows: list,
+      });
+    } catch (error) {
+      this.setData({ betaVersionsLoading: false });
+      throw error;
+    }
+  },
+
+  onBetaPanelTabChange(e) {
+    const key =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.key || "")
+        : "";
+    if (key !== "routes" && key !== "versions") return;
+    this.setData({ betaPanelTab: key });
+  },
+
+  onOpenCreateBetaRoute() {
+    const routePresetRows = buildBetaRoutePresetRows("");
+    const presetState = resolveBetaRoutePresetState("", routePresetRows);
+    this.setData({
+      betaRouteModalOpen: true,
+      betaRouteModalMode: "create",
+      betaRouteForm: buildDefaultBetaRouteForm(),
+      betaRoutePresetRows: routePresetRows,
+      betaRoutePresetIndex: presetState.index,
+      betaRoutePresetPreviewTitle: presetState.previewTitle,
+      betaRoutePresetPreviewPath: presetState.previewPath,
+      betaRoutePresetLastTitle: presetState.presetTitle,
+      betaRoutePresetOpen: false,
+    });
+  },
+
+  onOpenEditBetaRoute(e) {
+    const routeId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.id || 0)
+        : 0;
+    if (!routeId) return;
+    const target = (this.data.betaRouteRows || []).find((item) => item.id === routeId);
+    if (!target) return;
+
+    const routePresetRows = buildBetaRoutePresetRows(target.route_path);
+    const presetState = resolveBetaRoutePresetState(target.route_path, routePresetRows);
+    this.setData({
+      betaRouteModalOpen: true,
+      betaRouteModalMode: "edit",
+      betaRouteForm: {
+        id: target.id,
+        route_path: target.route_path,
+        route_title: target.route_title,
+        route_description: target.route_description,
+        is_active: target.is_active,
+      },
+      betaRoutePresetRows: routePresetRows,
+      betaRoutePresetIndex: presetState.index,
+      betaRoutePresetPreviewTitle: presetState.previewTitle,
+      betaRoutePresetPreviewPath: presetState.previewPath,
+      betaRoutePresetLastTitle: presetState.presetTitle,
+      betaRoutePresetOpen: false,
+    });
+  },
+
+  onCloseBetaRouteModal(forceClose = false) {
+    if (this.data.betaRouteSaving && !forceClose) return;
+    this.setData({
+      betaRouteModalOpen: false,
+      betaRouteModalMode: "create",
+      betaRouteForm: buildDefaultBetaRouteForm(),
+      betaRoutePresetRows: buildBetaRoutePresetRows(""),
+      betaRoutePresetIndex: 0,
+      betaRoutePresetPreviewTitle: "",
+      betaRoutePresetPreviewPath: "",
+      betaRoutePresetLastTitle: "",
+      betaRoutePresetOpen: false,
+    });
+  },
+
+  onBetaRouteInput(e) {
+    const field =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.field || "")
+        : "";
+    if (!field) return;
+    const value = e && e.detail ? String(e.detail.value || "") : "";
+    this.setData({
+      [`betaRouteForm.${field}`]: value,
+    });
+  },
+
+  onBetaRoutePresetChange(e) {
+    const index = e && e.detail ? Number(e.detail.value || 0) : 0;
+    this.applyBetaRoutePresetIndex(index);
+  },
+
+  applyBetaRoutePresetIndex(index) {
+    const rows = Array.isArray(this.data.betaRoutePresetRows) ? this.data.betaRoutePresetRows : [];
+    if (!rows.length) return;
+    const safeIndex = index >= 0 && index < rows.length ? index : 0;
+    const selected = rows[safeIndex] || rows[0];
+    const selectedPath = normalizeBetaRoutePath(selected && selected.route_path);
+    const selectedTitle = String((selected && selected.route_title) || "").trim();
+
+    const currentTitle = String((this.data.betaRouteForm && this.data.betaRouteForm.route_title) || "").trim();
+    const lastPresetTitle = String(this.data.betaRoutePresetLastTitle || "").trim();
+    const shouldAutoFillTitle = !currentTitle || currentTitle === lastPresetTitle;
+
+    const patch = {
+      betaRoutePresetIndex: safeIndex,
+      betaRoutePresetPreviewTitle: selectedTitle,
+      betaRoutePresetPreviewPath: selectedPath,
+      betaRoutePresetLastTitle: selectedTitle,
+      betaRoutePresetOpen: false,
+      "betaRouteForm.route_path": selectedPath,
+    };
+    if (shouldAutoFillTitle) {
+      patch["betaRouteForm.route_title"] = selectedTitle;
+    }
+    this.setData(patch);
+  },
+
+  onToggleBetaRoutePresetOpen() {
+    if (this.data.betaRouteSaving) return;
+    const rows = Array.isArray(this.data.betaRoutePresetRows) ? this.data.betaRoutePresetRows : [];
+    if (!rows.length) return;
+    this.setData({
+      betaRoutePresetOpen: !Boolean(this.data.betaRoutePresetOpen),
+    });
+  },
+
+  onSelectBetaRoutePreset(e) {
+    const index =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.index || 0)
+        : 0;
+    this.applyBetaRoutePresetIndex(index);
+  },
+
+  onBetaRouteActiveChange(e) {
+    this.setData({
+      "betaRouteForm.is_active": Boolean(e && e.detail && e.detail.value),
+    });
+  },
+
+  async onSubmitBetaRoute() {
+    if (this.data.betaRouteSaving) return;
+    const form = this.data.betaRouteForm || buildDefaultBetaRouteForm();
+    const routePath = normalizeBetaRoutePath(form.route_path);
+    const routeTitle = String(form.route_title || "").trim();
+    if (!routePath) {
+      wx.showToast({ title: "请选择功能路由", icon: "none" });
+      return;
+    }
+    if (!routeTitle) {
+      wx.showToast({ title: "请输入功能名称", icon: "none" });
+      return;
+    }
+
+    this.setData({ betaRouteSaving: true });
+    try {
+      await saveAdminBetaRoute({
+        id: Number(form.id || 0),
+        route_path: routePath,
+        route_title: routeTitle,
+        route_description: String(form.route_description || "").trim(),
+        is_active: Boolean(form.is_active),
+      });
+      this.showNotice("success", this.data.betaRouteModalMode === "edit" ? "内测路由已更新" : "内测路由已创建");
+      this.onCloseBetaRouteModal(true);
+      await Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]);
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "保存内测路由失败"));
+    } finally {
+      this.setData({ betaRouteSaving: false });
+    }
+  },
+
+  onOpenBetaRouteDeleteConfirm(e) {
+    const routeId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.id || 0)
+        : 0;
+    if (!routeId) return;
+    const target = (this.data.betaRouteRows || []).find((item) => item.id === routeId);
+    if (!target) return;
+    this.setData({
+      betaRouteDeleteConfirmOpen: true,
+      betaRouteDeletingId: routeId,
+      betaRouteDeletingTitle: target.route_title,
+    });
+  },
+
+  onCloseBetaRouteDeleteConfirm(forceClose = false) {
+    if (this.data.betaRouteDeleting && !forceClose) return;
+    this.setData({
+      betaRouteDeleteConfirmOpen: false,
+      betaRouteDeletingId: 0,
+      betaRouteDeletingTitle: "",
+    });
+  },
+
+  async onConfirmBetaRouteDelete() {
+    const routeId = Number(this.data.betaRouteDeletingId || 0);
+    if (!routeId || this.data.betaRouteDeleting) return;
+    this.setData({ betaRouteDeleting: true });
+    try {
+      await deleteAdminBetaRoute(routeId);
+      this.showNotice("success", "内测路由已删除");
+      this.onCloseBetaRouteDeleteConfirm(true);
+      await Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]);
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "删除内测路由失败"));
+    } finally {
+      this.setData({ betaRouteDeleting: false });
+    }
+  },
+
+  onOpenCreateBetaVersion() {
+    const routes = this.data.betaRouteRows || [];
+    if (!routes.length) {
+      wx.showToast({ title: "请先新增内测路由", icon: "none" });
+      return;
+    }
+    this.setData({
+      betaVersionModalOpen: true,
+      betaVersionModalMode: "create",
+      betaVersionForm: buildDefaultBetaVersionForm(routes),
+      betaVersionRoutePickerIndex: 0,
+      betaVersionRoutePreviewTitle: routes[0] ? routes[0].route_title : "",
+      betaVersionRoutePreviewPath: routes[0] ? routes[0].route_path : "",
+      betaVersionRouteOpen: false,
+    });
+  },
+
+  onOpenEditBetaVersion(e) {
+    const versionId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!versionId) return;
+    const target = (this.data.betaVersionRows || []).find((item) => item.id === versionId);
+    if (!target) return;
+
+    const routes = this.data.betaRouteRows || [];
+    const routeIndex = Math.max(
+      0,
+      routes.findIndex((item) => item.id === Number(target.route_id || 0))
+    );
+    this.setData({
+      betaVersionModalOpen: true,
+      betaVersionModalMode: "edit",
+      betaVersionForm: {
+        id: target.id,
+        feature_name: target.feature_name,
+        feature_description: target.feature_description,
+        feature_code: target.feature_code,
+        route_id: target.route_id,
+        is_active: target.is_active,
+        has_expiry: Boolean(target.expires_date),
+        expires_date: target.expires_date,
+      },
+      betaVersionRoutePickerIndex: routeIndex,
+      betaVersionRoutePreviewTitle: target.route_title || "",
+      betaVersionRoutePreviewPath: target.route_path || "",
+      betaVersionRouteOpen: false,
+    });
+  },
+
+  onCloseBetaVersionModal(forceClose = false) {
+    if (this.data.betaVersionSaving && !forceClose) return;
+    this.setData({
+      betaVersionModalOpen: false,
+      betaVersionModalMode: "create",
+      betaVersionForm: buildDefaultBetaVersionForm(this.data.betaRouteRows || []),
+      betaVersionRoutePickerIndex: 0,
+      betaVersionRoutePreviewTitle: "",
+      betaVersionRoutePreviewPath: "",
+      betaVersionRouteOpen: false,
+    });
+  },
+
+  onBetaVersionInput(e) {
+    const field =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.field || "")
+        : "";
+    if (!field) return;
+    let value = e && e.detail ? String(e.detail.value || "") : "";
+    if (field === "feature_code") {
+      value = normalizeAlbumAccessKey(value);
+    }
+    this.setData({
+      [`betaVersionForm.${field}`]: value,
+    });
+  },
+
+  onBetaVersionRouteChange(e) {
+    const index = e && e.detail ? Number(e.detail.value || 0) : 0;
+    this.applyBetaVersionRouteIndex(index);
+  },
+
+  applyBetaVersionRouteIndex(index) {
+    const routes = this.data.betaRouteRows || [];
+    if (!routes.length) return;
+    const safeIndex = index >= 0 && index < routes.length ? index : 0;
+    const target = routes[safeIndex] || routes[0];
+    this.setData({
+      "betaVersionForm.route_id": Number(target.id || 0),
+      betaVersionRoutePickerIndex: safeIndex,
+      betaVersionRoutePreviewTitle: String(target.route_title || ""),
+      betaVersionRoutePreviewPath: String(target.route_path || ""),
+      betaVersionRouteOpen: false,
+    });
+  },
+
+  onToggleBetaVersionRouteOpen() {
+    if (this.data.betaVersionSaving) return;
+    const routes = this.data.betaRouteRows || [];
+    if (!routes.length) return;
+    this.setData({
+      betaVersionRouteOpen: !Boolean(this.data.betaVersionRouteOpen),
+    });
+  },
+
+  onSelectBetaVersionRoute(e) {
+    const index =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.index || 0)
+        : 0;
+    this.applyBetaVersionRouteIndex(index);
+  },
+
+  onBetaVersionActiveChange(e) {
+    this.setData({
+      "betaVersionForm.is_active": Boolean(e && e.detail && e.detail.value),
+    });
+  },
+
+  onBetaVersionExpirySwitch(e) {
+    const checked = Boolean(e && e.detail && e.detail.value);
+    const patch = {
+      "betaVersionForm.has_expiry": checked,
+    };
+    if (!checked) {
+      patch["betaVersionForm.expires_date"] = "";
+    }
+    this.setData(patch);
+  },
+
+  onBetaVersionExpiryDateChange(e) {
+    const value = e && e.detail ? String(e.detail.value || "") : "";
+    this.setData({
+      "betaVersionForm.expires_date": value,
+    });
+  },
+
+  onGenerateBetaVersionCode() {
+    this.setData({
+      "betaVersionForm.feature_code": generateAdminBetaFeatureCode(),
+    });
+  },
+
+  async onSubmitBetaVersion() {
+    if (this.data.betaVersionSaving) return;
+    const form = this.data.betaVersionForm || buildDefaultBetaVersionForm(this.data.betaRouteRows || []);
+    const featureName = String(form.feature_name || "").trim();
+    const featureCode = normalizeAlbumAccessKey(form.feature_code);
+    const routeId = Number(form.route_id || 0);
+    if (!featureName) {
+      wx.showToast({ title: "请输入内测功能名称", icon: "none" });
+      return;
+    }
+    if (!routeId || !Number.isInteger(routeId)) {
+      wx.showToast({ title: "请选择功能路由", icon: "none" });
+      return;
+    }
+    if (!featureCode) {
+      wx.showToast({ title: "请输入内测码", icon: "none" });
+      return;
+    }
+    if (featureCode.length !== 8) {
+      wx.showToast({ title: "内测码必须是 8 位大写字母或数字", icon: "none" });
+      return;
+    }
+    if (Boolean(form.has_expiry) && !String(form.expires_date || "").trim()) {
+      wx.showToast({ title: "请选择有效期日期", icon: "none" });
+      return;
+    }
+
+    const expiresAt = Boolean(form.has_expiry) ? `${String(form.expires_date || "").trim()} 23:59:59` : null;
+
+    this.setData({ betaVersionSaving: true });
+    try {
+      await saveAdminBetaVersion({
+        id: String(form.id || "").trim(),
+        feature_name: featureName,
+        feature_description: String(form.feature_description || "").trim(),
+        feature_code: featureCode,
+        route_id: routeId,
+        is_active: Boolean(form.is_active),
+        expires_at: expiresAt,
+      });
+      this.showNotice("success", this.data.betaVersionModalMode === "edit" ? "内测版本已更新" : "内测版本已创建");
+      this.onCloseBetaVersionModal(true);
+      await this.loadBetaVersions();
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "保存内测版本失败"));
+    } finally {
+      this.setData({ betaVersionSaving: false });
+    }
+  },
+
+  onOpenBetaVersionDeleteConfirm(e) {
+    const versionId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!versionId) return;
+    const target = (this.data.betaVersionRows || []).find((item) => item.id === versionId);
+    if (!target) return;
+    this.setData({
+      betaVersionDeleteConfirmOpen: true,
+      betaVersionDeletingId: versionId,
+      betaVersionDeletingName: target.feature_name,
+    });
+  },
+
+  onCloseBetaVersionDeleteConfirm(forceClose = false) {
+    if (this.data.betaVersionDeleting && !forceClose) return;
+    this.setData({
+      betaVersionDeleteConfirmOpen: false,
+      betaVersionDeletingId: "",
+      betaVersionDeletingName: "",
+    });
+  },
+
+  async onConfirmBetaVersionDelete() {
+    const versionId = String(this.data.betaVersionDeletingId || "").trim();
+    if (!versionId || this.data.betaVersionDeleting) return;
+    this.setData({ betaVersionDeleting: true });
+    try {
+      await deleteAdminBetaVersion(versionId);
+      this.showNotice("success", "内测版本已删除");
+      this.onCloseBetaVersionDeleteConfirm(true);
+      await this.loadBetaVersions();
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "删除内测版本失败"));
+    } finally {
+      this.setData({ betaVersionDeleting: false });
+    }
+  },
+
+  onCopyBetaVersionCode(e) {
+    const code =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.code || "").trim()
+        : "";
+    if (!code) return;
+    wx.setClipboardData({
+      data: code,
+      success: () => {
+        this.showNotice("success", "内测码已复制");
+      },
+      fail: () => {
+        this.showNotice("error", "复制失败，请重试");
+      },
+    });
   },
 
   async loadPoses() {
@@ -3576,6 +4272,8 @@ Page({
           this.loadReleases(),
           this.loadAboutSettings(),
           this.loadRecentBookings(),
+          this.loadBetaRoutes().catch(() => {}),
+          this.loadBetaVersions().catch(() => {}),
         ].map((task) =>
           Promise.resolve(task)
             .then(() => ({ ok: true, error: null }))

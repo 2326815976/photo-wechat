@@ -117,19 +117,6 @@
           </button>
         </view>
 
-        <view class="audit-entry-card motion-fade-up motion-delay-5">
-          <view class="audit-entry-card__actions">
-            <button
-              class="audit-wechat-btn audit-entry-card__btn"
-              hover-class="audit-wechat-btn--active"
-              bindtap="onOpenAuditWechatLogin"
-              loading="{{auditWechatSubmitting}}"
-              disabled="{{auditWechatSubmitting || serviceMissing}}"
-            >
-              {{auditWechatSubmitting ? "微信登录中..." : "微信登录"}}
-            </button>
-          </view>
-        </view>
       </view>
     </block>
 
@@ -258,6 +245,20 @@
         </view>
       </view>
     </block>
+  </view>
+
+  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading}}">
+    <view class="audit-fixed-login__panel">
+      <button
+        class="audit-fixed-login__btn"
+        hover-class="audit-fixed-login__btn--active"
+        bindtap="onOpenAuditWechatLogin"
+        loading="{{auditWechatSubmitting}}"
+        disabled="{{auditWechatSubmitting || serviceMissing}}"
+      >
+        {{auditWechatSubmitting ? "微信登录中..." : "微信登录"}}
+      </button>
+    </view>
   </view>
 
   <view

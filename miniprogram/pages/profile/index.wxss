@@ -397,6 +397,62 @@
   margin-bottom: 24rpx;
 }
 
+.audit-fixed-login {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(174rpx + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  padding: 0 48rpx;
+  z-index: 80;
+  box-sizing: border-box;
+}
+
+.audit-fixed-login__panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 253, 245, 0.96);
+  border: 2rpx solid rgba(191, 220, 203, 0.52);
+  box-shadow: 0 10rpx 26rpx rgba(93, 64, 55, 0.12);
+}
+
+.audit-fixed-login__btn {
+  min-width: 220rpx;
+  height: 62rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid #BFDCCB;
+  background: #EAF6EF;
+  color: #2E8B57;
+  padding: 0 34rpx;
+  font-size: 27rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 0 10rpx rgba(46, 139, 87, 0.10);
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.audit-fixed-login__btn--active {
+  transform: scale(0.98);
+  background: #DDEFE4;
+  color: #267549;
+  box-shadow: 0 2rpx 8rpx rgba(46, 139, 87, 0.08);
+}
+
+.audit-fixed-login__btn[disabled] {
+  opacity: 0.56;
+}
+
+.audit-fixed-login__btn::after {
+  border: none;
+}
+
 .author-head {
   display: flex;
   align-items: center;
@@ -570,71 +626,6 @@
 
 .qr-save-btn--disabled {
   opacity: 0.65;
-}
-
-.audit-entry-card {
-  background: #fffdf5;
-  border-radius: 32rpx;
-  border: 2rpx solid rgba(255, 200, 87, 0.4);
-  box-shadow: 0 12rpx 36rpx rgba(93, 64, 55, 0.12);
-  padding: 28rpx;
-  margin-bottom: 20rpx;
-}
-
-.audit-entry-card__title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 800;
-  color: #5d4037;
-}
-
-.audit-entry-card__desc {
-  display: block;
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: rgba(93, 64, 55, 0.64);
-}
-
-.audit-entry-card__actions {
-  margin-top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16rpx;
-}
-
-.audit-entry-card__btn {
-  width: 100%;
-}
-
-.audit-wechat-btn {
-  width: 100%;
-  height: 96rpx;
-  border-radius: 999rpx;
-  border: 4rpx solid #0E8F4D;
-  background: #07C160;
-  color: #FFFFFF;
-  box-shadow: 8rpx 8rpx 0 #0E8F4D;
-  font-size: 32rpx;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
-}
-
-.audit-wechat-btn--active {
-  transform: translate(4rpx, 4rpx) scale(0.985);
-  box-shadow: 4rpx 4rpx 0 #0E8F4D;
-  filter: saturate(1.03);
-}
-
-.audit-wechat-btn[disabled] {
-  opacity: 0.55;
-}
-
-.audit-wechat-btn::after {
-  border: none;
 }
 
 .legal-modal-mask {
