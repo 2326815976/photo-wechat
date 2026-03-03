@@ -2329,7 +2329,7 @@ Page({
       if (shouldInvalidatePublicGalleryCache(this.data)) {
         markGalleryCacheDirty();
       }
-      this.showToastMessage("拍摄信息已更新", "success");
+      this.showToastMessage("拍摄时间已更新", "success");
     } catch (error) {
       console.error("保存拍摄日期失败:", error);
       this.showToastMessage(readErrorMessage(error, "保存失败"), "error");

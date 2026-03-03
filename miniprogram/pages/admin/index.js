@@ -74,30 +74,9 @@ const MAX_RELEASE_FILE_SIZE = 100 * 1024 * 1024;
 const ALBUM_COVER_TARGET_SIZE = 900 * 1024;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
+const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
 function resolveAppPublicUrl() {
-  let appRuntimeUrl = "";
-  try {
-    const app = getApp();
-    const globalData = app && app.globalData ? app.globalData : {};
-    appRuntimeUrl = String(globalData.appUrl || globalData.cloudRunBaseUrl || "")
-      .trim()
-      .replace(/\/+$/, "");
-  } catch (error) {
-    appRuntimeUrl = "";
-  }
-  if (appRuntimeUrl) return appRuntimeUrl;
-
-  return String(
-    (runtimeConfig &&
-      (runtimeConfig.appUrl ||
-        runtimeConfig.APP_URL ||
-        runtimeConfig.cloudRunBaseUrl ||
-        runtimeConfig.cloudrunBaseUrl ||
-        "")) ||
-      ""
-  )
-    .trim()
-    .replace(/\/+$/, "");
+  return FIXED_PUBLIC_ORIGIN;
 }
 
 const ADMIN_SECTION_META = {
@@ -827,11 +806,7 @@ function extractDateText(value) {
 function buildAlbumAccessLink(accessKey) {
   const key = normalizeAlbumAccessKey(accessKey);
   if (!key) return "";
-  const appPublicUrl = resolveAppPublicUrl();
-  if (appPublicUrl) {
-    return `${appPublicUrl}/album/${encodeURIComponent(key)}`;
-  }
-  return `/pages/album/detail?key=${encodeURIComponent(key)}`;
+  return `${resolveAppPublicUrl()}/album/${encodeURIComponent(key)}`;
 }
 
 function buildAlbumQrUrl(accessKey) {
