@@ -1447,6 +1447,9 @@ Page({
         p_photo_id: id,
         p_session_id: sessionId,
       });
+      if (r && r.error) {
+        return;
+      }
 
       const rawPayload = r ? r.data : null;
       if (typeof rawPayload !== "boolean" && hasExplicitRpcFailure(rawPayload)) {

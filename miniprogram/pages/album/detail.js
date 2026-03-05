@@ -1641,6 +1641,9 @@ Page({
         p_photo_id: id,
         p_session_id: sessionId,
       });
+      if (r && r.error) {
+        return;
+      }
       const payload = r ? r.data : null;
       if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
         return;
@@ -1658,6 +1661,9 @@ Page({
       const r = await dbRpc("increment_photo_download", {
         p_photo_id: id,
       });
+      if (r && r.error) {
+        return;
+      }
       const payload = r ? r.data : null;
       if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
         return;
