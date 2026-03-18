@@ -937,7 +937,7 @@ const pageDefinition = {
           count: "exact",
         });
 
-        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "sort_order")) {
+        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
@@ -955,8 +955,8 @@ const pageDefinition = {
         if (
           hasRpcError(result) &&
           (
-            isColumnMissingError(readRpcError(result, "??????"), "story_text") ||
-            isColumnMissingError(readRpcError(result, "??????"), "is_highlight")
+            isColumnMissingError(readRpcError(result, "获取照片失败"), "story_text") ||
+            isColumnMissingError(readRpcError(result, "获取照片失败"), "is_highlight")
           )
         ) {
           result = await dbQuery({
@@ -973,7 +973,7 @@ const pageDefinition = {
           });
         }
 
-        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "shot_location")) {
+        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "shot_location")) {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
@@ -986,7 +986,7 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "sort_order")) {
+          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
@@ -1002,7 +1002,7 @@ const pageDefinition = {
           }
         }
 
-        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "shot_date")) {
+        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "shot_date")) {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
@@ -1015,7 +1015,7 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "sort_order")) {
+          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
@@ -1034,8 +1034,8 @@ const pageDefinition = {
         if (
           hasRpcError(result) &&
           (
-            isColumnMissingError(readRpcError(result, "??????"), "shot_date") ||
-            isColumnMissingError(readRpcError(result, "??????"), "shot_location")
+            isColumnMissingError(readRpcError(result, "获取照片失败"), "shot_date") ||
+            isColumnMissingError(readRpcError(result, "获取照片失败"), "shot_location")
           )
         ) {
           result = await dbQuery({
@@ -1050,7 +1050,7 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "??????"), "sort_order")) {
+          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
@@ -1081,7 +1081,7 @@ const pageDefinition = {
         }
 
         if (hasRpcError(result)) {
-          throw new Error(readRpcError(result, "??????"));
+          throw new Error(readRpcError(result, "获取照片失败"));
         }
 
         const payload = readRpcData(result, []);
@@ -1177,13 +1177,13 @@ const pageDefinition = {
       });
       return true;
     } catch (error) {
-      console.error("??????:", error);
+      console.error("加载照片失败:", error);
       if (!silent) {
-        const message = readErrorMessage(error, "?????");
+        const message = readErrorMessage(error, "加载失败");
         if (isColumnMissingError(message, "shot_location")) {
           this.showToastMessage(ALBUM_PHOTO_SHOT_LOCATION_MIGRATION_HINT, "warning");
         } else {
-          this.showToastMessage(`???????${message}`, "warning");
+          this.showToastMessage(`照片加载失败：${message}`, "warning");
         }
       }
       return false;

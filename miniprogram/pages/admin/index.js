@@ -1934,9 +1934,11 @@ Page({
 
   shouldPreserveRuntimeStateOnForegroundReturn() {
     const files = Array.isArray(this.data.galleryUploadFiles) ? this.data.galleryUploadFiles : [];
+    const hasHydratedRuntimeState = !this.data.loading && !this.data.serviceMissing;
     return Boolean(this.data.galleryUploadSubmitting)
       || Boolean(this.data.galleryUploadModalOpen)
-      || files.length > 0;
+      || files.length > 0
+      || hasHydratedRuntimeState;
   },
 
   buildGalleryUploadDraftPayload() {
