@@ -52,7 +52,7 @@
       </view>
 
       <view class="masonry {{right.length === 0 ? 'masonry--single' : ''}} motion-fade-up motion-delay-2" wx:if="{{left.length > 0 || right.length > 0}}">
-        <view class="col">
+        <view class="col gallery-col gallery-col--left">
           <view class="card {{item.story_highlight ? 'card--highlight' : ''}} motion-fade-up" wx:for="{{left}}" wx:key="id" style="animation-delay: {{100 + (index % 8) * 30}}ms;">
             <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
               <block wx:if="{{item.story_open && item.has_story}}">
@@ -64,8 +64,8 @@
                 </view>
               </block>
               <block wx:else>
-                <view data-id="{{item.id}}" bindtap="previewPhoto">
-                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+                <view class="img-box" style="padding-top: {{item.__media_padding_top || '100%'}};" data-id="{{item.id}}" bindtap="previewPhoto">
+                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
                 </view>
               </block>
 
@@ -98,7 +98,7 @@
             </view>
           </view>
         </view>
-        <view class="col">
+        <view class="col gallery-col gallery-col--right">
           <view class="card {{item.story_highlight ? 'card--highlight' : ''}} motion-fade-up" wx:for="{{right}}" wx:key="id" style="animation-delay: {{120 + (index % 8) * 30}}ms;">
             <view class="img-wrap {{item.story_open ? 'img-wrap--story-open' : ''}}" hover-class="img-wrap--active" hover-stay-time="80">
               <block wx:if="{{item.story_open && item.has_story}}">
@@ -110,8 +110,8 @@
                 </view>
               </block>
               <block wx:else>
-                <view data-id="{{item.id}}" bindtap="previewPhoto">
-                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="widthFix" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
+                <view class="img-box" style="padding-top: {{item.__media_padding_top || '100%'}};" data-id="{{item.id}}" bindtap="previewPhoto">
+                  <image class="img" src="{{item.thumbnail_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" data-id="{{item.id}}" />
                 </view>
               </block>
 

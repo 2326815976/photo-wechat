@@ -102,7 +102,7 @@
       </view>
 
       <view class="grid {{rightPhotos.length === 0 ? 'grid--single' : ''}} motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
-        <view class="grid-col">
+        <view class="grid-col album-grid-col album-grid-col--left">
           <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_open && item.has_story}}">
@@ -114,15 +114,16 @@
                 </view>
               </block>
               <block wx:else>
-                <image
-                  wx:if="{{item.card_url_resolved}}"
-                  class="photo-img"
-                  src="{{item.card_url_resolved}}"
-                  mode="widthFix"
-                  lazy-load="{{true}}"
-                  bindload="onPhotoLoad"
-                  data-id="{{item.id}}"
-                />
+                <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                  <image
+                    class="photo-img"
+                    src="{{item.card_url_resolved}}"
+                    mode="aspectFill"
+                    lazy-load="{{true}}"
+                    bindload="onPhotoLoad"
+                    data-id="{{item.id}}"
+                  />
+                </view>
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 
@@ -152,7 +153,7 @@
           </view>
         </view>
 
-        <view class="grid-col">
+        <view class="grid-col album-grid-col album-grid-col--right">
           <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_open && item.has_story}}">
@@ -164,15 +165,16 @@
                 </view>
               </block>
               <block wx:else>
-                <image
-                  wx:if="{{item.card_url_resolved}}"
-                  class="photo-img"
-                  src="{{item.card_url_resolved}}"
-                  mode="widthFix"
-                  lazy-load="{{true}}"
-                  bindload="onPhotoLoad"
-                  data-id="{{item.id}}"
-                />
+                <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                  <image
+                    class="photo-img"
+                    src="{{item.card_url_resolved}}"
+                    mode="aspectFill"
+                    lazy-load="{{true}}"
+                    bindload="onPhotoLoad"
+                    data-id="{{item.id}}"
+                  />
+                </view>
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 

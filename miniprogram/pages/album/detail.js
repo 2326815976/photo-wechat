@@ -3,6 +3,10 @@ const { resolvePublicUrl } = require("../../utils/storage-url");
 const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { getSessionId } = require("../../utils/session");
+const {
+  buildStableWaterfallColumns,
+  shouldResetStableColumnMap,
+} = require("../../utils/stable-waterfall");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "「拾光谣」相册分享";
@@ -116,10 +120,17 @@ function resolveAlbumPhotoListRatios(list, ratioMap) {
   return (Array.isArray(list) ? list : []).map((photo) => {
     const nextRatio = resolveAlbumPhotoRatio(photo, ratioMap);
     const currentRatio = Number(photo && photo.__ratio);
-    if (Math.abs(nextRatio - currentRatio) < 0.001) {
+    const nextPaddingTop = `${nextRatio * 100}%`;
+    if (
+      Math.abs(nextRatio - currentRatio) < 0.001 &&
+      String((photo && photo.__media_padding_top) || "") === nextPaddingTop
+    ) {
       return photo;
     }
-    return Object.assign({}, photo, { __ratio: nextRatio });
+    return Object.assign({}, photo, {
+      __ratio: nextRatio,
+      __media_padding_top: nextPaddingTop,
+    });
   });
 }
 
@@ -159,6 +170,7 @@ function normalizePhoto(photo) {
     story_open: false,
     story_highlight: hasStory || isHighlight,
     __ratio: resolveAlbumPhotoRatio(photo, null),
+    __media_padding_top: `${resolveAlbumPhotoRatio(photo, null) * 100}%`,
     // 列表卡片优先走缩略图，保证清晰度同时降低首屏体积
     card_url_resolved: thumbnailUrl || previewUrl || originalUrl,
     // 全屏查看优先走原图，历史数据回退预览/缩略图
@@ -324,34 +336,15 @@ function computeToolbarStickyTop(safeTop) {
 
 function splitWaterfallColumns(list, options) {
   const ratioMap = options && options.ratioMap ? options.ratioMap : null;
-  const left = Array.isArray(options && options.left) ? options.left.slice() : [];
-  const right = Array.isArray(options && options.right) ? options.right.slice() : [];
-  let leftHeight = Number(options && options.leftHeight);
-  let rightHeight = Number(options && options.rightHeight);
-
-  if (!(leftHeight >= 0)) {
-    leftHeight = left.reduce((total, item) => total + estimateAlbumCardHeight(item, ratioMap), 0);
-  }
-  if (!(rightHeight >= 0)) {
-    rightHeight = right.reduce((total, item) => total + estimateAlbumCardHeight(item, ratioMap), 0);
-  }
-
-  resolveAlbumPhotoListRatios(list, ratioMap).forEach((item) => {
-    const estimatedHeight = estimateAlbumCardHeight(item, ratioMap);
-    if (leftHeight <= rightHeight) {
-      left.push(item);
-      leftHeight += estimatedHeight;
-    } else {
-      right.push(item);
-      rightHeight += estimatedHeight;
-    }
+  const resolvedList = resolveAlbumPhotoListRatios(list, ratioMap);
+  return buildStableWaterfallColumns(resolvedList, {
+    left: options && options.left,
+    right: options && options.right,
+    leftHeight: options && options.leftHeight,
+    rightHeight: options && options.rightHeight,
+    columnMap: options && options.columnMap,
+    estimateHeight: (item) => estimateAlbumCardHeight(item, ratioMap),
   });
-
-  if (left.length === 0 && right.length > 0) {
-    return { left: right.slice(), right: [], leftHeight: rightHeight, rightHeight: 0 };
-  }
-
-  return { left, right, leftHeight, rightHeight };
 }
 
 function resolveAlbumPhotoPagePayload(payload) {
@@ -497,6 +490,7 @@ Page({
   leftHeight: 0,
   rightHeight: 0,
   photoRatioMap: null,
+  photoColumnMap: null,
   relayoutTimer: null,
   photoLoadTicket: 0,
   useLegacyPhotoPaging: false,
@@ -518,6 +512,7 @@ Page({
     this.leftHeight = 0;
     this.rightHeight = 0;
     this.photoRatioMap = Object.create(null);
+    this.photoColumnMap = Object.create(null);
     this.relayoutTimer = null;
     this._lastAlbumAutoLoadAt = 0;
     this._windowHeight = 0;
@@ -831,6 +826,10 @@ Page({
 
   applyWaterfallPhotos(photos, opts) {
     const resolvedPhotos = resolveAlbumPhotoListRatios(photos, this.photoRatioMap);
+    if (Boolean(opts && opts.resetColumnMap) || shouldResetStableColumnMap(this.data.photos || [], resolvedPhotos)) {
+      this.photoColumnMap = Object.create(null);
+    }
+
     if (Boolean(opts && opts.preferAppend) && this.canAppendWaterfall(resolvedPhotos)) {
       const baseLeft = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
       const baseRight = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
@@ -841,19 +840,27 @@ Page({
         leftHeight: this.calculateWaterfallHeight(baseLeft),
         rightHeight: this.calculateWaterfallHeight(baseRight),
         ratioMap: this.photoRatioMap,
+        columnMap: this.photoColumnMap,
       });
-
+      this.photoColumnMap = columns.columnMap || Object.create(null);
       this.leftHeight = columns.leftHeight;
       this.rightHeight = columns.rightHeight;
-      this.setData({
-        photos: resolvedPhotos,
-        leftPhotos: columns.left,
-        rightPhotos: columns.right,
-      }, () => this.refreshSelectionMeta());
+      this.setData(
+        {
+          photos: resolvedPhotos,
+          leftPhotos: columns.left,
+          rightPhotos: columns.right,
+        },
+        () => this.refreshSelectionMeta()
+      );
       return;
     }
 
-    const columns = splitWaterfallColumns(resolvedPhotos, { ratioMap: this.photoRatioMap });
+    const columns = splitWaterfallColumns(resolvedPhotos, {
+      ratioMap: this.photoRatioMap,
+      columnMap: this.photoColumnMap,
+    });
+    this.photoColumnMap = columns.columnMap || Object.create(null);
     this.leftHeight = columns.leftHeight;
     this.rightHeight = columns.rightHeight;
     this.setData(
@@ -877,18 +884,15 @@ Page({
         hasAlbumPhotoRatioDrift(this.data.photos, nextPhotos) ||
         hasAlbumPhotoRatioDrift(this.data.leftPhotos, nextLeftPhotos) ||
         hasAlbumPhotoRatioDrift(this.data.rightPhotos, nextRightPhotos);
-      const nextColumns = shouldSyncVisible
-        ? splitWaterfallColumns(nextPhotos, { ratioMap: this.photoRatioMap })
-        : null;
 
-      this.leftHeight = nextColumns ? nextColumns.leftHeight : this.calculateWaterfallHeight(nextLeftPhotos);
-      this.rightHeight = nextColumns ? nextColumns.rightHeight : this.calculateWaterfallHeight(nextRightPhotos);
+      this.leftHeight = this.calculateWaterfallHeight(nextLeftPhotos);
+      this.rightHeight = this.calculateWaterfallHeight(nextRightPhotos);
 
       if (!shouldSyncVisible) return;
       this.setData({
         photos: nextPhotos,
-        leftPhotos: nextColumns.left,
-        rightPhotos: nextColumns.right,
+        leftPhotos: nextLeftPhotos,
+        rightPhotos: nextRightPhotos,
       });
     }, ALBUM_SOFT_RELAYOUT_DELAY);
   },
@@ -918,6 +922,14 @@ Page({
     }
 
     this.photoRatioMap[id] = ratio;
+    const current = this.findPhotoById(id);
+    if (!current) return;
+
+    const currentRatio = Number(current.__ratio || 0);
+    if (currentRatio > 0 && Math.abs(currentRatio - ratio) < 0.08) {
+      return;
+    }
+
     this.scheduleRelayout();
   },
 
@@ -1284,6 +1296,7 @@ Page({
         this.leftHeight = 0;
         this.rightHeight = 0;
         this.photoRatioMap = Object.create(null);
+        this.photoColumnMap = Object.create(null);
         this.setData(
           {
             album: normalizedAlbum,
@@ -1374,6 +1387,7 @@ Page({
     this.leftHeight = 0;
     this.rightHeight = 0;
     this.photoRatioMap = Object.create(null);
+    this.photoColumnMap = Object.create(null);
     this.setData({
       selectedFolder: id,
       loading: true,
