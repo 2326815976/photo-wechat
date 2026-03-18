@@ -4475,7 +4475,9 @@ Page({
       const result = await runAdminMaintenanceTasks();
       const cleanup = result && result.cleanup_result ? result.cleanup_result : {};
       const deletedPhotos = Number(cleanup.deleted_photos || 0);
+      const deletedFolders = Number(cleanup.deleted_folders || 0);
       const deletedAlbums = Number(cleanup.deleted_albums || 0);
+      const deletedStorageFiles = Number(cleanup.deleted_storage_files || 0);
       const cleanedSessions = Number(result && result.sessions_cleaned ? result.sessions_cleaned : 0);
       const cleanedIpAttempts = Number(result && result.ip_attempts_cleaned ? result.ip_attempts_cleaned : 0);
       const cleanedBetaBindings = Number(
@@ -4486,7 +4488,51 @@ Page({
         result && result.password_reset_tokens_cleaned ? result.password_reset_tokens_cleaned : 0
       );
       const cleanedActiveLogs = Number(result && result.user_active_logs_cleaned ? result.user_active_logs_cleaned : 0);
-      const maintenanceSummary = `清理照片${deletedPhotos}张，清理相册${deletedAlbums}个，会话${cleanedSessions}条，IP尝试${cleanedIpAttempts}条，浏览历史${cleanedPhotoViews}条，内测绑定${cleanedBetaBindings}条，重置令牌${cleanedResetTokens}条，活跃日志${cleanedActiveLogs}条`;
+      const cleanedCaptchaChallenges = Number(
+        result && result.slider_captcha_challenges_cleaned ? result.slider_captcha_challenges_cleaned : 0
+      );
+      const cleanedBlackouts = Number(result && result.booking_blackouts_cleaned ? result.booking_blackouts_cleaned : 0);
+      const cleanedAnalyticsDaily = Number(result && result.analytics_daily_cleaned ? result.analytics_daily_cleaned : 0);
+      const warningList = Array.isArray(cleanup.storage_cleanup_warnings)
+        ? cleanup.storage_cleanup_warnings.filter((item) => String(item || "").trim() !== "")
+        : [];
+      const skippedTasks = Array.isArray(result && result.skipped_tasks)
+        ? result.skipped_tasks.filter((item) => String(item || "").trim() !== "")
+        : [];
+      const taskLabelMap = {
+        beta_feature_bindings_cleanup: "内测功能绑定清理",
+        slider_captcha_challenges_cleanup: "滑块验证记录清理",
+        booking_blackouts_cleanup: "预约屏蔽日期清理",
+        analytics_daily_cleanup: "每日统计清理",
+        analytics_snapshot_update: "统计快照更新",
+      };
+      const skippedTaskLabels = skippedTasks.map((task) => taskLabelMap[task] || task);
+      const summaryParts = [
+        `清理照片${deletedPhotos}张`,
+        `清理文件夹${deletedFolders}个`,
+        `清理相册${deletedAlbums}个`,
+        `清理存储文件${deletedStorageFiles}个`,
+        `清理会话${cleanedSessions}条`,
+        `清理 IP 尝试${cleanedIpAttempts}条`,
+        `清理浏览记录${cleanedPhotoViews}条`,
+        `清理内测绑定${cleanedBetaBindings}条`,
+        `清理重置令牌${cleanedResetTokens}条`,
+        `清理活跃日志${cleanedActiveLogs}条`,
+        `清理滑块验证${cleanedCaptchaChallenges}条`,
+        `清理预约屏蔽日期${cleanedBlackouts}条`,
+        `清理每日统计${cleanedAnalyticsDaily}条`,
+      ];
+      const extraParts = [];
+      if (warningList.length > 0) {
+        extraParts.push(`存储清理告警：${warningList.join("；")}`);
+      }
+      if (skippedTaskLabels.length > 0) {
+        extraParts.push(`跳过任务：${skippedTaskLabels.join("、")}`);
+      }
+      const maintenanceSummary = summaryParts.join("，");
+      const maintenanceMessage = extraParts.length > 0
+        ? `${maintenanceSummary}；${extraParts.join("；")}`
+        : maintenanceSummary;
       const refreshResults = await Promise.all(
         [
           this.loadStats(),
@@ -4515,10 +4561,10 @@ Page({
         const firstMessage = readErrorMessage(firstReason, "数据刷新失败");
         this.showNotice(
           "warning",
-          `维护已完成：${maintenanceSummary}；但有 ${failedRefresh.length} 项数据刷新失败（${firstMessage}）`
+          `维护已完成：${maintenanceMessage}；但有 ${failedRefresh.length} 项数据刷新失败（${firstMessage}）`
         );
       } else {
-        this.showNotice("success", `维护完成：${maintenanceSummary}`);
+        this.showNotice("success", `维护完成：${maintenanceMessage}`);
       }
     } catch (error) {
       this.showNotice("error", readErrorMessage(error, "维护任务执行失败"));

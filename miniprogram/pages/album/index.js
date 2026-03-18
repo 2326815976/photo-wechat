@@ -186,6 +186,8 @@ Page({
   },
 
   onLoad() {
+    this._albumListBootstrapped = false;
+    this._lastSeenAppEnterSeq = 0;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -223,6 +225,10 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     if (app && typeof app.ensureAuditConfig === "function") {
       try {
         await app.ensureAuditConfig();
@@ -257,6 +263,14 @@ Page({
         backendReady: nextBackendReady,
         backendReconnecting: nextBackendReconnecting,
       });
+      if (
+        hasNewAppEntry &&
+        this._albumListBootstrapped &&
+        !this.data.pageLoading &&
+        !nextBackendReconnecting
+      ) {
+        return;
+      }
       this.loadUserData();
     } else {
       this.setData({ pageLoading: false });
@@ -393,6 +407,8 @@ Page({
           : "⚠️ 会话校验失败，请稍后重试"
       );
       this.setData({ pageLoading: false, isLoggedIn: false, boundAlbums: [] });
+    } finally {
+      this._albumListBootstrapped = true;
     }
   },
 

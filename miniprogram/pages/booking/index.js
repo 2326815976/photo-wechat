@@ -316,6 +316,8 @@ Page({
   },
 
   onLoad() {
+    this._bookingPageBootstrapped = false;
+    this._lastSeenAppEnterSeq = 0;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -332,6 +334,10 @@ Page({
   async onShow() {
     this.setTabBarVisible(true);
     const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     if (app && typeof app.ensureAuditConfig === "function") {
       try {
         await app.ensureAuditConfig();
@@ -348,6 +354,9 @@ Page({
 
     this.syncTabBar("pages/booking/index");
     if (!this.data.serviceMissing) {
+      if (hasNewAppEntry && this._bookingPageBootstrapped && !this.data.loading) {
+        return;
+      }
       await this.checkLoginAndLoad();
     }
   },
@@ -413,9 +422,11 @@ Page({
         this.loadBookingTypes(),
         this.loadAllowedCities(),
         this.loadBlockedDates({ forceFresh: true }),
-      ]).catch(
-        () => {}
-      );
+      ])
+        .catch(() => {})
+        .finally(() => {
+          this._bookingPageBootstrapped = true;
+        });
       return;
     }
 
@@ -429,6 +440,7 @@ Page({
       ]);
     } finally {
       this.setData({ loading: false });
+      this._bookingPageBootstrapped = true;
     }
   },
 

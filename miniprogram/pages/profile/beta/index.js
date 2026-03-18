@@ -231,6 +231,8 @@ Page({
   },
 
   onLoad() {
+    this._betaFeatureBootstrapped = false;
+    this._lastSeenAppEnterSeq = 0;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     this.setData({
@@ -240,6 +242,14 @@ Page({
   },
 
   onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+    if (hasNewAppEntry && this._betaFeatureBootstrapped && !this.data.loading) {
+      return;
+    }
     this.bootstrap();
   },
 
@@ -282,6 +292,8 @@ Page({
         title: toErrorMessage(error, "加载内测功能失败"),
         icon: "none",
       });
+    } finally {
+      this._betaFeatureBootstrapped = true;
     }
   },
 

@@ -501,6 +501,7 @@ Page({
   photoLoadTicket: 0,
   useLegacyPhotoPaging: false,
   legacyPhotosByFolder: null,
+  fullPhotosByFolder: null,
   _lastAlbumAutoLoadAt: 0,
   _windowHeight: 0,
 
@@ -513,6 +514,7 @@ Page({
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
+    this.fullPhotosByFolder = Object.create(null);
     this.leftHeight = 0;
     this.rightHeight = 0;
     this.photoRatioMap = Object.create(null);
@@ -1144,12 +1146,48 @@ Page({
     return (this.data.allPhotos || []).find((x) => String(x.id) === String(id)) || null;
   },
 
+  getCachedFullPhotosForFolder(folderId) {
+    const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    const currentFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
+    const currentRows = Array.isArray(this.data.allPhotos) ? this.data.allPhotos : [];
+    const total = Math.max(0, Number(this.data.total || 0));
+    if (
+      targetFolderId === currentFolderId &&
+      !this.data.hasMore &&
+      currentRows.length > 0 &&
+      (!total || currentRows.length >= total)
+    ) {
+      return currentRows.slice();
+    }
+    if (!this.fullPhotosByFolder) {
+      return [];
+    }
+    const cachedRows = this.fullPhotosByFolder[targetFolderId];
+    return Array.isArray(cachedRows) ? cachedRows.slice() : [];
+  },
+
+  cacheFullPhotosForFolder(folderId, rows) {
+    const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    if (!targetFolderId) return;
+    if (!this.fullPhotosByFolder) {
+      this.fullPhotosByFolder = Object.create(null);
+    }
+    this.fullPhotosByFolder[targetFolderId] = Array.isArray(rows) ? rows.slice() : [];
+  },
+
+  clearCachedFullPhotosForFolder(folderId) {
+    const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    if (!targetFolderId || !this.fullPhotosByFolder) return;
+    delete this.fullPhotosByFolder[targetFolderId];
+  },
+
   async loadAlbum() {
     this.setData({ loading: true, loadingMore: false });
     const loadTicket = this.photoLoadTicket + 1;
     this.photoLoadTicket = loadTicket;
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
+    this.fullPhotosByFolder = Object.create(null);
     try {
       const app = typeof getApp === "function" ? getApp() : null;
       let effectiveHideAudit = Boolean(this.data.hideAudit);
@@ -1373,6 +1411,10 @@ Page({
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const nextPageNo = toPageNumber(pageNo, 1);
 
+    if (reset) {
+      this.clearCachedFullPhotosForFolder(targetFolderId);
+    }
+
     if (!reset && this.data.loadingMore) return;
     if (!reset && !this.data.hasMore) return;
 
@@ -1447,6 +1489,9 @@ Page({
           : normalizedRows.length >= PHOTO_PAGE_SIZE
         : hasMoreFromPayload;
       const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
+      if (!hasMore) {
+        this.cacheFullPhotosForFolder(targetFolderId, mergedRows);
+      }
 
       this.setData(
         {
@@ -1488,6 +1533,10 @@ Page({
     const nextPageNo = toPageNumber(pageNo, 1);
 
     if (reset) {
+      this.clearCachedFullPhotosForFolder(targetFolderId);
+    }
+
+    if (reset) {
       if (!silent) {
         this.setData({ loading: true, loadingMore: false });
       }
@@ -1526,6 +1575,7 @@ Page({
         const allRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
         fullRows = filterPhotosByFolder(allRows, targetFolderId);
         this.legacyPhotosByFolder[targetFolderId] = fullRows;
+      this.cacheFullPhotosForFolder(targetFolderId, fullRows);
       }
 
       if (ticket !== this.photoLoadTicket) return;
@@ -1538,6 +1588,7 @@ Page({
       const total = Array.isArray(fullRows) ? fullRows.length : 0;
       const hasMore = mergedRows.length < total;
       const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
+      this.cacheFullPhotosForFolder(targetFolderId, fullRows);
 
       this.setData(
         {
@@ -1733,6 +1784,10 @@ Page({
 
   async loadAllPhotosForFolderLegacy(folderId) {
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    const cachedRows = this.getCachedFullPhotosForFolder(targetFolderId);
+    if (cachedRows.length > 0) {
+      return cachedRows;
+    }
 
     if (!this.legacyPhotosByFolder) {
       this.legacyPhotosByFolder = Object.create(null);
@@ -1759,6 +1814,7 @@ Page({
       const allRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
       fullRows = filterPhotosByFolder(allRows, targetFolderId);
       this.legacyPhotosByFolder[targetFolderId] = fullRows;
+      this.cacheFullPhotosForFolder(targetFolderId, fullRows);
     }
 
     return Array.isArray(fullRows) ? fullRows.slice() : [];
@@ -1766,6 +1822,10 @@ Page({
 
   async loadAllPhotosForFolder(folderId) {
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    const cachedRows = this.getCachedFullPhotosForFolder(targetFolderId);
+    if (cachedRows.length > 0) {
+      return cachedRows;
+    }
     if (this.useLegacyPhotoPaging) {
       return this.loadAllPhotosForFolderLegacy(targetFolderId);
     }
@@ -1827,7 +1887,8 @@ Page({
       }
     }
 
-    return rows;
+    this.cacheFullPhotosForFolder(targetFolderId, rows);
+    return rows.slice();
   },
 
   async ensureAlbumWritePermission() {
@@ -1908,9 +1969,15 @@ Page({
     if (!id) return;
 
     try {
-      const r = await dbRpc("increment_photo_download", {
-        p_photo_id: id,
-      });
+      const r = await dbRpc(
+        "increment_photo_download",
+        {
+          p_photo_id: id,
+        },
+        {
+          disableBackendRecovery: true,
+        }
+      );
       if (r && r.error) {
         return;
       }
@@ -2081,6 +2148,9 @@ Page({
         () => this.applyFilter()
       );
 
+      this.legacyPhotosByFolder = Object.create(null);
+      this.fullPhotosByFolder = Object.create(null);
+
       if (hasPublicDeleted) {
         markGalleryCacheDirty();
       }
@@ -2102,35 +2172,66 @@ Page({
     }
   },
 
-  openPhotoFullscreen(e) {
+  async openPhotoFullscreen(e) {
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
         : "";
     if (!id) return;
 
-    const list = this.data.photos || [];
-    const images = list.map((p) => p.fullscreen_url_resolved).filter(Boolean);
-    if (images.length === 0) {
+    const visibleRows = Array.isArray(this.data.photos) ? this.data.photos : [];
+    const target = visibleRows.find((item) => String(item.id) === id) || this.findPhotoById(id);
+    if (!target) return;
+
+    const targetFolderId = target.folder_id ? String(target.folder_id) : ROOT_FOLDER_ID;
+    let previewRows = this.getCachedFullPhotosForFolder(targetFolderId);
+    let loadingShown = false;
+
+    if (previewRows.length === 0) {
+      try {
+        if (this.data.hasMore || Math.max(0, Number(this.data.total || 0)) > visibleRows.length) {
+          wx.showLoading({ title: "正在准备全部照片...", mask: true });
+          loadingShown = true;
+        }
+      } catch (error) {
+        loadingShown = false;
+      }
+
+      try {
+        previewRows = await this.loadAllPhotosForFolder(targetFolderId);
+      } catch (error) {
+        previewRows = Array.isArray(this.data.allPhotos) && this.data.allPhotos.length > 0
+          ? this.data.allPhotos.slice()
+          : visibleRows.slice();
+      } finally {
+        if (loadingShown) {
+          try {
+            wx.hideLoading();
+          } catch (error) {
+            // ignore hide loading error
+          }
+        }
+      }
+    }
+
+    const previewableRows = (Array.isArray(previewRows) ? previewRows : []).filter((item) => Boolean(item && item.fullscreen_url_resolved));
+    if (previewableRows.length === 0) {
       this.showToast("原图暂不可用", "error", 2200);
       return;
     }
 
-    const target = list.find((p) => String(p.id) === id);
-    if (!target) return;
-
-    const currentUrl = target.fullscreen_url_resolved;
-    if (!currentUrl) {
+    const currentIndex = Math.max(0, previewableRows.findIndex((item) => String(item.id) === id));
+    const currentRow = previewableRows[currentIndex] || previewableRows[0];
+    if (!currentRow || !currentRow.fullscreen_url_resolved) {
       this.showToast("该照片原图暂不可用", "error", 2200);
       return;
     }
 
-    const idx = Math.max(0, images.findIndex((x) => String(x) === String(currentUrl)));
     void this.incrementPhotoViewCount(id);
     this.markTransientForegroundReturn();
     wx.previewImage({
-      current: images[idx],
-      urls: images,
+      current: currentRow.fullscreen_url_resolved,
+      urls: previewableRows.map((item) => item.fullscreen_url_resolved),
     });
   },
 

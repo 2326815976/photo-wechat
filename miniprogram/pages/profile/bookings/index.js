@@ -72,6 +72,8 @@ Page({
   },
 
   async onLoad() {
+    this._profileBookingsBootstrapped = false;
+    this._lastSeenAppEnterSeq = 0;
     const blocked = await this.syncAuditAccess();
     if (blocked) {
       return;
@@ -91,12 +93,20 @@ Page({
   },
 
   async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     const blocked = await this.syncAuditAccess();
     if (blocked) {
       return;
     }
 
     if (!this.data.serviceMissing) {
+      if (hasNewAppEntry && this._profileBookingsBootstrapped && !this.data.loading) {
+        return;
+      }
       this.loadBookings();
     }
   },
@@ -286,6 +296,8 @@ Page({
       this.setData({ loading: false, currentUserId, bookings });
     } catch (e) {
       this.setData({ loading: false, currentUserId: "", bookings: [] });
+    } finally {
+      this._profileBookingsBootstrapped = true;
     }
   },
 

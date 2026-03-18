@@ -202,14 +202,24 @@ Page({
   },
 
   onLoad() {
+    this._betaAdminBootstrapped = false;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
+    this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this.setData({
       safeTop: Number(globalData.statusBarHeight || 0),
     });
   },
 
   onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+    if (hasNewAppEntry && this._betaAdminBootstrapped && !this.data.loading) {
+      return;
+    }
     this.bootstrap();
   },
 
@@ -234,6 +244,7 @@ Page({
       });
     } finally {
       this.setData({ loading: false });
+      this._betaAdminBootstrapped = true;
     }
   },
 

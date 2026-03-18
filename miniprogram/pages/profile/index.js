@@ -162,6 +162,8 @@ Page({
   },
 
   onLoad() {
+    this._profilePageBootstrapped = false;
+    this._lastSeenAppEnterSeq = 0;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -193,6 +195,10 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     if (app && typeof app.ensureAuditConfig === "function") {
       try {
         await app.ensureAuditConfig();
@@ -208,6 +214,9 @@ Page({
     this.initAuditLegalDocuments(hideAudit);
 
     this.syncTabBar("pages/profile/index");
+    if (hasNewAppEntry && this._profilePageBootstrapped && !this.data.loading) {
+      return;
+    }
     this.refreshCurrentModeData();
   },
 
@@ -529,6 +538,8 @@ Page({
       if (this.data.hideAudit) {
         this.loadAbout();
       }
+    } finally {
+      this._profilePageBootstrapped = true;
     }
   },
 

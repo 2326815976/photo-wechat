@@ -166,15 +166,21 @@ function normalizeTransientPayload(payload, fallbackCount) {
   };
 }
 
-async function requestDbEndpoint(path, payloadBuilder) {
+async function requestDbEndpoint(path, payloadBuilder, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  const maxRetryTimes = Boolean(opts.disableTransientRetry) ? 0 : TRANSIENT_DB_RETRY_TIMES;
   let lastTransientResult = null;
 
-  for (let attempt = 0; attempt <= TRANSIENT_DB_RETRY_TIMES; attempt += 1) {
+  for (let attempt = 0; attempt <= maxRetryTimes; attempt += 1) {
     try {
-      const payload = await requestJson(path, payloadBuilder());
+      const requestInit = Object.assign({}, payloadBuilder());
+      if (opts.disableBackendRecovery) {
+        requestInit.disableBackendRecovery = true;
+      }
+      const payload = await requestJson(path, requestInit);
       if (isTransientBackendFailure(payload)) {
         lastTransientResult = payload;
-        if (attempt < TRANSIENT_DB_RETRY_TIMES) {
+        if (attempt < maxRetryTimes) {
           await wait(TRANSIENT_DB_RETRY_DELAY_MS * (attempt + 1));
           continue;
         }
@@ -185,7 +191,7 @@ async function requestDbEndpoint(path, payloadBuilder) {
       if (!isTransientBackendFailure(error)) {
         throw error;
       }
-      if (attempt < TRANSIENT_DB_RETRY_TIMES) {
+      if (attempt < maxRetryTimes) {
         await wait(TRANSIENT_DB_RETRY_DELAY_MS * (attempt + 1));
         continue;
       }
@@ -261,14 +267,22 @@ async function dbQuery(payload) {
   }));
 }
 
-async function dbRpc(functionName, args) {
-  return requestDbEndpoint("/api/db/rpc", () => ({
-    method: "POST",
-    data: {
-      functionName,
-      args: args || {},
-    },
-  }));
+async function dbRpc(functionName, args, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  return requestDbEndpoint(
+    "/api/db/rpc",
+    () => ({
+      method: "POST",
+      data: {
+        functionName,
+        args: args || {},
+      },
+    }),
+    {
+      disableTransientRetry: Boolean(opts.disableTransientRetry),
+      disableBackendRecovery: Boolean(opts.disableBackendRecovery),
+    }
+  );
 }
 
 function clearSessionCache() {

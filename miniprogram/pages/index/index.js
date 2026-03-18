@@ -145,6 +145,7 @@ Page({
     const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
     this.betaPoseBypassAllowed = this.consumeBetaPoseBypass();
     this.homeBootstrapped = false;
+    this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this.setData({
       safeTop,
       tagbarStickyTop: computeTagbarStickyTop(safeTop),
@@ -212,6 +213,10 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const isForegroundReturn = appEnterSeq > lastSeenAppEnterSeq;
+    this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     const bypassFromToken = this.consumeBetaPoseBypass();
     if (bypassFromToken) {
       this.betaPoseBypassAllowed = true;
@@ -274,7 +279,7 @@ Page({
       this.startShake();
     }
 
-    const skipSoftRefresh = this.consumeSuppressRefreshOnShow();
+    const skipSoftRefresh = this.consumeSuppressRefreshOnShow() || (isForegroundReturn && this.homeBootstrapped && !nextBackendReconnecting);
     if (!this.data.serviceMissing) {
       if (!skipSoftRefresh) {
         this.refreshTags({ force: false });
