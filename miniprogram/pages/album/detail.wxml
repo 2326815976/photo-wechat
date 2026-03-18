@@ -1,7 +1,9 @@
-<view class="page">
+﻿<view class="page">
   <app-header
+    id="albumHeader"
+    class="album-header-host"
     title="{{headerTitle}}"
-    subtitle="{{hideAudit ? '✨ 趁图片消失前，及时保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
+    subtitle="{{hideAudit ? '鉁?瓒佸浘鐗囨秷澶卞墠锛屽強鏃朵繚瀛?鉁? : '鉁?瓒侀瓟娉曟秷澶卞墠锛屾妸缇庡ソ瀹氭牸 鉁?}}"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="{{hideAudit ? 'pages/gallery/index' : 'pages/album/index'}}"
@@ -10,8 +12,8 @@
 
   <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">需要配置云托管服务名</text>
-      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+      <text class="config-tip__title">闇€瑕侀厤缃簯鎵樼鏈嶅姟鍚?/text>
+      <text class="config-tip__desc">璇峰湪 miniprogram/config.js 涓～鍐?cloudRunService锛堢敤浜?X-WX-SERVICE锛?/text>
     </view>
 
     <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
@@ -23,8 +25,8 @@
         </view>
       </view>
       <view class="loading-text">
-        <text class="loading-title">{{backendReconnecting ? '拾光中...' : '时光中...'}}</text>
-        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在为你打开专属回忆'}}</text>
+        <text class="loading-title">{{backendReconnecting ? '鎷惧厜涓?..' : '鏃跺厜涓?..'}}</text>
+        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在为你打开相册'}}</text>
       </view>
     </view>
 
@@ -37,14 +39,14 @@
           </view>
         </view>
         <view class="notice-close" hover-class="notice-close--active" bindtap="hideNotice">
-          <text class="notice-close-char">×</text>
+          <text class="notice-close-char">脳</text>
         </view>
       </view>
 
       <view class="toolbar motion-fade-up motion-delay-3" style="top: {{toolbarStickyTop}}px;">
         <view class="toolbar-folders-wrap {{showFolderGuide ? 'toolbar-folders-wrap--with-guide' : ''}}">
           <view class="folder-guide-tip motion-pop-in" wx:if="{{showFolderGuide}}" bindtap="dismissFolderGuide">
-            <text class="folder-guide-tip__text">左右滑动 / 点击标签可切换</text>
+            <text class="folder-guide-tip__text">宸﹀彸婊戝姩 / 鐐瑰嚮鏍囩鍙垏鎹?/text>
             <view class="folder-guide-tip__arrow"></view>
           </view>
 
@@ -72,7 +74,7 @@
               src="{{isSelectAll ? '/images/icons/check-square-brown.svg' : '/images/icons/square-muted.svg'}}"
               mode="aspectFit"
             />
-            <text>全选</text>
+            <text>鍏ㄩ€?/text>
           </button>
 
           <button
@@ -82,8 +84,8 @@
             disabled="{{batchLoading}}"
           >
             <image class="tool-icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
-            <text wx:if="{{selectedCount > 0}}">下载</text>
-            <text wx:else>全部下载</text>
+            <text wx:if="{{selectedCount > 0}}">涓嬭浇</text>
+            <text wx:else>鍏ㄩ儴涓嬭浇</text>
             <text class="tool-badge" wx:if="{{selectedCount > 0}}">{{selectedCount > 99 ? '99+' : selectedCount}}</text>
           </button>
 
@@ -106,7 +108,7 @@
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
                   <view class="photo-story-panel__paper">
-                    <text class="photo-story-panel__title">关于此刻</text>
+                    <text class="photo-story-panel__title">鍏充簬姝ゅ埢</text>
                     <text class="photo-story-panel__text">{{item.story_text}}</text>
                   </view>
                 </view>
@@ -118,6 +120,8 @@
                   src="{{item.card_url_resolved}}"
                   mode="widthFix"
                   lazy-load="{{true}}"
+                  bindload="onPhotoLoad"
+                  data-id="{{item.id}}"
                 />
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
@@ -129,12 +133,12 @@
                 data-id="{{item.id}}"
               >
                 <view class="select-badge-core">
-                  <text class="select-badge-check" wx:if="{{item._selected}}">✓</text>
+                  <text class="select-badge-check" wx:if="{{item._selected}}">鉁?/text>
                 </view>
               </view>
 
               <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
-                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">鈫?/text>
               </view>
 
             </view>
@@ -142,7 +146,7 @@
             <view class="photo-actions" wx:if="{{!hideAudit}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                <text>{{item.is_public ? '已定格' : '定格'}}</text>
+                <text>{{item.is_public ? '宸插畾鏍? : '瀹氭牸'}}</text>
               </button>
             </view>
           </view>
@@ -154,7 +158,7 @@
               <block wx:if="{{item.story_open && item.has_story}}">
                 <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
                   <view class="photo-story-panel__paper">
-                    <text class="photo-story-panel__title">关于此刻</text>
+                    <text class="photo-story-panel__title">鍏充簬姝ゅ埢</text>
                     <text class="photo-story-panel__text">{{item.story_text}}</text>
                   </view>
                 </view>
@@ -166,6 +170,8 @@
                   src="{{item.card_url_resolved}}"
                   mode="widthFix"
                   lazy-load="{{true}}"
+                  bindload="onPhotoLoad"
+                  data-id="{{item.id}}"
                 />
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
@@ -177,12 +183,12 @@
                 data-id="{{item.id}}"
               >
                 <view class="select-badge-core">
-                  <text class="select-badge-check" wx:if="{{item._selected}}">✓</text>
+                  <text class="select-badge-check" wx:if="{{item._selected}}">鉁?/text>
                 </view>
               </view>
 
               <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
-                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">鈫?/text>
               </view>
 
             </view>
@@ -190,7 +196,7 @@
             <view class="photo-actions" wx:if="{{!hideAudit}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                <text>{{item.is_public ? '已定格' : '定格'}}</text>
+                <text>{{item.is_public ? '宸插畾鏍? : '瀹氭牸'}}</text>
               </button>
             </view>
           </view>
@@ -198,22 +204,22 @@
       </view>
 
       <view class="empty motion-fade-up motion-delay-5" wx:if="{{photos.length === 0}}">
-        <text class="empty-text">暂无照片</text>
+        <text class="empty-text">鏆傛棤鐓х墖</text>
       </view>
 
       <view class="donation-entry motion-fade-up motion-delay-6" wx:if="{{album.enable_tipping && album.donation_qr_code_url}}">
         <button class="donation-btn" hover-class="donation-btn--active" bindtap="openDonationModal">
           <image class="donation-icon" src="/images/icons/heart-orange.svg" mode="aspectFit" />
-          <text>留下一份心意</text>
+          <text>鐣欎笅涓€浠藉績鎰?/text>
         </button>
       </view>
 
       <view class="more" wx:if="{{loadingMore}}">
         <view class="small-spinner"></view>
-        <text class="more-text">拾光中...</text>
+        <text class="more-text">鎷惧厜涓?..</text>
       </view>
       <view class="end" wx:if="{{!hasMore && photos.length > 0}}">
-        <text class="end-text">✨ 已经到底啦 ✨</text>
+        <text class="end-text">鉁?宸茬粡鍒板簳鍟?鉁?/text>
       </view>
     </view>
   </view>
@@ -224,16 +230,14 @@
       <view class="confirm-icon-wrap">
         <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
       </view>
-      <text class="confirm-title">✨ 施展定格魔法？</text>
+      <text class="confirm-title">鉁?鏂藉睍瀹氭牸榄旀硶锛?/text>
       <text class="confirm-text">
-        魔法生效后，这张照片就会飞到 <text class="confirm-highlight">【照片墙】</text> 上，和更多人分享这份美好！📸
-        这样它就有了 <text class="confirm-highlight">【永恒】</text> 的魔法加持，打破 {{expiryDays}} 天消失的魔咒，永远在这里闪闪发光啦~ ✨
-      </text>
-      <text class="confirm-tip">💡 Tips：如果改变主意，可以随时再次点击让魔法失效，照片会回到专属空间继续 {{expiryDays}} 天倒计时哦~</text>
+        榄旀硶鐢熸晥鍚庯紝杩欏紶鐓х墖灏变細椋炲埌 <text class="confirm-highlight">銆愮収鐗囧銆?/text> 涓婏紝鍜屾洿澶氫汉鍒嗕韩杩欎唤缇庡ソ锛侌煋?        杩欐牱瀹冨氨鏈変簡 <text class="confirm-highlight">銆愭案鎭掋€?/text> 鐨勯瓟娉曞姞鎸侊紝鎵撶牬 {{expiryDays}} 澶╂秷澶辩殑榄斿拻锛屾案杩滃湪杩欓噷闂棯鍙戝厜鍟 鉁?      </text>
+      <text class="confirm-tip">馃挕 Tips锛氬鏋滄敼鍙樹富鎰忥紝鍙互闅忔椂鍐嶆鐐瑰嚮璁╅瓟娉曞け鏁堬紝鐓х墖浼氬洖鍒颁笓灞炵┖闂寸户缁?{{expiryDays}} 澶╁€掕鏃跺摝~</text>
 
       <view class="confirm-actions">
-      <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closePinConfirm">再想想</button>
-      <button class="confirm-btn confirm-btn--primary" hover-class="confirm-btn--primary-active" bindtap="confirmPin">✨ 确认定格</button>
+      <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closePinConfirm">鍐嶆兂鎯?/button>
+      <button class="confirm-btn confirm-btn--primary" hover-class="confirm-btn--primary-active" bindtap="confirmPin">鉁?纭瀹氭牸</button>
       </view>
     </view>
   </view>
@@ -244,12 +248,12 @@
       <view class="confirm-icon-wrap confirm-icon-wrap--danger">
         <image class="confirm-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
       </view>
-      <text class="confirm-title">确定要删除吗？</text>
-      <text class="confirm-text">你即将删除 {{selectedCount}} 张照片，此操作不可撤销。</text>
+      <text class="confirm-title">纭畾瑕佸垹闄ゅ悧锛?/text>
+      <text class="confirm-text">浣犲嵆灏嗗垹闄?{{selectedCount}} 寮犵収鐗囷紝姝ゆ搷浣滀笉鍙挙閿€銆?/text>
 
       <view class="confirm-actions">
-        <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closeDeleteConfirm">取消</button>
-        <button class="confirm-btn confirm-btn--danger" hover-class="confirm-btn--danger-active" bindtap="confirmBatchDelete">确认删除</button>
+        <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closeDeleteConfirm">鍙栨秷</button>
+        <button class="confirm-btn confirm-btn--danger" hover-class="confirm-btn--danger-active" bindtap="confirmBatchDelete">纭鍒犻櫎</button>
       </view>
     </view>
   </view>
@@ -270,10 +274,10 @@
     </view>
   </view>
 
-  <!-- Web 同款：拆信交互（信封 -> 信纸） -->
+  <!-- Web 鍚屾锛氭媶淇′氦浜掞紙淇″皝 -> 淇＄焊锛?-->
   <view class="letter-mask motion-fade-in" wx:if="{{showWelcomeLetter}}" bindtap="onLetterMaskTap"></view>
   <view class="letter-modal motion-fade-in" wx:if="{{showWelcomeLetter}}">
-    <!-- 信封阶段 -->
+    <!-- 淇″皝闃舵 -->
     <view class="envelope-wrap" wx:if="{{letterStage === 'envelope'}}" catchtap="noop">
       <view class="envelope-float">
         <view class="envelope-card">
@@ -283,16 +287,16 @@
           <view class="envelope-flap"></view>
 
           <view class="envelope-stamp">
-            <text class="envelope-stamp-emoji">📷</text>
+            <text class="envelope-stamp-emoji">馃摲</text>
           </view>
           <view class="envelope-postmark"></view>
 
           <view class="envelope-to">
-            <text class="envelope-to-text">To: {{album.recipient_name || '拾光者'}}</text>
+            <text class="envelope-to-text">To: {{album.recipient_name || '鎷惧厜鑰?}}</text>
             <view class="envelope-to-line"></view>
           </view>
 
-          <text class="envelope-sticker">✨</text>
+          <text class="envelope-sticker">鉁?/text>
         </view>
 
       <view class="seal" hover-class="seal--active" bindtap="onOpenLetter">
@@ -301,16 +305,16 @@
         </view>
       </view>
 
-        <text class="envelope-hint">轻触拆封解锁相册</text>
+        <text class="envelope-hint">杞昏Е鎷嗗皝瑙ｉ攣鐩稿唽</text>
       </view>
     </view>
 
-    <!-- 打开过渡 -->
+    <!-- 鎵撳紑杩囨浮 -->
     <view class="opening-wrap" wx:if="{{letterStage === 'opening'}}" catchtap="noop">
       <view class="opening-card"></view>
     </view>
 
-    <!-- 信纸阶段（含关闭动画） -->
+    <!-- 淇＄焊闃舵锛堝惈鍏抽棴鍔ㄧ敾锛?-->
     <view
       class="paper-card {{letterStage === 'closing' ? 'paper-card--closing' : 'paper-card--open'}}"
       wx:if="{{letterStage === 'letter' || letterStage === 'closing'}}"
@@ -329,11 +333,12 @@
   <view class="modal-mask motion-fade-in" wx:if="{{showDonationModal}}" bindtap="closeDonationModal"></view>
   <view class="confirm-modal motion-fade-in" wx:if="{{showDonationModal}}">
     <view class="donation-card motion-pop-in" catchtap="noop">
-      <text class="donation-title">感谢你的心意</text>
-      <text class="donation-desc">长按二维码保存后，可在微信扫码赞赏</text>
+      <text class="donation-title">鎰熻阿浣犵殑蹇冩剰</text>
+      <text class="donation-desc">闀挎寜浜岀淮鐮佷繚瀛樺悗锛屽彲鍦ㄥ井淇℃壂鐮佽禐璧?/text>
       <image class="donation-qr" src="{{album.donation_qr_code_url}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
-      <button class="letter-btn" hover-class="letter-btn--active" bindtap="closeDonationModal">我知道了</button>
+      <button class="letter-btn" hover-class="letter-btn--active" bindtap="closeDonationModal">鎴戠煡閬撲簡</button>
     </view>
   </view>
 
 </view>
+

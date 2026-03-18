@@ -29,6 +29,7 @@
     <view wx:if="{{!loading}}">
       <view class="error motion-pop-in" wx:if="{{error}}">
         <text class="error-text">{{error}}</text>
+        <button class="qr-save-btn" bindtap="onRetryLoad" hover-class="qr-save-btn--active">重试</button>
       </view>
 
       <view class="paper-card motion-fade-up motion-delay-2" wx:if="{{about.author_name || about.author_message}}">

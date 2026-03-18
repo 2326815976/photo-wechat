@@ -1,9 +1,19 @@
 const { requestJson, requestUpload } = require("../utils/cloudrun");
 
 const SESSION_CACHE_TTL_MS = 45 * 1000;
+const TRANSIENT_DB_RETRY_TIMES = 2;
+const TRANSIENT_DB_RETRY_DELAY_MS = 1200;
 let cachedSessionPayload = null;
 let cachedSessionAt = 0;
 let pendingSessionRequest = null;
+
+function wait(ms) {
+  const delay = Math.max(0, Number(ms || 0));
+  if (!delay) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, delay);
+  });
+}
 
 function shouldRetryWithNextPath(error) {
   const statusCode = Number((error && error.statusCode) || 0);
@@ -73,6 +83,122 @@ function ensureSuccessPayload(payload, fallback) {
   return payload;
 }
 
+function readPayloadFailureCode(payload) {
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    const directError = current.error;
+    if (directError && typeof directError === "object") {
+      const nestedCode = String(directError.code || "").trim();
+      if (nestedCode) return nestedCode;
+    }
+    const directCode = String(current.code || "").trim();
+    if (directCode) return directCode;
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return "";
+}
+
+function hasTransientBackendMessage(message) {
+  const text = String(message || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("service unavailable") ||
+    text.includes("upstream connect error") ||
+    text.includes("upstream request timeout") ||
+    text.includes("gateway timeout") ||
+    text.includes("connection reset") ||
+    text.includes("econnreset") ||
+    text.includes("socket hang up") ||
+    text.includes("request:fail") ||
+    text.includes("timeout") ||
+    text.includes("timed out") ||
+    text.includes("网络错误") ||
+    text.includes("连接失败") ||
+    text.includes("连接超时") ||
+    text.includes("暂不可用") ||
+    text.includes("云托管请求失败") ||
+    text.includes("invalidparameter") ||
+    text.includes("parameter error") && text.includes("run query failed") ||
+    text.includes("run query failed, database") ||
+    text.includes("database connection failed") ||
+    text.includes("服务暂时不可用") ||
+    text.includes("服务正在恢复")
+  );
+}
+
+function isTransientBackendFailure(input) {
+  if (!input) return false;
+
+  const statusCode = Number((input && input.statusCode) || 0);
+  if ([502, 503, 504, 520, 521, 522, 523, 524].includes(statusCode)) {
+    return true;
+  }
+
+  const directCode = String((input && input.code) || "").trim().toUpperCase();
+  if (directCode === "TRANSIENT_BACKEND") {
+    return true;
+  }
+
+  if (hasExplicitPayloadFailure(input)) {
+    const payloadCode = readPayloadFailureCode(input).trim().toUpperCase();
+    if (payloadCode === "TRANSIENT_BACKEND") {
+      return true;
+    }
+    return hasTransientBackendMessage(readPayloadFailureMessage(input, ""));
+  }
+
+  const message = String((input && input.message) || "").trim();
+  return hasTransientBackendMessage(message);
+}
+
+function normalizeTransientPayload(payload, fallbackCount) {
+  const count = fallbackCount === undefined ? null : fallbackCount;
+  return {
+    data: null,
+    error: {
+      message: "服务暂时不可用，请稍后重试",
+      code: "TRANSIENT_BACKEND",
+    },
+    count,
+  };
+}
+
+async function requestDbEndpoint(path, payloadBuilder) {
+  let lastTransientResult = null;
+
+  for (let attempt = 0; attempt <= TRANSIENT_DB_RETRY_TIMES; attempt += 1) {
+    try {
+      const payload = await requestJson(path, payloadBuilder());
+      if (isTransientBackendFailure(payload)) {
+        lastTransientResult = payload;
+        if (attempt < TRANSIENT_DB_RETRY_TIMES) {
+          await wait(TRANSIENT_DB_RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        return normalizeTransientPayload(payload, payload && payload.count);
+      }
+      return payload;
+    } catch (error) {
+      if (!isTransientBackendFailure(error)) {
+        throw error;
+      }
+      if (attempt < TRANSIENT_DB_RETRY_TIMES) {
+        await wait(TRANSIENT_DB_RETRY_DELAY_MS * (attempt + 1));
+        continue;
+      }
+      const transientError = new Error("服务暂时不可用，请稍后重试");
+      transientError.code = "TRANSIENT_BACKEND";
+      transientError.statusCode = Number((error && error.statusCode) || 503) || 503;
+      throw transientError;
+    }
+  }
+
+  return normalizeTransientPayload(lastTransientResult, null);
+}
+
 async function requestWithFallback(candidates, init) {
   const rows = Array.isArray(candidates) ? candidates : [];
   let lastError = null;
@@ -129,20 +255,20 @@ async function requestWithFallback(candidates, init) {
 }
 
 async function dbQuery(payload) {
-  return requestJson("/api/db/query", {
+  return requestDbEndpoint("/api/db/query", () => ({
     method: "POST",
     data: payload,
-  });
+  }));
 }
 
 async function dbRpc(functionName, args) {
-  return requestJson("/api/db/rpc", {
+  return requestDbEndpoint("/api/db/rpc", () => ({
     method: "POST",
     data: {
       functionName,
       args: args || {},
     },
-  });
+  }));
 }
 
 function clearSessionCache() {

@@ -1711,7 +1711,7 @@ async function listAdminGalleryPhotos(limit) {
     action: "select",
     columns:
       "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,shot_date,created_at,width,height",
-    orders: [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }],
+    orders: [{ column: "created_at", ascending: false }, { column: "shot_date", ascending: false }],
     limit: pageLimit,
   });
   if (result && result.error && isColumnMissingError(result.error, "shot_date")) {

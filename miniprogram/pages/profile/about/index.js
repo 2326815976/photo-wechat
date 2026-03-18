@@ -216,6 +216,11 @@ Page({
     });
   },
 
+  onRetryLoad() {
+    if (this.data.loading || this.data.serviceMissing) return;
+    void this.loadAbout();
+  },
+
   async ensureAlbumWritePermission() {
     try {
       const setting = await wx.getSetting();

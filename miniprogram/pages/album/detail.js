@@ -56,6 +56,92 @@ function normalizeMaybeText(value) {
   return raw;
 }
 
+const ALBUM_LAYOUT_RATIO_MIN = 0.78;
+const ALBUM_LAYOUT_RATIO_MAX = 2.5;
+const ALBUM_CARD_CHROME_RATIO = 0.24;
+const ALBUM_STORY_BASE_RATIO = 1.16;
+const ALBUM_STORY_LINE_RATIO = 0.1;
+const ALBUM_STORY_CHARS_PER_LINE = 14;
+const ALBUM_SOFT_RELAYOUT_DELAY = 160;
+
+function clampAlbumLayoutRatio(value, fallback) {
+  const numericValue = Number(value || 0);
+  if (!(numericValue > 0)) return fallback;
+  return Math.min(ALBUM_LAYOUT_RATIO_MAX, Math.max(ALBUM_LAYOUT_RATIO_MIN, numericValue));
+}
+
+function estimateAlbumTextLines(value, charsPerLine) {
+  const text = String(value || "").trim();
+  if (!text) return 0;
+
+  const perLine = Math.max(8, Number(charsPerLine || 0) || ALBUM_STORY_CHARS_PER_LINE);
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / perLine)), 0);
+}
+
+function resolveAlbumPhotoRatio(photo, ratioMap) {
+  const id =
+    photo && photo.id !== undefined && photo.id !== null
+      ? String(photo.id)
+      : "";
+  const runtimeRatio = id && ratioMap ? Number(ratioMap[id] || 0) : 0;
+  if (runtimeRatio > 0) {
+    return clampAlbumLayoutRatio(runtimeRatio, 4 / 3);
+  }
+
+  const photoRatio = Number(photo && photo.__ratio);
+  if (photoRatio > 0) {
+    return clampAlbumLayoutRatio(photoRatio, 4 / 3);
+  }
+
+  const width = Number((photo && photo.width) || 0);
+  const height = Number((photo && photo.height) || 0);
+  const ratio = width > 0 && height > 0 ? height / width : 4 / 3;
+  return clampAlbumLayoutRatio(ratio, 4 / 3);
+}
+
+function estimateAlbumCardHeight(photo, ratioMap) {
+  if (photo && photo.story_open && photo.has_story) {
+    const lines = estimateAlbumTextLines(photo.story_text, ALBUM_STORY_CHARS_PER_LINE);
+    const storyRatio = ALBUM_STORY_BASE_RATIO + Math.min(1.32, lines * ALBUM_STORY_LINE_RATIO);
+    return Math.max(1.3, storyRatio);
+  }
+
+  return resolveAlbumPhotoRatio(photo, ratioMap) + ALBUM_CARD_CHROME_RATIO;
+}
+
+function resolveAlbumPhotoListRatios(list, ratioMap) {
+  return (Array.isArray(list) ? list : []).map((photo) => {
+    const nextRatio = resolveAlbumPhotoRatio(photo, ratioMap);
+    const currentRatio = Number(photo && photo.__ratio);
+    if (Math.abs(nextRatio - currentRatio) < 0.001) {
+      return photo;
+    }
+    return Object.assign({}, photo, { __ratio: nextRatio });
+  });
+}
+
+function hasAlbumPhotoRatioDrift(currentList, nextList) {
+  const current = Array.isArray(currentList) ? currentList : [];
+  const next = Array.isArray(nextList) ? nextList : [];
+  if (current.length !== next.length) return true;
+
+  for (let index = 0; index < current.length; index += 1) {
+    const currentItem = current[index] || {};
+    const nextItem = next[index] || {};
+    if (String(currentItem.id || "") !== String(nextItem.id || "")) {
+      return true;
+    }
+    if (Math.abs(Number(currentItem.__ratio || 0) - Number(nextItem.__ratio || 0)) >= 0.001) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function normalizePhoto(photo) {
   const thumbnailUrl = resolvePublicUrl(photo && photo.thumbnail_url);
   const previewUrl = resolvePublicUrl(photo && photo.preview_url);
@@ -72,6 +158,7 @@ function normalizePhoto(photo) {
     is_highlight: isHighlight,
     story_open: false,
     story_highlight: hasStory || isHighlight,
+    __ratio: resolveAlbumPhotoRatio(photo, null),
     // 列表卡片优先走缩略图，保证清晰度同时降低首屏体积
     card_url_resolved: thumbnailUrl || previewUrl || originalUrl,
     // 全屏查看优先走原图，历史数据回退预览/缩略图
@@ -231,22 +318,26 @@ function computeToolbarStickyTop(safeTop) {
   const unit = Math.max(windowWidth, 320) / 750;
   const headerInnerHeight = 96 * unit; // app-header back-sub 高度
   // 与页头无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝。
-  const top = Number(safeTop || 0) + headerInnerHeight;
+  const top = Number(safeTop || 0) + headerInnerHeight - 1;
   return Math.max(0, Math.round(top));
 }
 
-function splitWaterfallColumns(list) {
-  const left = [];
-  const right = [];
-  let leftHeight = 0;
-  let rightHeight = 0;
+function splitWaterfallColumns(list, options) {
+  const ratioMap = options && options.ratioMap ? options.ratioMap : null;
+  const left = Array.isArray(options && options.left) ? options.left.slice() : [];
+  const right = Array.isArray(options && options.right) ? options.right.slice() : [];
+  let leftHeight = Number(options && options.leftHeight);
+  let rightHeight = Number(options && options.rightHeight);
 
-  (list || []).forEach((item) => {
-    const width = Number(item && item.width) || 0;
-    const height = Number(item && item.height) || 0;
-    const ratio = width > 0 && height > 0 ? height / width : 4 / 3;
-    const estimatedHeight = Math.min(2.4, Math.max(0.75, ratio)) + 0.22;
+  if (!(leftHeight >= 0)) {
+    leftHeight = left.reduce((total, item) => total + estimateAlbumCardHeight(item, ratioMap), 0);
+  }
+  if (!(rightHeight >= 0)) {
+    rightHeight = right.reduce((total, item) => total + estimateAlbumCardHeight(item, ratioMap), 0);
+  }
 
+  resolveAlbumPhotoListRatios(list, ratioMap).forEach((item) => {
+    const estimatedHeight = estimateAlbumCardHeight(item, ratioMap);
     if (leftHeight <= rightHeight) {
       left.push(item);
       leftHeight += estimatedHeight;
@@ -257,10 +348,10 @@ function splitWaterfallColumns(list) {
   });
 
   if (left.length === 0 && right.length > 0) {
-    return { left: right.slice(), right: [] };
+    return { left: right.slice(), right: [], leftHeight: rightHeight, rightHeight: 0 };
   }
 
-  return { left, right };
+  return { left, right, leftHeight, rightHeight };
 }
 
 function resolveAlbumPhotoPagePayload(payload) {
@@ -358,7 +449,7 @@ Page({
     total: 0,
 
     album: null,
-    headerTitle: "专属回忆",
+    headerTitle: "",
     expiryDays: 7,
     expiryNotice: "",
     showNotice: true,
@@ -403,6 +494,10 @@ Page({
   folderGuideTimer: null,
   folderWaveTimer: null,
   folderWaveRunToken: 0,
+  leftHeight: 0,
+  rightHeight: 0,
+  photoRatioMap: null,
+  relayoutTimer: null,
   photoLoadTicket: 0,
   useLegacyPhotoPaging: false,
   legacyPhotosByFolder: null,
@@ -418,8 +513,14 @@ Page({
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
+    this.leftHeight = 0;
+    this.rightHeight = 0;
+    this.photoRatioMap = Object.create(null);
+    this.relayoutTimer = null;
     this._lastAlbumAutoLoadAt = 0;
     this._windowHeight = 0;
+    const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
+    this._lastSeenAppEnterSeq = Math.max(0, currentAppEnterSeq - 1);
     try {
       if (typeof wx.getWindowInfo === "function") {
         const info = wx.getWindowInfo();
@@ -458,10 +559,13 @@ Page({
       backendReady,
       backendReconnecting,
       key,
+      headerTitle: cachedRootFolderName || initialRootFolderName || "",
       welcomeStorageKey: `album_welcome_seen_${key}`,
       welcomeEggStorageKey: `album_welcome_egg_seen_${key}`,
       rootFolderName: cachedRootFolderName || initialRootFolderName || "根目录",
       initialRootFolderName: cachedRootFolderName || initialRootFolderName || "",
+    }, () => {
+      this.scheduleToolbarStickyTopSync();
     });
 
     if (app && typeof app.subscribeAuditConfig === "function") {
@@ -504,6 +608,17 @@ Page({
 
     const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
     this.setData(this.buildHideAuditPatch(hideAudit));
+    this.scheduleToolbarStickyTopSync();
+
+    const appEnterSeq = Math.max(
+      0,
+      Number(app && app.globalData ? app.globalData.appEnterSeq : 0)
+    );
+    const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
+    if (hasNewAppEntry) {
+      this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+    }
 
     if (this.data.serviceMissing) return;
     if (!String(this.data.key || "").trim()) return;
@@ -534,7 +649,16 @@ Page({
     }
     if (this.consumeSuppressRefreshOnShow()) return;
     if (this.data.loading || this.data.loadingMore) return;
-    this.triggerFolderGuideForEntry();
+
+    const hasLoadedPhotos = Array.isArray(this.data.photos) && this.data.photos.length > 0;
+    if (hasNewAppEntry) {
+      this.triggerFolderGuideForEntry();
+      if (hasLoadedPhotos) {
+        return;
+      }
+    } else {
+      this.triggerFolderGuideForEntry();
+    }
 
     void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, 1, {
       reset: true,
@@ -557,10 +681,25 @@ Page({
     return !expired;
   },
 
+  scheduleToolbarStickyTopSync() {
+    if (typeof wx === "undefined" || typeof wx.nextTick !== "function") return;
+    wx.nextTick(() => {
+      this.syncToolbarStickyTop();
+    });
+  },
+
+  syncToolbarStickyTop() {
+    const fallbackTop = computeToolbarStickyTop(this.data.safeTop);
+    if (Math.abs(fallbackTop - Number(this.data.toolbarStickyTop || 0)) >= 1) {
+      this.setData({ toolbarStickyTop: fallbackTop });
+    }
+  },
+
   onUnload() {
     this.clearToastTimer();
     this.clearFolderGuideTimer();
     this.clearFolderWaveTimer();
+    this.clearRelayoutTimer();
     this.photoLoadTicket += 1;
     this._lastAlbumAutoLoadAt = 0;
     if (typeof this._unsubscribeAuditConfig === "function") {
@@ -657,6 +796,127 @@ Page({
       clearTimeout(this.folderWaveTimer);
       this.folderWaveTimer = null;
     }
+  },
+
+  clearRelayoutTimer() {
+    if (!this.relayoutTimer) return;
+    clearTimeout(this.relayoutTimer);
+    this.relayoutTimer = null;
+  },
+
+  calculateWaterfallHeight(list) {
+    return (Array.isArray(list) ? list : []).reduce(
+      (total, photo) => total + estimateAlbumCardHeight(photo, this.photoRatioMap),
+      0
+    );
+  },
+
+  canAppendWaterfall(nextList) {
+    const currentList = Array.isArray(this.data.photos) ? this.data.photos : [];
+    const resolvedNextList = Array.isArray(nextList) ? nextList : [];
+    if (currentList.length <= 0 || resolvedNextList.length <= currentList.length) {
+      return false;
+    }
+
+    for (let index = 0; index < currentList.length; index += 1) {
+      if (String((currentList[index] && currentList[index].id) || "") !== String((resolvedNextList[index] && resolvedNextList[index].id) || "")) {
+        return false;
+      }
+    }
+
+    return true;
+  },
+
+  applyWaterfallPhotos(photos, opts) {
+    const resolvedPhotos = resolveAlbumPhotoListRatios(photos, this.photoRatioMap);
+    if (Boolean(opts && opts.preferAppend) && this.canAppendWaterfall(resolvedPhotos)) {
+      const baseLeft = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
+      const baseRight = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
+      const incremental = resolvedPhotos.slice((this.data.photos || []).length);
+      const columns = splitWaterfallColumns(incremental, {
+        left: baseLeft,
+        right: baseRight,
+        leftHeight: this.calculateWaterfallHeight(baseLeft),
+        rightHeight: this.calculateWaterfallHeight(baseRight),
+        ratioMap: this.photoRatioMap,
+      });
+
+      this.leftHeight = columns.leftHeight;
+      this.rightHeight = columns.rightHeight;
+      this.setData({
+        photos: resolvedPhotos,
+        leftPhotos: columns.left,
+        rightPhotos: columns.right,
+      }, () => this.refreshSelectionMeta());
+      return;
+    }
+
+    const columns = splitWaterfallColumns(resolvedPhotos, { ratioMap: this.photoRatioMap });
+    this.leftHeight = columns.leftHeight;
+    this.rightHeight = columns.rightHeight;
+    this.setData(
+      {
+        photos: resolvedPhotos,
+        leftPhotos: columns.left,
+        rightPhotos: columns.right,
+      },
+      () => this.refreshSelectionMeta()
+    );
+  },
+
+  scheduleRelayout() {
+    if (this.relayoutTimer) return;
+    this.relayoutTimer = setTimeout(() => {
+      this.relayoutTimer = null;
+      const nextPhotos = resolveAlbumPhotoListRatios(this.data.photos || [], this.photoRatioMap);
+      const nextLeftPhotos = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
+      const nextRightPhotos = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
+      const shouldSyncVisible =
+        hasAlbumPhotoRatioDrift(this.data.photos, nextPhotos) ||
+        hasAlbumPhotoRatioDrift(this.data.leftPhotos, nextLeftPhotos) ||
+        hasAlbumPhotoRatioDrift(this.data.rightPhotos, nextRightPhotos);
+      const nextColumns = shouldSyncVisible
+        ? splitWaterfallColumns(nextPhotos, { ratioMap: this.photoRatioMap })
+        : null;
+
+      this.leftHeight = nextColumns ? nextColumns.leftHeight : this.calculateWaterfallHeight(nextLeftPhotos);
+      this.rightHeight = nextColumns ? nextColumns.rightHeight : this.calculateWaterfallHeight(nextRightPhotos);
+
+      if (!shouldSyncVisible) return;
+      this.setData({
+        photos: nextPhotos,
+        leftPhotos: nextColumns.left,
+        rightPhotos: nextColumns.right,
+      });
+    }, ALBUM_SOFT_RELAYOUT_DELAY);
+  },
+
+  onPhotoLoad(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!id) return;
+
+    const detail = (e && e.detail) || {};
+    const width = Number(detail.width || 0);
+    const height = Number(detail.height || 0);
+    if (!(width > 0 && height > 0)) return;
+
+    const ratio = height / width;
+    if (!(ratio > 0)) return;
+
+    if (!this.photoRatioMap) {
+      this.photoRatioMap = Object.create(null);
+    }
+
+    const prevRatio = Number(this.photoRatioMap[id] || 0);
+    if (prevRatio > 0 && Math.abs(prevRatio - ratio) < 0.01) {
+      return;
+    }
+
+    this.photoRatioMap[id] = ratio;
+    this.scheduleRelayout();
   },
 
   startFolderWaveAnimation() {
@@ -982,10 +1242,16 @@ Page({
         !hasSeenWelcomeEgg;
       const showWelcomeLetter = effectiveHideAudit ? false : canShowWelcome;
       await new Promise((resolve) => {
+        this.clearRelayoutTimer();
+        this.leftHeight = 0;
+        this.rightHeight = 0;
+        this.photoRatioMap = Object.create(null);
         this.setData(
           {
             album: normalizedAlbum,
-            headerTitle: (normalizedAlbum && normalizedAlbum.title) || "专属回忆",
+            headerTitle:
+              String((normalizedAlbum && normalizedAlbum.title) || "").trim() ||
+              String(rootFolderName || this.data.initialRootFolderName || "").trim(),
             expiryDays,
             expiryNotice: buildExpiryNotice(normalizedAlbum),
             welcomeText:
@@ -1020,6 +1286,7 @@ Page({
           },
           () => {
             this.refreshSelectionMeta();
+            this.scheduleToolbarStickyTopSync();
             if (showFolderGuide) {
               this.startFolderGuideAutoDismiss();
             } else {
@@ -1065,6 +1332,10 @@ Page({
     }
 
     const folder = (this.data.folders || []).find((item) => String(item.id || "") === id) || null;
+    this.clearRelayoutTimer();
+    this.leftHeight = 0;
+    this.rightHeight = 0;
+    this.photoRatioMap = Object.create(null);
     this.setData({
       selectedFolder: id,
       loading: true,
@@ -1090,16 +1361,7 @@ Page({
 
   applyFilter() {
     const selectedPhotos = withSelection(this.data.allPhotos || [], this.data.selectedPhotoMap || {});
-    const columns = splitWaterfallColumns(selectedPhotos);
-
-    this.setData(
-      {
-        photos: selectedPhotos,
-        leftPhotos: columns.left,
-        rightPhotos: columns.right,
-      },
-      () => this.refreshSelectionMeta()
-    );
+    this.applyWaterfallPhotos(selectedPhotos);
   },
 
   async loadPhotoPage(folderId, pageNo, opts) {
@@ -1185,19 +1447,15 @@ Page({
           : normalizedRows.length >= PHOTO_PAGE_SIZE
         : hasMoreFromPayload;
       const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
-      const columns = splitWaterfallColumns(selectedPhotos);
 
       this.setData(
         {
           allPhotos: mergedRows,
-          photos: selectedPhotos,
-          leftPhotos: columns.left,
-          rightPhotos: columns.right,
           pageNo: nextPageNo,
           total,
           hasMore,
         },
-        () => this.refreshSelectionMeta()
+        () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
       );
     } catch (e) {
       if (!(reset && silent)) {
@@ -1280,19 +1538,15 @@ Page({
       const total = Array.isArray(fullRows) ? fullRows.length : 0;
       const hasMore = mergedRows.length < total;
       const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
-      const columns = splitWaterfallColumns(selectedPhotos);
 
       this.setData(
         {
           allPhotos: mergedRows,
-          photos: selectedPhotos,
-          leftPhotos: columns.left,
-          rightPhotos: columns.right,
           pageNo: nextPageNo,
           total,
           hasMore,
         },
-        () => this.refreshSelectionMeta()
+        () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
       );
     } catch (e) {
       if (!(reset && silent)) {
@@ -1442,7 +1696,6 @@ Page({
       });
 
       const selectedPhotos = withSelection(fullRows, map);
-      const columns = splitWaterfallColumns(selectedPhotos);
       const total = fullRows.length;
       const pageNo = total > 0 ? Math.ceil(total / PHOTO_PAGE_SIZE) : 0;
 
@@ -1450,16 +1703,13 @@ Page({
         {
           selectedPhotoMap: map,
           allPhotos: fullRows,
-          photos: selectedPhotos,
-          leftPhotos: columns.left,
-          rightPhotos: columns.right,
           total,
           pageNo,
           hasMore: false,
           loading: false,
           loadingMore: false,
         },
-        () => this.refreshSelectionMeta()
+        () => this.applyWaterfallPhotos(selectedPhotos)
       );
 
       if (total > 0) {

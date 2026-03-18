@@ -46,7 +46,7 @@
     </view>
   </view>
 
-  <scroll-view class="content" scroll-y="true" enable-flex="true" style="padding-top: {{contentTopPx}}px;">
+  <scroll-view class="content" scroll-y="true" enable-flex="true" bindscrolltolower="onContentScrollToLower" lower-threshold="120" style="padding-top: {{contentTopPx}}px;">
     <view class="content-inner">
       <view class="config-tip motion-fade-up" wx:if="{{serviceMissing}}">
         <text class="config-tip__title">需要配置云托管服务名</text>
@@ -1087,22 +1087,9 @@
                   </view>
                 </view>
 
-                <view class="pose-pagination">
-                  <button
-                    class="pose-page-btn pose-page-btn--ghost"
-                    bindtap="onPosePrevPage"
-                    disabled="{{poseCurrentPage <= 1}}"
-                  >
-                    上一页
-                  </button>
-                  <text class="pose-page-indicator">第 {{poseCurrentPage}} 页 / 共 {{poseTotalPages}} 页</text>
-                  <button
-                    class="pose-page-btn pose-page-btn--ghost"
-                    bindtap="onPoseNextPage"
-                    disabled="{{poseCurrentPage >= poseTotalPages}}"
-                  >
-                    下一页
-                  </button>
+                <view class="pose-pagination" wx:if="{{poseTotalCount}}">
+                  <text class="pose-page-indicator" wx:if="{{poseHasMoreVisible}}">已加载 {{posePagedList.length}} / {{poseTotalCount}} 个，下滑继续加载</text>
+                  <text class="pose-page-indicator" wx:else>已全部加载，共 {{poseTotalCount}} 个</text>
                 </view>
               </block>
             </block>
@@ -1309,7 +1296,7 @@
         </block>
 
         <block wx:if="{{activeSection === 'gallery'}}">
-          <gallery-manager class="motion-fade-up" />
+          <gallery-manager id="galleryManager" class="motion-fade-up" />
         </block>
 
         <block wx:if="{{activeSection === 'albums'}}">

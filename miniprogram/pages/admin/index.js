@@ -56,6 +56,11 @@ const {
 const { logout, requestJson } = require("../../services/photo-api");
 const { clearStoredCookie } = require("../../utils/auth");
 const { resolvePublicUrl } = require("../../utils/storage-url");
+const {
+  saveTransientPageState,
+  loadTransientPageState,
+  clearTransientPageState,
+} = require("../../utils/transient-page-state");
 const runtimeConfig = require("../../config");
 
 const BOOKING_STATUS_OPTIONS = [
@@ -82,6 +87,8 @@ const ALBUM_COVER_TARGET_SIZE = 900 * 1024;
 const ALBUM_COVER_MAX_LONG_EDGE = 1920;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
+const ADMIN_GALLERY_UPLOAD_DRAFT_KEY = "admin_gallery_upload_draft_v1";
+const ADMIN_GALLERY_UPLOAD_DRAFT_TTL_MS = 30 * 60 * 1000;
 const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
 function resolveAppPublicUrl() {
   return FIXED_PUBLIC_ORIGIN;
@@ -1397,8 +1404,10 @@ Page({
     posePagedList: [],
     poseCurrentPage: 1,
     posePageSize: 10,
+    poseVisibleCount: 10,
     poseTotalCount: 0,
     poseTotalPages: 1,
+    poseHasMoreVisible: false,
     poseDeletingId: 0,
     poses: [],
 
@@ -1558,19 +1567,48 @@ Page({
     const headerOffsetPx = safeTop + 56;
     const contentTopPx = headerOffsetPx + 16;
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, headerOffsetPx, contentTopPx, serviceMissing });
+    this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
+    const restoredDraft = loadTransientPageState(ADMIN_GALLERY_UPLOAD_DRAFT_KEY);
+    const hasRestoredDraft = Boolean(restoredDraft && typeof restoredDraft === "object");
+    this._restoredGalleryUploadDraft = hasRestoredDraft;
+    this.setData(Object.assign(
+      { safeTop, headerOffsetPx, contentTopPx, serviceMissing },
+      hasRestoredDraft ? {
+        activeSection: "gallery",
+        galleryUploadModalOpen: Boolean(restoredDraft.galleryUploadModalOpen),
+        galleryUploadFiles: Array.isArray(restoredDraft.galleryUploadFiles) ? restoredDraft.galleryUploadFiles : [],
+        galleryUploadSubmitting: false,
+        galleryUploadProgressCurrent: 0,
+        galleryUploadProgressTotal: 0,
+      } : {}
+    ));
   },
 
   onShow() {
+    const app = getApp();
+    const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
+    const isForegroundReturn = appEnterSeq > Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
+    this._lastSeenAppEnterSeq = appEnterSeq;
     this.syncSectionMeta(this.data.activeSection);
     if (!this.data.serviceMissing) {
       if (this.consumeSuppressBootstrapOnShow()) {
+        return;
+      }
+      if (isForegroundReturn && this.shouldPreserveRuntimeStateOnForegroundReturn()) {
+        if (this._restoredGalleryUploadDraft) {
+          this._restoredGalleryUploadDraft = false;
+          this.showNotice("info", "已恢复未完成的图片上传草稿，请继续操作");
+        }
         return;
       }
       this.bootstrap();
     } else {
       this.setData({ loading: false });
     }
+  },
+
+  onHide() {
+    this.persistGalleryUploadDraft();
   },
 
   onPullDownRefresh() {
@@ -1581,7 +1619,22 @@ Page({
     void this.bootstrap();
   },
 
+  onContentScrollToLower() {
+    if (this.data.serviceMissing || this.data.loading || this.data.authDenied) return;
+    if (this.data.activeSection === "poses") {
+      this.loadMorePoseRows();
+      return;
+    }
+    if (this.data.activeSection === "gallery") {
+      const galleryManager = this.selectComponent("#galleryManager");
+      if (galleryManager && typeof galleryManager.loadMorePhotos === "function") {
+        galleryManager.loadMorePhotos();
+      }
+    }
+  },
+
   onUnload() {
+    this.persistGalleryUploadDraft();
     this.clearNoticeTimer();
     this.clearBookingSearchTimer();
     this.clearReleaseModeTimer();
@@ -1877,6 +1930,54 @@ Page({
     this._suppressBootstrapOnNextShow = true;
     this._suppressBootstrapAt = Date.now();
     this._suppressBootstrapReason = String(reason || "").trim();
+  },
+
+  shouldPreserveRuntimeStateOnForegroundReturn() {
+    const files = Array.isArray(this.data.galleryUploadFiles) ? this.data.galleryUploadFiles : [];
+    return Boolean(this.data.galleryUploadSubmitting)
+      || Boolean(this.data.galleryUploadModalOpen)
+      || files.length > 0;
+  },
+
+  buildGalleryUploadDraftPayload() {
+    const files = Array.isArray(this.data.galleryUploadFiles) ? this.data.galleryUploadFiles : [];
+    return {
+      galleryUploadModalOpen: Boolean(this.data.galleryUploadModalOpen || files.length > 0),
+      galleryUploadFiles: files.map((file, index) => {
+        const tempFilePath = String((file && file.tempFilePath) || "").trim();
+        if (!tempFilePath) return null;
+        const size = Math.max(0, Number((file && file.size) || 0));
+        return {
+          key: String((file && file.key) || `${Date.now()}_${index}`).trim(),
+          tempFilePath,
+          fileName: String((file && file.fileName) || "").trim(),
+          size,
+          sizeText: String((file && file.sizeText) || formatFileSize(size) || "").trim(),
+          width: Math.max(0, Number((file && file.width) || 0)),
+          height: Math.max(0, Number((file && file.height) || 0)),
+        };
+      }).filter(Boolean),
+      wasSubmitting: Boolean(this.data.galleryUploadSubmitting),
+    };
+  },
+
+  persistGalleryUploadDraft() {
+    const files = Array.isArray(this.data.galleryUploadFiles) ? this.data.galleryUploadFiles : [];
+    const hasDraft = Boolean(this.data.galleryUploadSubmitting) || files.length > 0;
+    if (!hasDraft) {
+      clearTransientPageState(ADMIN_GALLERY_UPLOAD_DRAFT_KEY);
+      return;
+    }
+    saveTransientPageState(
+      ADMIN_GALLERY_UPLOAD_DRAFT_KEY,
+      this.buildGalleryUploadDraftPayload(),
+      ADMIN_GALLERY_UPLOAD_DRAFT_TTL_MS
+    );
+  },
+
+  clearGalleryUploadDraft() {
+    clearTransientPageState(ADMIN_GALLERY_UPLOAD_DRAFT_KEY);
+    this._restoredGalleryUploadDraft = false;
   },
 
   consumeSuppressBootstrapOnShow() {
@@ -2990,18 +3091,11 @@ Page({
     const pageSize = Math.max(1, Number(this.data.posePageSize || 10));
     const totalCount = filteredRows.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    let currentPage = Number(this.data.poseCurrentPage || 1);
-    if (!Number.isFinite(currentPage) || currentPage < 1) {
-      currentPage = 1;
-    }
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-    if (totalCount === 0) {
-      currentPage = 1;
-    }
-    const startIndex = (currentPage - 1) * pageSize;
-    const pagedRows = filteredRows.slice(startIndex, startIndex + pageSize);
+    const rawVisibleCount = Math.max(pageSize, Number(this.data.poseVisibleCount || pageSize));
+    const visibleCount = totalCount > 0 ? Math.min(rawVisibleCount, totalCount) : pageSize;
+    const pagedRows = filteredRows.slice(0, visibleCount);
+    const currentPage = totalCount > 0 ? Math.max(1, Math.ceil(pagedRows.length / pageSize)) : 1;
+    const poseHasMoreVisible = pagedRows.length < totalCount;
 
     const poseAllSelected =
       pagedRows.length > 0 &&
@@ -3044,8 +3138,10 @@ Page({
       poseFilteredList: filteredRows,
       posePagedList: pagedRows,
       poseCurrentPage: currentPage,
+      poseVisibleCount: visibleCount,
       poseTotalCount: totalCount,
       poseTotalPages: totalPages,
+      poseHasMoreVisible,
       poseSelectedIds: normalizedSelectedIds,
       poseSelectedCount: normalizedSelectedIds.length,
       poseAllSelected,
@@ -3166,6 +3262,7 @@ Page({
       {
         poseSelectedTags: next,
         poseCurrentPage: 1,
+        poseVisibleCount: Math.max(1, Number(this.data.posePageSize || 10)),
       },
       () => {
         this.refreshPoseModuleView();
@@ -3230,21 +3327,13 @@ Page({
     });
   },
 
-  onPosePrevPage() {
+  loadMorePoseRows() {
     if (this.data.poseBatchDeleting || this.data.poseDeletingId) return;
-    const currentPage = Number(this.data.poseCurrentPage || 1);
-    if (!Number.isFinite(currentPage) || currentPage <= 1) return;
-    this.setData({ poseCurrentPage: currentPage - 1 }, () => {
-      this.refreshPoseModuleView();
-    });
-  },
-
-  onPoseNextPage() {
-    if (this.data.poseBatchDeleting || this.data.poseDeletingId) return;
-    const currentPage = Number(this.data.poseCurrentPage || 1);
-    const totalPages = Number(this.data.poseTotalPages || 1);
-    if (!Number.isFinite(currentPage) || !Number.isFinite(totalPages) || currentPage >= totalPages) return;
-    this.setData({ poseCurrentPage: currentPage + 1 }, () => {
+    if (String(this.data.posePanelTab || "poses") !== "poses") return;
+    if (!this.data.poseHasMoreVisible) return;
+    const pageSize = Math.max(1, Number(this.data.posePageSize || 10));
+    const visibleCount = Math.max(pageSize, Number(this.data.poseVisibleCount || pageSize));
+    this.setData({ poseVisibleCount: visibleCount + pageSize }, () => {
       this.refreshPoseModuleView();
     });
   },
@@ -4770,6 +4859,7 @@ Page({
       galleryUploadProgressCurrent: 0,
       galleryUploadProgressTotal: 0,
     });
+    this.clearGalleryUploadDraft();
   },
 
   onChooseGalleryUploadImages() {
@@ -4811,6 +4901,7 @@ Page({
         }
 
         this.setData({ galleryUploadFiles: files });
+        this.persistGalleryUploadDraft();
       },
       fail: (error) => {
         const message = String((error && error.errMsg) || "");
@@ -4823,6 +4914,7 @@ Page({
   onClearGalleryUploadFiles() {
     if (this.data.galleryUploadSubmitting) return;
     this.setData({ galleryUploadFiles: [] });
+    this.clearGalleryUploadDraft();
   },
 
   onRemoveGalleryUploadFile(e) {
@@ -4836,6 +4928,11 @@ Page({
     if (index >= files.length) return;
     files.splice(index, 1);
     this.setData({ galleryUploadFiles: files });
+    if (files.length > 0) {
+      this.persistGalleryUploadDraft();
+    } else {
+      this.clearGalleryUploadDraft();
+    }
   },
 
   async onSubmitGalleryUpload() {
@@ -4851,6 +4948,7 @@ Page({
       galleryUploadProgressCurrent: 0,
       galleryUploadProgressTotal: files.length,
     });
+    this.persistGalleryUploadDraft();
 
     let successCount = 0;
     let failedCount = 0;
@@ -4880,6 +4978,7 @@ Page({
       galleryUploadProgressCurrent: 0,
       galleryUploadProgressTotal: 0,
     });
+    this.clearGalleryUploadDraft();
 
     if (successCount > 0) {
       let refreshWarning = "";

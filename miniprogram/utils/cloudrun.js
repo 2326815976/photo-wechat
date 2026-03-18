@@ -13,10 +13,12 @@ let runtimeFingerprint = "";
 let requestTraceCounter = 0;
 let backendRecoveryPromise = null;
 
-const BACKEND_HEALTH_CHECK_PATH = "/api/auth/session";
+const BACKEND_HEALTH_CHECK_PATH = "/api/health/ready";
 const BACKEND_RECOVERY_MAX_WAIT_MS = 45 * 1000;
 const BACKEND_RECOVERY_INTERVAL_MS = 2500;
 const BACKEND_HEALTH_CHECK_TIMEOUT_MS = 5000;
+const BACKEND_POST_RECOVERY_RETRY_TIMES = 2;
+const BACKEND_POST_RECOVERY_RETRY_DELAY_MS = 1500;
 
 function normalizeRuntimeValue(value) {
   return String(value || "").trim();
@@ -168,6 +170,77 @@ function hasBackendUnavailableMessageKeyword(message) {
   );
 }
 
+function hasBackendTransientMessageKeyword(message) {
+  const text = String(message || "").trim().toLowerCase();
+  if (!text) return false;
+  return (
+    hasBackendUnavailableMessageKeyword(text) ||
+    text.includes("invalidparameter") ||
+    text.includes("parameter error") && text.includes("run query failed") ||
+    text.includes("run query failed, database") ||
+    text.includes("database connection failed") ||
+    text.includes("sql 执行失败") ||
+    text.includes("服务暂时不可用") ||
+    text.includes("服务正在恢复")
+  );
+}
+
+function extractPayloadErrorInfo(payload) {
+  let current = parseMaybeJson(payload);
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+
+    const directError = current.error;
+    if (typeof directError === "string" && directError.trim()) {
+      return {
+        message: directError.trim(),
+        code: String(current.code || "").trim(),
+      };
+    }
+
+    if (directError && typeof directError === "object") {
+      const message = String(directError.message || current.message || "").trim();
+      const code = String(directError.code || current.code || "").trim();
+      if (message || code) {
+        return {
+          message,
+          code,
+        };
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(current, "success") && current.success === false) {
+      return {
+        message: String(current.message || "请求失败").trim(),
+        code: String(current.code || "").trim(),
+      };
+    }
+
+    if (Object.prototype.hasOwnProperty.call(current, "ok") && current.ok === false) {
+      return {
+        message: String(current.message || "请求失败").trim(),
+        code: String(current.code || "").trim(),
+      };
+    }
+
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+
+  return null;
+}
+
+function isTransientPayloadError(payload) {
+  const info = extractPayloadErrorInfo(payload);
+  if (!info) return false;
+  const code = String(info.code || "").trim().toUpperCase();
+  if (code === "TRANSIENT_BACKEND") {
+    return true;
+  }
+  return hasBackendTransientMessageKeyword(info.message);
+}
+
 function shouldTriggerBackendRecovery(error, statusCodeHint) {
   const statusCode = normalizeStatusCode(
     statusCodeHint !== undefined && statusCodeHint !== null
@@ -187,11 +260,11 @@ function shouldTriggerBackendRecovery(error, statusCodeHint) {
 
   // 500 仅在命中“后端不可用”关键字时触发恢复，避免掩盖真实业务错误。
   if (statusCode === 500) {
-    return hasBackendUnavailableMessageKeyword(message);
+    return hasBackendTransientMessageKeyword(message);
   }
 
   if (!statusCode || statusCode >= 520) {
-    return hasBackendUnavailableMessageKeyword(message);
+    return hasBackendTransientMessageKeyword(message);
   }
 
   return false;
@@ -456,10 +529,11 @@ async function probeBackendHealthOnce() {
       timeout: BACKEND_HEALTH_CHECK_TIMEOUT_MS,
     });
     const statusCode = normalizeStatusCode(response && response.statusCode);
-    if (!statusCode) {
+    if (!statusCode || statusCode < 200 || statusCode >= 300) {
       return false;
     }
-    return !isBackendUnavailableStatus(statusCode);
+    const parsedData = parseMaybeJson(response ? response.data : undefined);
+    return !extractPayloadErrorInfo(parsedData);
   } catch (error) {
     return false;
   }
@@ -585,6 +659,19 @@ async function requestJson(path, init) {
     return err;
   };
 
+  const buildPayloadTransientError = (payload, statusCodeHint) => {
+    const payloadErrorInfo = extractPayloadErrorInfo(payload) || {};
+    const err = new Error("服务暂时不可用，请稍后重试");
+    err.code = String(payloadErrorInfo.code || "").trim() || "TRANSIENT_BACKEND";
+    err.statusCode = normalizeStatusCode(statusCodeHint || 503) || 503;
+    err.path = String(path || "");
+    err.method = String(method || "GET").toUpperCase();
+    err.service = runtime.service;
+    err.env = runtime.env;
+    err.rawMessage = String(payloadErrorInfo.message || "").trim();
+    return err;
+  };
+
   const appendRecoveryHint = (error, recoveryResult, recovered) => {
     const err = error instanceof Error ? error : new Error(String(error || "请求失败"));
     if (recoveryResult && typeof recoveryResult === "object") {
@@ -625,7 +712,22 @@ async function requestJson(path, init) {
     }
 
     try {
-      const retried = await sendRequestWithCookieRetry();
+      let retried = null;
+      for (let attempt = 0; attempt <= BACKEND_POST_RECOVERY_RETRY_TIMES; attempt += 1) {
+        retried = await sendRequestWithCookieRetry();
+        const retriedStatusCode = Number((retried && retried.statusCode) || 0);
+        const retriedPayload = retried ? retried.parsedData : null;
+        const shouldRetryAgain =
+          isBackendUnavailableStatus(retriedStatusCode) ||
+          isTransientPayloadError(retriedPayload);
+        if (!shouldRetryAgain) {
+          break;
+        }
+        if (attempt >= BACKEND_POST_RECOVERY_RETRY_TIMES) {
+          throw buildPayloadTransientError(retriedPayload, retriedStatusCode || 503);
+        }
+        await sleep(BACKEND_POST_RECOVERY_RETRY_DELAY_MS * (attempt + 1));
+      }
       syncAppBackendStatus({
         backendReady: true,
         backendReconnecting: false,
@@ -668,6 +770,21 @@ async function requestJson(path, init) {
   if (statusCode && (statusCode < 200 || statusCode >= 300)) {
     const httpError = buildHttpError(res, statusCode, parsedData);
     throw httpError;
+  }
+
+  if (isTransientPayloadError(parsedData)) {
+    const payloadError = buildPayloadTransientError(parsedData, 503);
+    const recoveredResult = await tryRecoverAndRetry(payloadError, 503);
+    if (!recoveredResult) {
+      throw payloadError;
+    }
+    res = recoveredResult.response;
+    statusCode = recoveredResult.statusCode;
+    parsedData = recoveredResult.parsedData;
+  }
+
+  if (isTransientPayloadError(parsedData)) {
+    throw buildPayloadTransientError(parsedData, 503);
   }
 
   syncAppBackendStatus({

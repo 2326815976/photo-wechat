@@ -196,6 +196,92 @@ function normalizePhoto(photo, options) {
   });
 }
 
+const GALLERY_LAYOUT_RATIO_MIN = 0.72;
+const GALLERY_LAYOUT_RATIO_MAX = 2.6;
+const GALLERY_CARD_CHROME_RATIO = 0.34;
+const GALLERY_STORY_BASE_RATIO = 1.12;
+const GALLERY_STORY_LINE_RATIO = 0.1;
+const GALLERY_STORY_CHARS_PER_LINE = 14;
+const GALLERY_SOFT_RELAYOUT_DELAY = 160;
+
+function clampGalleryLayoutRatio(value, fallback) {
+  const numericValue = Number(value || 0);
+  if (!(numericValue > 0)) return fallback;
+  return Math.min(GALLERY_LAYOUT_RATIO_MAX, Math.max(GALLERY_LAYOUT_RATIO_MIN, numericValue));
+}
+
+function estimateGalleryTextLines(value, charsPerLine) {
+  const text = String(value || "").trim();
+  if (!text) return 0;
+
+  const perLine = Math.max(8, Number(charsPerLine || 0) || GALLERY_STORY_CHARS_PER_LINE);
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .reduce((total, line) => total + Math.max(1, Math.ceil(line.length / perLine)), 0);
+}
+
+function resolveGalleryPhotoRatio(photo, ratioMap) {
+  const id =
+    photo && photo.id !== undefined && photo.id !== null
+      ? String(photo.id)
+      : "";
+  const runtimeRatio = id && ratioMap ? Number(ratioMap[id] || 0) : 0;
+  if (runtimeRatio > 0) {
+    return clampGalleryLayoutRatio(runtimeRatio, 1);
+  }
+
+  const photoRatio = Number(photo && photo.__ratio);
+  if (photoRatio > 0) {
+    return clampGalleryLayoutRatio(photoRatio, 1);
+  }
+
+  const width = Number((photo && photo.width) || 0);
+  const height = Number((photo && photo.height) || 0);
+  const ratio = width > 0 && height > 0 ? height / width : 1;
+  return clampGalleryLayoutRatio(ratio, 1);
+}
+
+function estimateGalleryCardHeight(photo, ratioMap) {
+  if (photo && photo.story_open && photo.has_story) {
+    const lines = estimateGalleryTextLines(photo.story_text, GALLERY_STORY_CHARS_PER_LINE);
+    const storyRatio = GALLERY_STORY_BASE_RATIO + Math.min(1.28, lines * GALLERY_STORY_LINE_RATIO);
+    return Math.max(1.28, storyRatio);
+  }
+
+  return resolveGalleryPhotoRatio(photo, ratioMap) + GALLERY_CARD_CHROME_RATIO;
+}
+
+function resolveGalleryPhotoListRatios(list, ratioMap) {
+  return (Array.isArray(list) ? list : []).map((photo) => {
+    const nextRatio = resolveGalleryPhotoRatio(photo, ratioMap);
+    const currentRatio = Number(photo && photo.__ratio);
+    if (Math.abs(nextRatio - currentRatio) < 0.001) {
+      return photo;
+    }
+    return Object.assign({}, photo, { __ratio: nextRatio });
+  });
+}
+
+function hasGalleryPhotoRatioDrift(currentList, nextList) {
+  const current = Array.isArray(currentList) ? currentList : [];
+  const next = Array.isArray(nextList) ? nextList : [];
+  if (current.length !== next.length) return true;
+
+  for (let index = 0; index < current.length; index += 1) {
+    const currentItem = current[index] || {};
+    const nextItem = next[index] || {};
+    if (String(currentItem.id || "") !== String(nextItem.id || "")) {
+      return true;
+    }
+    if (Math.abs(Number(currentItem.__ratio || 0) - Number(nextItem.__ratio || 0)) >= 0.001) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function hasExplicitRpcFailure(payload) {
   if (payload === false) return true;
   let current = payload;
@@ -560,6 +646,12 @@ Page({
     }
 
     const shouldForceRefresh = consumeGalleryCacheDirty();
+    const hasLoadedPhotos = Array.isArray(this.data.photos) && this.data.photos.length > 0;
+    if (hasNewAppEntry && hasLoadedPhotos && !shouldForceRefresh) {
+      void this.refreshLoginState();
+      this.scheduleScrollMetricsRefresh();
+      return;
+    }
     if (shouldForceRefresh) {
       this.resetGalleryStateForRefresh();
       void this.refreshLoginState();
@@ -892,7 +984,7 @@ Page({
     return formatDateDashUTC8(parsed);
   },
 
-  applyGalleryViewFromSource(sourceRows) {
+  applyGalleryViewFromSource(sourceRows, opts) {
     const source = Array.isArray(sourceRows)
       ? sourceRows.slice()
       : (Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos.slice() : []);
@@ -930,7 +1022,13 @@ Page({
       return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
     });
 
-    this.applyPhotoList(viewRows);
+    const resolvedViewRows = resolveGalleryPhotoListRatios(viewRows, this.photoRatioMap);
+    if (Boolean(opts && opts.preferAppend) && this.canAppendResolvedPhotoList(resolvedViewRows)) {
+      this.appendResolvedPhotoList(resolvedViewRows);
+      return;
+    }
+
+    this.applyPhotoList(resolvedViewRows, { resolved: true });
   },
 
   getActiveFilterPreset() {
@@ -1068,19 +1166,27 @@ Page({
     );
   },
 
-  buildColumnsFromPhotos(photos) {
-    let leftHeight = 0;
-    let rightHeight = 0;
-    const left = [];
-    const right = [];
+  buildColumnsFromPhotos(photos, seed) {
+    const left = Array.isArray(seed && seed.left) ? seed.left.slice() : [];
+    const right = Array.isArray(seed && seed.right) ? seed.right.slice() : [];
+    let leftHeight = Number(seed && seed.leftHeight);
+    let rightHeight = Number(seed && seed.rightHeight);
+
+    if (!(leftHeight >= 0)) {
+      leftHeight = this.calculatePhotoListHeight(left);
+    }
+    if (!(rightHeight >= 0)) {
+      rightHeight = this.calculatePhotoListHeight(right);
+    }
 
     (photos || []).forEach((p) => {
+      const nextHeight = estimateGalleryCardHeight(p, this.photoRatioMap);
       if (leftHeight <= rightHeight) {
         left.push(p);
-        leftHeight += Number(p.__ratio || 1);
+        leftHeight += nextHeight;
       } else {
         right.push(p);
-        rightHeight += Number(p.__ratio || 1);
+        rightHeight += nextHeight;
       }
     });
 
@@ -1089,6 +1195,56 @@ Page({
     }
 
     return { left, right, leftHeight, rightHeight };
+  },
+
+  calculatePhotoListHeight(list) {
+    return (Array.isArray(list) ? list : []).reduce(
+      (total, photo) => total + estimateGalleryCardHeight(photo, this.photoRatioMap),
+      0
+    );
+  },
+
+  canAppendResolvedPhotoList(nextList) {
+    const currentList = Array.isArray(this.data.photos) ? this.data.photos : [];
+    const resolvedNextList = Array.isArray(nextList) ? nextList : [];
+    if (currentList.length <= 0 || resolvedNextList.length <= currentList.length) {
+      return false;
+    }
+
+    for (let index = 0; index < currentList.length; index += 1) {
+      if (String((currentList[index] && currentList[index].id) || "") !== String((resolvedNextList[index] && resolvedNextList[index].id) || "")) {
+        return false;
+      }
+    }
+
+    return true;
+  },
+
+  appendResolvedPhotoList(nextList) {
+    const resolvedNextList = Array.isArray(nextList) ? nextList : [];
+    if (!this.canAppendResolvedPhotoList(resolvedNextList)) {
+      this.applyPhotoList(resolvedNextList, { resolved: true });
+      return;
+    }
+
+    const baseLeft = resolveGalleryPhotoListRatios(this.data.left || [], this.photoRatioMap);
+    const baseRight = resolveGalleryPhotoListRatios(this.data.right || [], this.photoRatioMap);
+    const incremental = resolvedNextList.slice((this.data.photos || []).length);
+    const columns = this.buildColumnsFromPhotos(incremental, {
+      left: baseLeft,
+      right: baseRight,
+      leftHeight: this.calculatePhotoListHeight(baseLeft),
+      rightHeight: this.calculatePhotoListHeight(baseRight),
+    });
+
+    this.leftHeight = columns.leftHeight;
+    this.rightHeight = columns.rightHeight;
+    this.setData({
+      photos: resolvedNextList,
+      left: columns.left,
+      right: columns.right,
+    });
+    this.scheduleScrollMetricsRefresh();
   },
 
   clearRelayoutTimer() {
@@ -1177,37 +1333,38 @@ Page({
     if (this.relayoutTimer) return;
     this.relayoutTimer = setTimeout(() => {
       this.relayoutTimer = null;
-      const photos = this.data.photos || [];
-      if (!Array.isArray(photos) || photos.length === 0) return;
+      const nextPhotos = resolveGalleryPhotoListRatios(this.data.photos || [], this.photoRatioMap);
+      const nextLeft = resolveGalleryPhotoListRatios(this.data.left || [], this.photoRatioMap);
+      const nextRight = resolveGalleryPhotoListRatios(this.data.right || [], this.photoRatioMap);
+      const shouldSyncVisible =
+        hasGalleryPhotoRatioDrift(this.data.photos, nextPhotos) ||
+        hasGalleryPhotoRatioDrift(this.data.left, nextLeft) ||
+        hasGalleryPhotoRatioDrift(this.data.right, nextRight);
+      const nextColumns = shouldSyncVisible ? this.buildColumnsFromPhotos(nextPhotos) : null;
 
-      this.applyPhotoList(photos);
+      this.leftHeight = nextColumns ? nextColumns.leftHeight : this.calculatePhotoListHeight(nextLeft);
+      this.rightHeight = nextColumns ? nextColumns.rightHeight : this.calculatePhotoListHeight(nextRight);
+
+      if (shouldSyncVisible) {
+        this.setData({
+          photos: nextPhotos,
+          left: nextColumns.left,
+          right: nextColumns.right,
+        });
+      }
+      this.scheduleScrollMetricsRefresh();
       this.persistGalleryCache(
         { writeStorage: Number(this.data.pageNo || 1) === 1 },
         this.data.sourcePhotos
       );
-    }, 48);
+    }, GALLERY_SOFT_RELAYOUT_DELAY);
   },
 
-  applyPhotoList(photos) {
+  applyPhotoList(photos, opts) {
     const source = Array.isArray(photos) ? photos : [];
-    const ratioMap = this.photoRatioMap || {};
-    const list = source.map((photo) => {
-      const id =
-        photo && photo.id !== undefined && photo.id !== null
-          ? String(photo.id)
-          : "";
-      if (!id || !Object.prototype.hasOwnProperty.call(ratioMap, id)) {
-        return photo;
-      }
-
-      const runtimeRatio = Number(ratioMap[id] || 0);
-      if (!(runtimeRatio > 0)) return photo;
-
-      const currentRatio = Number(photo.__ratio || 0);
-      if (Math.abs(runtimeRatio - currentRatio) < 0.001) return photo;
-
-      return Object.assign({}, photo, { __ratio: runtimeRatio });
-    });
+    const list = Boolean(opts && opts.resolved)
+      ? source.slice()
+      : resolveGalleryPhotoListRatios(source, this.photoRatioMap);
     const columns = this.buildColumnsFromPhotos(list);
     this.leftHeight = columns.leftHeight;
     this.rightHeight = columns.rightHeight;
@@ -1327,7 +1484,7 @@ Page({
         mergedSource = incremental.length > 0 ? currentSource.concat(incremental) : currentSource;
       }
 
-      this.applyGalleryViewFromSource(mergedSource);
+      this.applyGalleryViewFromSource(mergedSource, { preferAppend: pageNo > 1 });
 
       const loadedCount = mergedSource.length;
       const hasKnownTotal = total > 0;

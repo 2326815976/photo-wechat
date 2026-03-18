@@ -2,7 +2,7 @@
 const config = require("./config");
 const { requestJson } = require("./utils/cloudrun");
 
-const CLOUDRUN_HEALTH_ENDPOINT = "/api/auth/session";
+const CLOUDRUN_HEALTH_ENDPOINT = "/api/health/ready";
 const AUDIT_CONFIG_ENDPOINT = "/api/miniprogram/runtime-config";
 const BACKEND_RETRY_INTERVAL_MS = 2500;
 const BACKEND_HEALTH_TIMEOUT_MS = 5000;

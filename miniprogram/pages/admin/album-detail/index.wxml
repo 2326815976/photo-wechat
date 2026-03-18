@@ -168,20 +168,16 @@
 
         <view class="photo-card__sort-actions" wx:if="{{!isSelectionMode}}">
           <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" catchtap="onMovePhotoTop" disabled="{{actionLoading}}">置顶</button>
-          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{index === 0 || actionLoading}}">上移</button>
-          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{index === filteredPhotos.length - 1 || actionLoading}}">下移</button>
+          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="up" catchtap="onMovePhotoSort" disabled="{{!item.canMoveUp || actionLoading}}">上移</button>
+          <button class="photo-card__sort-btn" data-photo-id="{{item.id}}" data-direction="down" catchtap="onMovePhotoSort" disabled="{{!item.canMoveDown || actionLoading}}">下移</button>
         </view>
       </view>
     </view>
 
-    <view class="pagination">
-      <button class="pagination__btn" bindtap="onPrevPage" disabled="{{currentPage === 1}}">
-        上一页
-      </button>
-      <text class="pagination__info">第 {{currentPage}} 页 / 共 {{totalPages}} 页</text>
-      <button class="pagination__btn" bindtap="onNextPage" disabled="{{currentPage >= totalPages}}">
-        下一页
-      </button>
+    <view class="pagination" wx:if="{{filteredPhotos.length || totalCount}}">
+      <text class="pagination__info" wx:if="{{loadingMore}}">正在加载更多...</text>
+      <text class="pagination__info" wx:elif="{{hasMore}}">已加载 {{filteredPhotos.length}} / {{totalCount}} 张，下滑继续加载</text>
+      <text class="pagination__info" wx:else>已全部加载，共 {{totalCount}} 张</text>
     </view>
   </view>
 
