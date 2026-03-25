@@ -62,6 +62,39 @@ function normalizeShotLocation(value) {
   return raw;
 }
 
+function resolveAdminPhotoDisplayDate(photo) {
+  return normalizeShotDate(photo && photo.shot_date) || normalizeShotDate(photo && photo.created_at);
+}
+
+function normalizeAdminPhotoSortOrder(value) {
+  const sortValue = Number(value);
+  return Number.isFinite(sortValue) && sortValue > 0 ? Math.round(sortValue) : DEFAULT_SORT_ORDER;
+}
+
+function sortAdminAlbumPhotos(rows, isSystemAlbum) {
+  return (Array.isArray(rows) ? rows.slice() : []).sort((a, b) => {
+    const normalizedA = normalizeAdminPhotoSortOrder(a && a.sort_order);
+    const normalizedB = normalizeAdminPhotoSortOrder(b && b.sort_order);
+    if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+
+    if (isSystemAlbum) {
+      const dateA = resolveAdminPhotoDisplayDate(a) || "";
+      const dateB = resolveAdminPhotoDisplayDate(b) || "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA, "zh-CN");
+    }
+
+    return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
+  });
+}
+
+function attachAdminPhotoMoveState(rows, totalCount) {
+  const safeTotalCount = Math.max(Number(totalCount || 0), 0);
+  return (Array.isArray(rows) ? rows : []).map((item, index) => Object.assign({}, item, {
+    canMoveUp: index > 0,
+    canMoveDown: index < Math.max(0, safeTotalCount - 1),
+  }));
+}
+
 function isColumnMissingError(message, column) {
   const normalized = String(message || "").toLowerCase();
   const target = String(column || "").trim().toLowerCase();
@@ -518,8 +551,7 @@ function normalizePhotoRecord(row) {
   const viewCountRaw = Number(item.view_count);
   const likeCountRaw = Number(item.like_count);
   const downloadCountRaw = Number(item.download_count);
-  const sortRaw = Number(item.sort_order);
-  const sortOrder = Number.isFinite(sortRaw) && sortRaw > 0 ? Math.round(sortRaw) : DEFAULT_SORT_ORDER;
+  const sortOrder = normalizeAdminPhotoSortOrder(item.sort_order);
 
   return Object.assign({}, item, {
     url: urlResolved,
@@ -1019,7 +1051,7 @@ Page({
         action: "select",
         columns: "id,album_id,name,created_at",
         filters: [{ column: "album_id", operator: "eq", value: this.data.albumId }],
-        orders: [{ column: "created_at", ascending: false }],
+        orders: [{ column: "created_at", ascending: true }],
       });
 
       if (!hasRpcError(result)) {
@@ -1246,6 +1278,11 @@ Page({
           });
         });
 
+        photos = attachAdminPhotoMoveState(
+          sortAdminAlbumPhotos(photos, Boolean(this.data.isSystemAlbum)),
+          safeTotalCount
+        );
+
         return { photos, totalCount: safeTotalCount, totalPages };
       };
 
@@ -1279,7 +1316,13 @@ Page({
           return false;
         }
 
-        const photos = mergeLoadedPhotos(this.data.photos, pageResult.photos);
+        const photos = attachAdminPhotoMoveState(
+          sortAdminAlbumPhotos(
+            mergeLoadedPhotos(this.data.photos, pageResult.photos),
+            Boolean(this.data.isSystemAlbum)
+          ),
+          pageResult.totalCount
+        );
         this.setData({
           photos,
           currentPage: nextPage,
@@ -1306,6 +1349,11 @@ Page({
         totalCount = pageResult.totalCount;
         totalPages = pageResult.totalPages;
       }
+
+      photos = attachAdminPhotoMoveState(
+        sortAdminAlbumPhotos(photos, Boolean(this.data.isSystemAlbum)),
+        totalCount
+      );
 
       this.setData({
         photos,
@@ -1484,19 +1532,7 @@ Page({
       ? photos.filter(p => String(p.folder_id || "") === String(selectedFolder))
       : photos.filter(p => !p.folder_id);
 
-    filteredPhotos = filteredPhotos.slice().sort((a, b) => {
-      const sortA = Number(a && a.sort_order);
-      const sortB = Number(b && b.sort_order);
-      const normalizedA = Number.isFinite(sortA) && sortA > 0 ? Math.round(sortA) : DEFAULT_SORT_ORDER;
-      const normalizedB = Number.isFinite(sortB) && sortB > 0 ? Math.round(sortB) : DEFAULT_SORT_ORDER;
-      if (normalizedA !== normalizedB) return normalizedA - normalizedB;
-      if (isSystemAlbum) {
-        const shotA = normalizeShotDate(a && a.shot_date) || "";
-        const shotB = normalizeShotDate(b && b.shot_date) || "";
-        if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
-      }
-      return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
-    });
+    filteredPhotos = sortAdminAlbumPhotos(filteredPhotos, isSystemAlbum);
 
     filteredPhotos = filteredPhotos.map(photo => {
       const dateText = formatPhotoDateWithYear(photo.shot_date || photo.created_at);
@@ -2762,13 +2798,13 @@ Page({
       }
 
       const rows = Array.isArray(this.data.photos) ? this.data.photos : [];
-      const nextPhotos = rows.map((item) => {
+      const nextPhotos = attachAdminPhotoMoveState(sortAdminAlbumPhotos(rows.map((item) => {
         if (String(item.id) !== photoId) return item;
         return Object.assign({}, item, {
           shot_date: shotDate,
           shot_location: usedShotLocationColumn ? shotLocation : normalizeShotLocation(item.shot_location),
         });
-      });
+      }), Boolean(this.data.isSystemAlbum)), this.data.totalCount);
       this.setData(
         {
           photos: nextPhotos,

@@ -4494,7 +4494,21 @@ Page({
       const cleanedBlackouts = Number(result && result.booking_blackouts_cleaned ? result.booking_blackouts_cleaned : 0);
       const cleanedAnalyticsDaily = Number(result && result.analytics_daily_cleaned ? result.analytics_daily_cleaned : 0);
       const warningList = Array.isArray(cleanup.storage_cleanup_warnings)
-        ? cleanup.storage_cleanup_warnings.filter((item) => String(item || "").trim() !== "")
+        ? cleanup.storage_cleanup_warnings
+            .map((item) =>
+              String(item || "")
+                .replace(/https?:\/\/\S+/gi, "")
+                .replace(/\s+/g, " ")
+                .trim()
+            )
+            .map((item) => {
+              if (!item) return "";
+              if (item.includes("Cannot operate more than 50 files one time")) {
+                return "单次存储删除数量超过上限，系统已自动切换为分批删除。";
+              }
+              return item.length > 100 ? `${item.slice(0, 100)}...` : item;
+            })
+            .filter((item) => item !== "")
         : [];
       const skippedTasks = Array.isArray(result && result.skipped_tasks)
         ? result.skipped_tasks.filter((item) => String(item || "").trim() !== "")

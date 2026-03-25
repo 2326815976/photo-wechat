@@ -588,6 +588,7 @@
 
 .more {
   margin-top: 24rpx;
+  min-height: 48rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -611,6 +612,10 @@
 
 .end {
   margin-top: 24rpx;
+  min-height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
 }
 
