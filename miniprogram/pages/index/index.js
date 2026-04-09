@@ -116,6 +116,8 @@ Page({
     posePool: [],
     isAnimating: false,
     poseWrapAnimation: {},
+    poseImageLoaded: false,
+    poseImageLoadFailed: false,
 
     showTagSelector: false,
     shakeEnabled: false,
@@ -578,6 +580,21 @@ Page({
     this.setData({ showTagSelector: false });
   },
 
+  onPoseImageLoad() {
+    if (this.data.poseImageLoaded && !this.data.poseImageLoadFailed) return;
+    this.setData({
+      poseImageLoaded: true,
+      poseImageLoadFailed: false,
+    });
+  },
+
+  onPoseImageError() {
+    this.setData({
+      poseImageLoaded: false,
+      poseImageLoadFailed: true,
+    });
+  },
+
   openFullscreen() {
     const pose = this.data.currentPose;
     if (!pose || !pose.image_url_resolved) return;
@@ -753,6 +770,8 @@ Page({
       const normalized = this.normalizePose(pose);
       this.setData({
         currentPose: normalized,
+        poseImageLoaded: false,
+        poseImageLoadFailed: false,
       }, () => {
         this.triggerPoseEnter();
       });
@@ -965,6 +984,8 @@ Page({
         this.setData({
           currentPose: first,
           posePool: rest,
+          poseImageLoaded: false,
+          poseImageLoadFailed: false,
         }, () => {
           this.triggerPoseEnter();
         });
@@ -1085,6 +1106,8 @@ Page({
         {
           currentPose: nextPose,
           posePool: rest,
+          poseImageLoaded: false,
+          poseImageLoadFailed: false,
         },
         () => {
           this.triggerPoseEnter();

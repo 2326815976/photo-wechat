@@ -409,6 +409,7 @@
 }
 
 .pose-img-wrap {
+  position: relative;
   flex: 1;
   min-height: 0;
   border-radius: 4rpx; /* rounded-sm */
@@ -419,6 +420,157 @@
 .pose-img {
   width: 100%;
   height: 100%;
+  opacity: 0;
+  transition: opacity 280ms ease;
+}
+
+.pose-img--loaded {
+  opacity: 1;
+}
+
+.pose-img-loading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, #FFFBF0 0%, #FFF8E8 52%, #FFF4E0 100%);
+}
+
+.pose-img-loading__center {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.pose-img-loading__center--error {
+  gap: 12rpx;
+}
+
+.pose-img-loading__camera-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 108rpx;
+  height: 108rpx;
+  animation: pose-image-camera-float 2s ease-in-out infinite;
+}
+
+.pose-img-loading__camera {
+  font-size: 72rpx;
+  line-height: 1;
+  animation: pose-image-camera-glow 1.5s ease-in-out infinite;
+}
+
+.pose-img-loading__camera--error {
+  animation: none;
+}
+
+.pose-img-loading__spark {
+  position: absolute;
+  top: -2rpx;
+  right: -2rpx;
+  font-size: 30rpx;
+  line-height: 1;
+  animation: pose-image-spark-pop 2s ease-out infinite;
+}
+
+.pose-img-loading__title {
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: rgba(93, 64, 55, 0.6);
+  font-weight: 500;
+  animation: pose-image-text-pulse 1.5s ease-in-out infinite;
+}
+
+.pose-img-loading__desc {
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: rgba(93, 64, 55, 0.38);
+}
+
+.pose-img-loading__ambient {
+  position: absolute;
+  font-size: 24rpx;
+  line-height: 1;
+  opacity: 0.32;
+}
+
+.pose-img-loading__ambient--left {
+  top: 26%;
+  left: 28%;
+  animation: pose-image-ambient-left 4s ease-in-out infinite;
+}
+
+.pose-img-loading__ambient--right {
+  right: 24%;
+  bottom: 24%;
+  animation: pose-image-ambient-right 3.5s ease-in-out infinite;
+}
+
+@keyframes pose-image-camera-float {
+  0% { transform: rotate(-2deg) scale(1); }
+  50% { transform: rotate(2deg) scale(1.05); }
+  100% { transform: rotate(-2deg) scale(1); }
+}
+
+@keyframes pose-image-camera-glow {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(1.18); }
+  100% { filter: brightness(1); }
+}
+
+@keyframes pose-image-spark-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@keyframes pose-image-text-pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes pose-image-ambient-left {
+  0% {
+    transform: translate3d(-10rpx, -18rpx, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(10rpx, 14rpx, 0) rotate(180deg);
+  }
+  100% {
+    transform: translate3d(-10rpx, -18rpx, 0) rotate(360deg);
+  }
+}
+
+@keyframes pose-image-ambient-right {
+  0% {
+    transform: translate3d(10rpx, 14rpx, 0) rotate(360deg);
+  }
+  50% {
+    transform: translate3d(-12rpx, -12rpx, 0) rotate(180deg);
+  }
+  100% {
+    transform: translate3d(10rpx, 14rpx, 0) rotate(0deg);
+  }
 }
 
 .pose-tags {

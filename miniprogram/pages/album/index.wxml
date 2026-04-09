@@ -1,8 +1,8 @@
 <view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <app-header
-  managedPageKey="album"
-    title="{{hideAudit ? '闂佺儵鏅濋…鍫ュ船娴犲绠甸柟閭﹀墮缁? : '婵炴垶鎸婚幐鎼佹儓濡粯浜ら柡鍌涘缁傚牏绱掔仦鐐仢婵?}}"
-    subtitle="{{hideAudit ? '闂?闁荤喐鐟辩紞渚€寮ㄩ敐澶婄闁绘灏欏Σ鏇㈡煟閳哄喚鐒鹃柛?闂? : '濡絽鍟ㄦ禍?闂佹悶鍨洪敃顐ゆ濠靛洦浜ゆ繛鍡樻尭濞咃繝鏌﹀Ο铏圭婵炵厧鍟幏鍛存偐閸偆鏆犻梺缁樼懐閸撴瑩顢欏鍥ㄥ闁哄娉曠粻?濡絽鍟ㄦ禍?}}"
+    managedPageKey="album"
+    title="{{hideAudit ? '相册提取' : '专属返图空间'}}"
+    subtitle="{{hideAudit ? '✨ 解锁加密相册 ✨' : '✨ 趁照片消失前，把美好定格 ✨'}}"
     safeTop="{{safeTop}}"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
@@ -12,8 +12,8 @@
 
   <view class="content {{pageIsStandalone ? 'content--preview' : ''}}">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">闂傚倸娲犻崑鎾绘偡閺囨氨绐旈柛妯稿€楃槐鏃堫敊閼姐倝娈梺鐟扮仛椤洭顢橀幖浣稿珘鐎广儱鎳庨～銈夋煕?/text>
-      <text class="config-tip__desc">闁荤姴娲ら崲鎻掞耿?miniprogram/config.js 婵炴垶鎼╅崢濂告晲閻愬搫绀?cloudRunService闂佹寧绋戦悧蹇涘极閵堝棛顩?X-WX-SERVICE闂?/text>
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
     <view class="loading motion-fade-up motion-delay-2" wx:if="{{pageLoading}}">
@@ -38,7 +38,7 @@
         {{listNotice.message}}
       </view>
 
-      <!-- 閻庤鐡曠亸娆忊枍閵夈劊浜归柡鍥ㄦ皑閻燁剟鏌￠崼婵愭Ш缂侇噯濡囬埀顒冾潐濮樸劑鍩為弽顓熲拻?-->
+      <!-- 已登录且有绑定空间 -->
       <view wx:if="{{isLoggedIn && boundAlbums.length > 0 && !showKeyInput}}">
         <view class="album-list">
           <view
@@ -52,45 +52,48 @@
             data-root-folder-name="{{item.root_folder_name}}"
             bindtap="openAlbum"
           >
-            <view class="album-cover">
-              <image wx:if="{{item.cover_url}}" class="album-cover-img" src="{{item.cover_url}}" mode="widthFix" />
-              <view wx:else class="album-cover-placeholder">
-                <image class="album-cover-placeholder-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-              </view>
+            <image wx:if="{{item.cover_url}}" class="album-cover-img" src="{{item.cover_url}}" mode="aspectFill" />
+            <view wx:else class="album-cover-placeholder">
+              <image class="album-cover-placeholder-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
             </view>
 
-            <view class="album-info">
-              <text class="album-title">{{item.title || '闂佸搫鐗滄禍婊堝箠閿熺姴瑙︾€广儱娲犻弫鍕⒒?}}</text>
-              <view class="album-meta">
-                <image class="album-meta-icon" src="/images/icons/calendar-muted.svg" mode="aspectFit" />
+            <view class="album-main">
+              <view class="album-info">
+                <text class="album-title">{{item.title || '未命名空间'}}</text>
                 <text class="album-meta-text">{{item.created_at_text}}</text>
               </view>
-              <text class="album-expiry {{item.is_expired ? 'album-expiry--expired' : (item.days_remaining <= 3 ? 'album-expiry--soon' : '')}}">
-                {{item.expiry_text}}
-              </text>
-            </view>
 
-            <view class="album-actions">
-              <button
-                class="album-action-btn album-action-btn--danger {{unbindingAlbumId === item.id ? 'album-action-btn--disabled' : ''}}"
-                hover-class="album-action-btn--danger-active"
-                catchtap="requestUnbindAlbum"
-                data-album-id="{{item.id}}"
-                disabled="{{unbindingAlbumId === item.id}}"
-              >
-                <image class="album-action-btn__icon album-action-btn__icon--danger" src="/images/icons/trash-red.svg" mode="aspectFit" />
-              </button>
+              <view class="album-side">
+                <view class="album-actions">
+                  <button
+                    class="album-action-btn album-action-btn--danger {{unbindingAlbumId === item.id ? 'album-action-btn--disabled' : ''}}"
+                    hover-class="album-action-btn--danger-active"
+                    catchtap="requestUnbindAlbum"
+                    data-album-id="{{item.id}}"
+                    disabled="{{unbindingAlbumId === item.id}}"
+                  >
+                    <image class="album-action-btn__icon album-action-btn__icon--danger" src="/images/icons/unlink-red.svg" mode="aspectFit" />
+                    <text class="album-action-btn__text album-action-btn__text--danger">
+                      {{unbindingAlbumId === item.id ? '解绑中' : '解绑'}}
+                    </text>
+                  </button>
 
-              <button
-                class="album-action-btn album-action-btn--enter {{unbindingAlbumId === item.id ? 'album-action-btn--disabled' : ''}}"
-                hover-class="album-action-btn--enter-active"
-                catchtap="openAlbum"
-                data-key="{{item.access_key}}"
-                data-root-folder-name="{{item.root_folder_name}}"
-                disabled="{{unbindingAlbumId === item.id}}"
-              >
-                <image class="album-action-btn__icon album-action-btn__icon--enter" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
-              </button>
+                  <button
+                    class="album-action-btn album-action-btn--enter {{unbindingAlbumId === item.id ? 'album-action-btn--disabled' : ''}}"
+                    hover-class="album-action-btn--enter-active"
+                    catchtap="openAlbum"
+                    data-key="{{item.access_key}}"
+                    data-root-folder-name="{{item.root_folder_name}}"
+                    disabled="{{unbindingAlbumId === item.id}}"
+                  >
+                    <image class="album-action-btn__icon album-action-btn__icon--enter" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
+                  </button>
+                </view>
+
+                <text class="album-expiry-badge {{item.is_expired ? 'album-expiry-badge--expired' : ''}}">
+                  {{item.expiry_text}}
+                </text>
+              </view>
             </view>
           </view>
         </view>
@@ -98,26 +101,26 @@
         <button class="add-btn" hover-class="add-btn--active" bindtap="showKeyInput">
           <view class="add-row">
             <image class="add-icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
-            <text class="add-text">缂傚倷鐒﹂崹鐢告偩?闁荤姳绀佸鈥澄涢崼鏇炵闁哄牏鏁搁柧鍌滅磼鐏炵偓銇濇俊?/text>
+            <text class="add-text">绑定 / 访问其他空间</text>
           </view>
         </button>
       </view>
 
-      <!-- 闁诲酣娼уΛ婵嬪箰濠婂嫭缍囬柟鎯у暱瀵?-->
+      <!-- 密钥输入 -->
       <view wx:else class="key-wrap motion-fade-up motion-delay-2">
         <view class="key-icon">
           <image class="key-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
         </view>
         <view class="key-card">
           <view class="key-bg"></view>
-          <!-- Web 闂佸憡鑹鹃張顒勵敄濞嗘挻鏅慨妯夸含閻撴帡鎮归幇顒傛憼閻庡灚绮撻弻锕傤敊閻撳孩鏆ラ悗瑙勬尭閻妲愬鍍olute闂佹寧绋戦¨鈧紒杈ㄧ箖濞煎繘骞橀崘鎻掓辈濠碘剝顨呭Λ妤勩亹閸涘﹦鐟圭憸鏃堛€傞埡鍛仼?padding -->
+          <!-- Web 同款：粘贴按钮内嵌（absolute），输入框右侧预留 padding -->
           <view class="key-input-box">
             <input
               class="key-input"
-              placeholder="闁哄鐗婇幐鎼佸矗閸℃瑧鐭堥柣鎰問濞尖晠鎮楅棃娑欘棦闁?.."
+              placeholder="输入神秘密钥..."
               placeholder-class="key-input-placeholder"
-              style="font-family: 'ZQKNNY','YouYuan','濡ょ姷鍋熼崢褍銆?,'Microsoft YaHei',sans-serif; font-weight: 900;"
-              placeholder-style="font-family: 'ZQKNNY','YouYuan','濡ょ姷鍋熼崢褍銆?,'Microsoft YaHei',sans-serif; color: rgba(93, 64, 55, 0.45);"
+              style="font-family: 'ZQKNNY','YouYuan','幼圆','Microsoft YaHei',sans-serif; font-weight: 900;"
+              placeholder-style="font-family: 'ZQKNNY','YouYuan','幼圆','Microsoft YaHei',sans-serif; color: rgba(93, 64, 55, 0.45);"
               value="{{accessKey}}"
               bindinput="onAccessKeyInput"
               maxlength="32"
@@ -135,18 +138,18 @@
           <button class="submit-btn" hover-class="submit-btn--active" bindtap="submit" disabled="{{submitting}}">
             <view class="submit-row">
               <image class="submit-icon {{submitting ? 'submit-icon--spin' : ''}}" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-              <text>{{submitting ? '婵°倗濮撮惌渚€鎯佹径瀣枖?..' : '闁荤喐鐟辩紞渚€寮ㄩ敐澶嬪剮缂佸鐏濋弬鈧?}}</text>
+              <text>{{submitting ? '验证中...' : '解锁相册'}}</text>
             </view>
           </button>
 
           <view class="key-tips">
-            <text class="key-tip">濡絽鍟€?闂佸湱绮崝妤呭Φ濮樿埖鏅慨妯虹－缂堝鏌涜箛瀣姎闁伙附鍨块弻锕傚Ψ閵夛箑鈧敻鏌涘Δ鈧崯鑳亹閸欏浜ゆ繛鎴灻鍐测槈閹惧磭鎽犳俊鐐插€块幆鍕矙閸喗鏉哥紓浣告湰濡炶棄螞?/text>
-            <text class="key-tip">闁诲酣娼уΛ婵嬪箰濠婂牊鍋ㄩ弶鍫氭櫓閸氣偓闂佽崵鍋涘Λ妤呭箟閹惰棄绠甸柟閭︿簽鏉╂棃鏌ㄥ☉妯垮闁糕晛鐭傚鐢告偄闁垮鈧數绱掔仦鐐仢婵☆偉娉曟禍鎼佸幢濮橆剚顔囬梺鍛婃煟閸旀垿寮ㄩ姀鐘?/text>
+            <text class="key-tip">💡 提示：输入密钥后即可进入临时相册空间</text>
+            <text class="key-tip">密钥由管理员提供，到期后空间将自动销毁</text>
           </view>
         </view>
 
         <button class="back-btn" hover-class="back-btn--active" wx:if="{{isLoggedIn && boundAlbums.length > 0}}" bindtap="hideKeyInput">
-          闂?闁哄鏅滈弻銊ッ洪弽顓炵闁瑰濮甸悾閬嶆煟閳哄喚鐒鹃柛?
+          ← 返回我的相册
         </button>
       </view>
     </view>
@@ -158,9 +161,9 @@
       <view class="confirm-icon-wrap">
         <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
       </view>
-      <text class="confirm-title">闁荤喐鐟辩紞浣糕枍鎼达絿鐭氭繛宸簼閿涚喓绱撴担鐟扮仴闁伙綁绠栭弫?/text>
-      <text class="confirm-text">闁荤喐鐟辩紞浣糕枍鎼淬劌瑙﹂幖瀛樼箘閻熸繂霉閸忚壈澹橀柛銊ョ秺濮婁粙濡堕崶锝嗘櫈闂傚倸鍊瑰娆撳船鐎电硶鍋撻崷顓燁仧缂佽鲸绻冮幏鍛存偐鏉堚晝鐓楅梺鍛婄懐閸ㄥ爼鍩€椤掍椒浜㈢紒璇插暟閳ь剟娼уΛ婵嬪箰濠婂牊鐓傜€广儱妫欓悡鈧柡澶嗘櫆缁嬫垿宕ｉ崱娑氬祦閻犲搫鎼弲娆愮箾閸☆厾纾跨紒顕嗗閳ь剝顫夐崫搴ㄥ焵?/text>
-      <text class="confirm-tip">閻熸粎澧楅幐鍛婃櫠閻樼數鐭氭繛宸簼閿涚喖鏌ㄥ☉娆樺姱{unbindTargetAlbum.title || '闂佸搫鐗滄禍婊堝箠閿熺姴瑙︾€广儱娲犻弫鍕⒒?}}</text>
+      <text class="confirm-title">解除空间绑定？</text>
+      <text class="confirm-text">解除后不会删除空间内容，你仍可通过密钥重新进入并再次绑定。</text>
+      <text class="confirm-tip">当前空间：{{unbindTargetAlbum.title || '未命名空间'}}</text>
 
       <view class="confirm-actions">
         <button
@@ -169,7 +172,7 @@
           bindtap="cancelUnbindAlbum"
           disabled="{{unbindingAlbumId !== ''}}"
         >
-          闂佸憡鍔曠粔鐢稿礂閸岀偛绠?
+          再想想
         </button>
         <button
           class="confirm-btn confirm-btn--primary"
@@ -177,7 +180,7 @@
           bindtap="confirmUnbindAlbum"
           disabled="{{unbindingAlbumId !== ''}}"
         >
-          {{unbindingAlbumId ? '闁荤喐鐟辩紞浣糕枍鎼淬垻鈻?..' : '缂佺虎鍙庨崰娑㈩敇閼姐倖鍠嗛柨婵嗩槹閻?}}
+          {{unbindingAlbumId ? '解绑中...' : '确认解除'}}
         </button>
       </view>
     </view>

@@ -439,24 +439,15 @@ button::after {
   inset: 0;
   z-index: 12;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 36rpx 24rpx;
-  box-sizing: border-box;
-  background: rgba(255, 251, 240, 0.82);
-}
-
-.album-overlay-loading__card {
-  display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 18rpx;
-  min-width: 280rpx;
-  padding: 34rpx 34rpx 30rpx;
-  border-radius: 28rpx;
-  border: 2rpx solid rgba(166, 126, 82, 0.18);
-  background: linear-gradient(180deg, rgba(255, 253, 247, 0.96) 0%, rgba(255, 246, 231, 0.92) 100%);
-  box-shadow: 0 18rpx 48rpx rgba(93, 64, 55, 0.16);
+  padding: 36rpx 24rpx;
+  box-sizing: border-box;
+  background: rgba(255, 251, 240, 0.78);
+  -webkit-backdrop-filter: blur(8rpx);
+  backdrop-filter: blur(8rpx);
 }
 
 .album-overlay-loading__ring {
@@ -468,7 +459,7 @@ button::after {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8rpx;
+  gap: 6rpx;
 }
 
 .grid--single {

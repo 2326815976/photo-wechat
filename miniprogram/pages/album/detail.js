@@ -1461,6 +1461,12 @@ Page({
       resolve();
     }));
 
+    try {
+      wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    } catch (error) {
+      // ignore
+    }
+
     const success = await this.loadPhotoPage(id, 1, { reset: true, silent: true });
     if (!success && String(this.data.selectedFolder || ROOT_FOLDER_ID) === id) {
       await new Promise((resolve) => this.setData({

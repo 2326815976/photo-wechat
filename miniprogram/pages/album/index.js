@@ -428,7 +428,7 @@ Page({
           root_folder_name: rootFolderName,
           is_expired: isExpired,
           days_remaining: daysRemaining,
-          expiry_text: isExpired ? "⚠️ 已过期" : `✨ 剩余 ${Math.max(daysRemaining, 0)} 天`,
+          expiry_text: isExpired ? "已过期" : `剩余 ${Math.max(daysRemaining, 0)} 天`,
         });
       });
 

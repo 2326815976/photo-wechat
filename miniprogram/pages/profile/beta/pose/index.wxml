@@ -93,7 +93,33 @@
       <view class="pose-card">
         <view class="pose-doodle">📷</view>
         <view class="pose-img-wrap" bindtap="openFullscreen">
-          <image class="pose-img" src="{{currentPose.image_url_resolved}}" mode="aspectFill" />
+          <image
+            class="pose-img {{poseImageLoaded ? 'pose-img--loaded' : ''}}"
+            src="{{currentPose.image_url_resolved}}"
+            mode="aspectFill"
+            bindload="onPoseImageLoad"
+            binderror="onPoseImageError"
+          />
+          <view class="pose-img-loading" wx:if="{{!poseImageLoaded}}">
+            <block wx:if="{{poseImageLoadFailed}}">
+              <view class="pose-img-loading__center pose-img-loading__center--error">
+                <text class="pose-img-loading__camera pose-img-loading__camera--error">📸</text>
+                <text class="pose-img-loading__title">图片开小差了</text>
+                <text class="pose-img-loading__desc">稍后再试试</text>
+              </view>
+            </block>
+            <block wx:else>
+              <text class="pose-img-loading__ambient pose-img-loading__ambient--left">✨</text>
+              <text class="pose-img-loading__ambient pose-img-loading__ambient--right">💫</text>
+              <view class="pose-img-loading__center">
+                <view class="pose-img-loading__camera-wrap">
+                  <text class="pose-img-loading__camera">📷</text>
+                  <text class="pose-img-loading__spark">✨</text>
+                </view>
+                <text class="pose-img-loading__title">拾光中...</text>
+              </view>
+            </block>
+          </view>
         </view>
         <view class="pose-tags">
           <view
@@ -172,4 +198,3 @@
   </view>
 
 </view>
-

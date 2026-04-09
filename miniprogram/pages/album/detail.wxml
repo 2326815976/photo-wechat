@@ -102,19 +102,17 @@
       </view>
 
       <view class="gallery-content-shell">
-        <view class="album-overlay-loading" wx:if="{{switchingFolderLoading}}">
-          <view class="album-overlay-loading__card motion-pop-in">
-            <view class="loading-ring album-overlay-loading__ring">
-              <view class="ring ring--outer"></view>
-              <view class="ring ring--inner"></view>
-              <view class="ring-center">
-                <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-              </view>
+        <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading}}">
+          <view class="loading-ring album-overlay-loading__ring">
+            <view class="ring ring--outer"></view>
+            <view class="ring ring--inner"></view>
+            <view class="ring-center">
+              <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
             </view>
-            <view class="loading-text album-overlay-loading__text">
-              <text class="loading-title">拾光中...</text>
-              <text class="loading-desc">正在切换当前照片分组</text>
-            </view>
+          </view>
+          <view class="loading-text album-overlay-loading__text">
+            <text class="loading-title">拾光中...</text>
+            <text class="loading-desc">正在切换照片标签</text>
           </view>
         </view>
 
