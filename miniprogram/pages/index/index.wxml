@@ -1,10 +1,15 @@
-<view class="page">
+<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <app-header
-    wx:if="{{!auditChecking && (!hideAudit || betaPoseBypassAllowed) && backendReady}}"
+  managedPageKey="pose"
+    wx:if="{{!auditChecking && backendReady && (pageIsStandalone || homeRedirectPath === 'pages/index/index' || betaPoseBypassAllowed)}}"
     title="拾光谣"
     subtitle="✨ 记录此刻的不期而遇 ✨"
     safeTop="{{safeTop}}"
-    isHomePage="{{true}}"
+    showBack="{{pageIsStandalone}}"
+    fallbackRoute="{{pageFallbackRoute}}"
+    fallbackTab="{{pageFallbackTab}}"
+    preferFallback="{{pageIsStandalone}}"
+    isHomePage="{{!pageIsStandalone}}"
     animateIn="{{pageReady}}"
   />
 
@@ -22,7 +27,7 @@
     </view>
   </view>
 
-  <view class="content" wx:if="{{!auditChecking && (!hideAudit || betaPoseBypassAllowed) && backendReady}}">
+  <view class="content {{pageIsStandalone ? 'content--preview' : ''}}" wx:if="{{!auditChecking && backendReady && (pageIsStandalone || homeRedirectPath === 'pages/index/index' || betaPoseBypassAllowed)}}">
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
@@ -107,7 +112,7 @@
     </view>
 
     <!-- 底部操作 -->
-    <view class="bottom {{pageReady ? 'bottom--enter' : ''}}">
+    <view class="bottom {{pageReady ? 'bottom--enter' : ''}} {{pageIsStandalone ? 'bottom--preview' : ''}}">
       <view class="shuffle-btn {{isAnimating ? 'shuffle-btn--disabled' : ''}}" hover-class="shuffle-btn--active" hover-stay-time="80" bindtap="onShuffle">
         <image
           class="shuffle-icon {{isAnimating ? 'shuffle-icon--spin' : ''}}"
@@ -171,4 +176,5 @@
 
   <view class="audit-guard" wx:if="{{auditChecking}}"></view>
 
+  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/index/index" />
 </view>

@@ -1,0 +1,7 @@
+page {
+  background: #fffaf2;
+}
+
+.page-scroll {
+  height: 100vh;
+}

@@ -1,0 +1,4 @@
+<view wx:if="{{url}}" style="height: 100vh; background: #FFFBF0;">
+  <web-view src="{{url}}"></web-view>
+</view>
+<view wx:else style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #FFFBF0; color: #5D4037; font-size: 28rpx;">预览地址缺失</view>

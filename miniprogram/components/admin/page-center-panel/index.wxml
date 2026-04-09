@@ -1,0 +1,212 @@
+<view class="page-center-panel">
+  <view class="page-shell {{embedded ? 'page-shell--embedded' : ''}}">
+    <view class="panel-card intro-card">
+      <view class="page-title">{{channelTitle}}</view>
+      <text class="intro-desc">{{channelDesc}}</text>
+    </view>
+
+    <view class="panel-card" wx:if="{{loading}}">
+      <view class="empty-box">正在读取页面管理数据...</view>
+    </view>
+
+    <view class="panel-card" wx:elif="{{!pageRows.length}}">
+      <view class="empty-box">当前没有可管理的页面。</view>
+    </view>
+
+    <block wx:else>
+      <view class="page-card panel-card" wx:for="{{pageRows}}" wx:key="pageKey">
+        <view class="page-card__layout page-card__layout--simple">
+          <view class="page-card__main">
+            <view class="page-card__head">
+              <view class="page-card__title-row">
+                <view class="page-card__title">{{item.pageName}}</view>
+                <text class="status-pill status-pill--{{item.statusType}}">{{item.statusLabel}}</text>
+                <text class="tag-pill">{{item.pageKey}}</text>
+                <text class="tag-pill tag-pill--soft" wx:if="{{item.isBuiltIn}}">内置页</text>
+              </view>
+              <text class="page-card__desc" wx:if="{{item.pageDescription}}">{{item.pageDescription}}</text>
+            </view>
+            <view class="meta-pills page-card__meta">
+              <text class="meta-pill">入口：{{item.statusLabel}}{{item.statusType === 'online' && item.currentRule.showInNav ? ' · 第 ' + item.navRank + ' 位' : (item.statusType === 'beta' ? ' · 无底栏' : '')}}</text>
+              <text class="meta-pill">菜单：{{item.loginNavLabel}}{{item.currentRule.showInNav ? ' · 第 ' + item.navRank + ' 位' : ' · 未进底栏'}}</text>
+              <text class="meta-pill">顶部：{{item.headerTitlePreview}}{{item.currentRule.headerSubtitle ? ' · ' + item.headerSubtitlePreview : ''}}</text>
+              <text class="meta-pill" wx:if="{{item.supportsBeta}}">内测码：{{item.betaCodeSummary.usable}} / {{item.betaCodeSummary.total}}</text>
+            </view>
+          </view>
+
+          <view class="action-grid action-grid--triple page-card__actions">
+            <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{item.pageKey}}" data-action="edit">编辑</button>
+            <button class="action-btn {{item.quickActionClassName}}" bindtap="onQuickAction" data-page-key="{{item.pageKey}}" data-action="{{item.quickActionType}}" disabled="{{(savingKey ? true : false) || item.quickActionDisabled}}">{{savingKey === (item.pageKey + ':state:' + item.quickActionType) ? item.quickActionLoadingLabel : item.quickActionLabel}}</button>
+            <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{item.pageKey}}" data-action="view" disabled="{{!item.supportsPreview || !item.currentPreviewRoutePath}}">查看</button>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <view class="modal-mask" wx:if="{{dialogRow && dialogMode}}" bindtap="closeActionDialog">
+      <view class="modal-card" catchtap="noop">
+        <view class="modal-head">
+          <view class="modal-head__main">
+            <view class="modal-title">{{dialogMode === 'offline' ? '确认下线 · ' + dialogRow.pageName : '编辑页面 · ' + dialogRow.pageName}}</view>
+            <text class="modal-desc">{{dialogMode === 'offline' ? '下线后普通用户无法访问该页面，管理员仍可通过“查看”无底栏进入。' : '只保留必要项：标题、菜单、内测、上线。'}}</text>
+          </view>
+          <view class="modal-close" bindtap="closeActionDialog">×</view>
+        </view>
+
+        <block wx:if="{{dialogMode === 'offline'}}">
+          <view class="impact-card impact-card--danger">
+            <view class="impact-card__title">下线影响</view>
+            <text class="impact-card__desc">• 普通用户无法通过正式路由访问该页面。</text>
+            <text class="impact-card__desc">• 如果页面当前在底栏中，会立即从底部菜单移除。</text>
+            <text class="impact-card__desc">• 管理员仍可通过“查看”无底栏预览该页面。</text>
+          </view>
+
+          <view class="field-grid field-grid--two">
+            <view class="info-card info-card--plain">
+              <view class="info-card__title">正式路由</view>
+              <text class="info-card__desc info-card__desc--mono">{{dialogRow.currentRoutePath || '未配置'}}</text>
+            </view>
+            <view class="info-card info-card--plain">
+              <view class="info-card__title">查看路由</view>
+              <text class="info-card__desc info-card__desc--mono">{{dialogRow.currentPreviewRoutePath || '未配置'}}</text>
+            </view>
+          </view>
+
+          <view class="modal-actions">
+            <button class="modal-btn modal-btn--ghost" bindtap="closeActionDialog">取消</button>
+            <button class="modal-btn modal-btn--danger" bindtap="onDialogSubmit" data-action="offline" disabled="{{savingKey ? true : false}}">确认下线</button>
+          </view>
+        </block>
+
+        <block wx:else>
+          <view class="modal-section">
+            <view class="modal-section__head">
+              <view>
+                <view class="modal-section__title">标题设置</view>
+                <text class="modal-section__desc">大标题如“拾光谣”，小标题如“定格美好瞬间”。</text>
+              </view>
+            </view>
+            <view class="field-grid field-grid--two modal-section__form-grid">
+              <view class="field-card">
+                <text class="field-label">顶部大标题</text>
+                <input class="field-input" value="{{dialogRow.currentRule.headerTitle}}" data-page-key="{{dialogRow.pageKey}}" data-field="headerTitle" bindinput="onRuleInput" placeholder="如：拾光谣" />
+              </view>
+              <view class="field-card">
+                <text class="field-label">顶部小标题</text>
+                <input class="field-input" value="{{dialogRow.currentRule.headerSubtitle}}" data-page-key="{{dialogRow.pageKey}}" data-field="headerSubtitle" bindinput="onRuleInput" placeholder="如：定格美好瞬间" />
+              </view>
+            </view>
+            <view class="modal-section__actions">
+              <button class="mini-btn mini-btn--strong modal-section__save-btn" bindtap="onSaveTitleRule" data-page-key="{{dialogRow.pageKey}}" disabled="{{savingKey ? true : false}}">{{savingKey === (dialogRow.pageKey + ':rule:title') ? '保存中...' : '保存标题设置'}}</button>
+            </view>
+          </view>
+
+          <view class="modal-section">
+            <view class="modal-section__head">
+              <view>
+                <view class="modal-section__title">菜单设置</view>
+                <text class="modal-section__desc">只保留当前端真正需要修改的菜单文案。</text>
+              </view>
+            </view>
+            <view class="field-grid field-grid--two modal-section__form-grid">
+              <view class="field-card">
+                <text class="field-label">底部菜单名称</text>
+                <input class="field-input" value="{{dialogRow.currentRule.navText}}" data-page-key="{{dialogRow.pageKey}}" data-field="navText" bindinput="onRuleInput" placeholder="如：首页" />
+              </view>
+              <view class="field-card">
+                <text class="field-label">未登录菜单名称</text>
+                <input class="field-input" value="{{dialogRow.currentRule.guestNavText}}" data-page-key="{{dialogRow.pageKey}}" data-field="guestNavText" bindinput="onRuleInput" placeholder="未登录用户看到的名称" />
+              </view>
+            </view>
+            <view class="modal-section__actions">
+              <button class="mini-btn mini-btn--strong modal-section__save-btn" bindtap="onSaveMenuRule" data-page-key="{{dialogRow.pageKey}}" disabled="{{savingKey ? true : false}}">{{savingKey === (dialogRow.pageKey + ':rule:menu') ? '保存中...' : '保存菜单设置'}}</button>
+            </view>
+          </view>
+
+          <view class="modal-section" wx:if="{{dialogRow.supportsBeta}}">
+            <view class="modal-section__head">
+              <view>
+                <view class="modal-section__title">内测设置</view>
+                <text class="modal-section__desc">{{dialogRow.statusType === 'beta' ? '维护当前端可用的内测码，并可继续保留内测发布。' : (dialogRow.betaCodesAvailable.length ? '已满足切换为内测条件，可从当前状态切换为内测。' : '请先创建至少一个当前端可用的内测码，才能切换为内测。')}}</text>
+              </view>
+              <text class="badge-pill badge-pill--beta">可用 {{dialogRow.betaCodesAvailable.length}} 个</text>
+            </view>
+
+            <view class="field-grid field-grid--two modal-section__form-grid">
+              <view class="field-card">
+                <text class="field-label">内测码名称</text>
+                <input class="field-input" value="{{dialogRow.betaDraft.betaName}}" data-page-key="{{dialogRow.pageKey}}" data-field="betaName" bindinput="onBetaInput" focus="{{betaEditorFocusPageKey === dialogRow.pageKey}}" placeholder="如：4 月摄影伙伴" />
+              </view>
+              <view class="field-card">
+                <text class="field-label">到期日期</text>
+                <picker mode="date" value="{{dialogRow.betaDraft.expiresAt}}" data-page-key="{{dialogRow.pageKey}}" data-field="expiresAt" bindchange="onBetaInput">
+                  <view class="field-picker {{dialogRow.betaDraft.expiresAt ? '' : 'field-picker--placeholder'}}">{{dialogRow.betaDraft.expiresAt || '请选择日期'}}</view>
+                </picker>
+              </view>
+              <view class="field-card field-card--full">
+                <text class="field-label">内测码（留空则自动生成）</text>
+                <input class="field-input field-input--upper" value="{{dialogRow.betaDraft.betaCode}}" data-page-key="{{dialogRow.pageKey}}" data-field="betaCode" bindinput="onBetaInput" placeholder="如：SGY2026" />
+              </view>
+            </view>
+
+            <text class="helper-text">{{dialogRow.betaDraftHelperText}}</text>
+
+            <view class="inline-actions inline-actions--triple">
+              <button class="mini-btn inline-actions__btn" bindtap="onGenerateBetaCode" data-page-key="{{dialogRow.pageKey}}">随机生成</button>
+              <button class="mini-btn mini-btn--strong inline-actions__btn" bindtap="onSaveBetaCode" data-page-key="{{dialogRow.pageKey}}" disabled="{{savingKey ? true : false}}">{{dialogRow.betaSaveButtonText}}</button>
+              <button class="mini-btn mini-btn--soft-primary inline-actions__btn" bindtap="onDialogSubmit" data-action="beta" disabled="{{(savingKey ? true : false) || !dialogRow.betaCodesAvailable.length}}">{{dialogRow.statusType === 'beta' ? '保存内测设置' : '切换为内测'}}</button>
+            </view>
+
+            <view class="code-list">
+              <view class="code-card" wx:for="{{dialogRow.betaCodesVisible}}" wx:key="id">
+                <view class="code-card__head">
+                  <view class="code-card__main">
+                    <view class="code-card__title-row">
+                      <view class="code-card__title">{{item.betaName}}</view>
+                      <text class="code-pill code-pill--{{item.lifecycleKey}}">{{item.lifecycleLabel}}</text>
+                    </view>
+                    <text class="code-card__code">{{item.betaCode}}</text>
+                  </view>
+                  <view class="inline-actions inline-actions--compact code-card__actions">
+                    <button class="mini-btn" bindtap="onEditBetaCode" data-page-key="{{dialogRow.pageKey}}" data-code-id="{{item.id}}">{{item.editActionText}}</button>
+                    <button class="mini-btn mini-btn--danger" bindtap="onDestroyBetaCode" data-code-id="{{item.id}}" data-beta-name="{{item.betaName}}" disabled="{{savingKey ? true : false}}">删除</button>
+                  </view>
+                </view>
+              </view>
+              <view class="empty-box empty-box--light" wx:if="{{!dialogRow.betaCodesVisible.length}}">当前端还没有内测码，请先创建至少一个可用内测码。</view>
+            </view>
+          </view>
+
+          <view class="modal-section">
+            <view class="modal-section__head">
+              <view>
+                <view class="modal-section__title">上线设置</view>
+                <text class="modal-section__desc">{{dialogRow.navSupported ? (dialogRow.statusType === 'online' ? '维护当前底部菜单顺序与上线状态。' : '满足上线条件，保存后会进入底部菜单。') : '当前页面不是底栏候选，不能直接上线到菜单。'}}</text>
+              </view>
+            </view>
+
+            <view class="order-pills">
+              <text class="{{item.pageKey === dialogRow.pageKey ? 'order-pill order-pill--active' : 'order-pill'}}" wx:for="{{navRows}}" wx:key="pageKey">{{index + 1}}. {{item.displayLabel}}</text>
+            </view>
+
+            <view class="online-actions">
+              <button class="mini-btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="up" disabled="{{savingKey ? true : (dialogRow.forcedHomeEntry || dialogRow.navRank <= 1)}}">前移</button>
+              <button class="mini-btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="down" disabled="{{savingKey ? true : (dialogRow.forcedHomeEntry || !dialogRow.navRank || dialogRow.navRank >= dialogRow.navTotal)}}">后移</button>
+              <button class="modal-btn modal-btn--primary online-actions__save-btn" bindtap="onDialogSubmit" data-action="online" disabled="{{(savingKey ? true : false) || !dialogRow.navSupported}}">{{dialogRow.statusType === 'online' ? '保存上线设置' : '切换为上线'}}</button>
+            </view>
+          </view>
+
+          <view class="modal-section modal-section--actions">
+            <view class="modal-actions">
+              <button class="modal-btn modal-btn--ghost" bindtap="closeActionDialog">取消</button>
+              <button class="modal-btn modal-btn--ghost" bindtap="onResetRule" data-page-key="{{dialogRow.pageKey}}">恢复已保存</button>
+              <button class="modal-btn modal-btn--plain" bindtap="onDialogSaveRule" disabled="{{savingKey ? true : false}}">保存基础信息</button>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+
+    <view class="notice notice--{{noticeType}}" wx:if="{{noticeText}}">{{noticeText}}</view>
+  </view>
+</view>

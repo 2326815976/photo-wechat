@@ -1,6 +1,7 @@
 {
   "usingComponents": {
     "map-picker": "/components/map-picker/index",
-    "gallery-manager": "/components/admin/gallery-manager/index"
+    "gallery-manager": "/components/admin/gallery-manager/index",
+    "page-center-panel": "/components/admin/page-center-panel/index"
   }
 }

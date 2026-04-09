@@ -8,6 +8,8 @@ const DEFAULT_SORT_ORDER = 2147483647;
 const TOP_PIN_SORT_ORDER = 1;
 const TOP_PIN_CONFLICT_SORT_ORDER = 11;
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
+const ALBUM_FOLDER_SORT_MIGRATION_HINT = "数据库缺少 album_folders.sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/15_album_folder_sort_order.sql";
+const ALBUM_FOLDER_SORT_READONLY_HINT = "当前后端暂不支持 album_folders.sort_order, 已回退为旧版顺序展示; 如需启用上移/下移, 请同步数据库迁移和后端字段白名单: photo/sql/migrations/15_album_folder_sort_order.sql";
 const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_highlight / sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/06_album_photo_story_sort.sql";
 const ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT = "数据库缺少 shot_date 字段，请先执行 SQL 迁移：photo/sql/migrations/07_album_photo_shot_date.sql";
 const ALBUM_PHOTO_SHOT_LOCATION_MIGRATION_HINT = "数据库缺少 shot_location 字段，请先执行 SQL 迁移：photo/sql/migrations/08_album_photo_shot_location.sql";
@@ -73,6 +75,28 @@ function isColumnMissingError(message, column) {
   );
 }
 
+function isColumnAccessDeniedError(message, column, table) {
+  const raw = String(message || "");
+  const normalized = raw.toLowerCase();
+  const target = String(column || "").trim().toLowerCase();
+  const normalizedTable = String(table || "").trim().toLowerCase();
+  if (!target) return false;
+  const qualifiedTarget = normalizedTable ? normalizedTable + "." + target : "";
+  return (
+    (raw.includes("字段不允许访问") &&
+      ((qualifiedTarget && normalized.includes(qualifiedTarget)) ||
+        normalized.includes("." + target) ||
+        normalized.includes(target))) ||
+    (normalized.includes("field") &&
+      normalized.includes("not allowed") &&
+      ((qualifiedTarget && normalized.includes(qualifiedTarget)) || normalized.includes(target)))
+  );
+}
+
+function isColumnUnavailableError(message, column, table) {
+  return isColumnMissingError(message, column) || isColumnAccessDeniedError(message, column, table);
+}
+
 function isRootFolderTarget(value) {
   const text = String(value === undefined || value === null ? "" : value).trim();
   if (!text) return true;
@@ -82,6 +106,26 @@ function isRootFolderTarget(value) {
 function buildRootMoveTempFolderName() {
   const suffix = Math.random().toString(36).slice(2, 8);
   return `__ROOT_MOVE_TMP__${Date.now()}_${suffix}`;
+}
+
+function buildFolderSortOrderValue(index) {
+  return (Math.max(0, Number(index) || 0) + 1) * 10;
+}
+
+function normalizeFolderSortOrder(value) {
+  const sortValue = Number(value);
+  return Number.isFinite(sortValue) && sortValue > 0 ? Math.round(sortValue) : DEFAULT_SORT_ORDER;
+}
+
+function sortAlbumFolders(rows) {
+  return (Array.isArray(rows) ? rows.slice() : []).sort((a, b) => {
+    const normalizedA = normalizeFolderSortOrder(a && a.sort_order);
+    const normalizedB = normalizeFolderSortOrder(b && b.sort_order);
+    if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+    const createdCompare = String((a && a.created_at) || "").localeCompare(String((b && b.created_at) || ""), "zh-CN");
+    if (createdCompare !== 0) return createdCompare;
+    return String((a && a.id) || "").localeCompare(String((b && b.id) || ""), "zh-CN");
+  });
 }
 
 function hasRpcError(result) {
@@ -624,6 +668,10 @@ const pageDefinition = {
     loading: true,
     selectedFolder: null,
     selectedFolderName: "根目录",
+    selectedFolderCanMoveTop: false,
+    selectedFolderCanMoveUp: false,
+    selectedFolderCanMoveDown: false,
+    folderSortOrderAvailable: true,
     rootFolderName: "根目录",
     rootPhotoCount: 0,
 
@@ -807,13 +855,29 @@ const pageDefinition = {
   async loadFolders(options) {
     const silent = Boolean(options && options.silent);
     try {
-      const result = await dbQuery({
+      let result = await dbQuery({
         table: "album_folders",
         action: "select",
-        columns: "id,album_id,name,created_at",
+        columns: "id,album_id,name,sort_order,created_at",
         filters: [{ column: "album_id", operator: "eq", value: this.data.albumId }],
-        orders: [{ column: "created_at", ascending: false }],
+        orders: [
+          { column: "sort_order", ascending: true },
+          { column: "created_at", ascending: true },
+        ],
       });
+      let folderSortOrderAvailable = true;
+      const folderSortReadError = readRpcError(result, "获取文件夹失败");
+
+      if (hasRpcError(result) && isColumnUnavailableError(folderSortReadError, "sort_order", "album_folders")) {
+        folderSortOrderAvailable = false;
+        result = await dbQuery({
+          table: "album_folders",
+          action: "select",
+          columns: "id,album_id,name,created_at",
+          filters: [{ column: "album_id", operator: "eq", value: this.data.albumId }],
+          orders: [{ column: "created_at", ascending: true }],
+        });
+      }
 
       if (!hasRpcError(result)) {
         const folderData = readRpcData(result, []);
@@ -824,10 +888,11 @@ const pageDefinition = {
         const previousCountMap = new Map(
           previousFolders.map((folder) => [String(folder.id), Number(folder.photoCount || 0)])
         );
-        const folders = folderRows.map(folder => ({
+        const folders = sortAlbumFolders(folderRows.map(folder => ({
           ...folder,
+          sort_order: normalizeFolderSortOrder(folder && folder.sort_order),
           photoCount: previousCountMap.get(String(folder.id)) || 0
-        }));
+        })));
         const nextSelectedFolder =
           this.data.selectedFolder &&
           !folders.some((folder) => String(folder.id) === String(this.data.selectedFolder))
@@ -843,6 +908,8 @@ const pageDefinition = {
           folders,
           selectedFolder: nextSelectedFolder,
           selectedFolderName: String(nextSelectedFolderName || ""),
+          folderSortOrderAvailable,
+          ...this.resolveSelectedFolderMoveState(nextSelectedFolder, folders, { folderSortOrderAvailable }),
         }, () => {
           void this.updateFolderPhotoCounts();
         });
@@ -918,16 +985,61 @@ const pageDefinition = {
         "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,is_public,view_count,like_count,created_at";
       const minimalColumns =
         "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,is_public,view_count,like_count,created_at";
+      const fullColumnsWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
+      const columnsWithoutSortWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,shot_location,is_public,view_count,like_count,created_at";
+      const columnsWithoutStoryWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
+      const columnsWithoutShotLocationWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,is_public,view_count,like_count,created_at";
+      const columnsWithoutShotDateWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_location,is_public,view_count,like_count,created_at";
+      const columnsWithoutShotMetaWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
+      const columnsWithoutSortOrLocationWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_date,is_public,view_count,like_count,created_at";
+      const columnsWithoutSortShotDateWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,shot_location,is_public,view_count,like_count,created_at";
+      const columnsWithoutSortShotMetaWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,is_public,view_count,like_count,created_at";
+      const minimalColumnsWithoutLegacyUrl =
+        "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,is_public,view_count,like_count,created_at";
 
       const queryPhotoPage = async (pageNo) => {
         const safePageNo = Math.max(1, Number(pageNo || 1));
         const offset = (safePageNo - 1) * photosPerPage;
         const photoFilters = buildPhotoFilters();
+        const legacyColumnSet = {
+          full: fullColumns,
+          withoutSort: columnsWithoutSort,
+          withoutStory: columnsWithoutStory,
+          withoutShotLocation: columnsWithoutShotLocation,
+          withoutShotDate: columnsWithoutShotDate,
+          withoutShotMeta: columnsWithoutShotMeta,
+          withoutSortOrLocation: columnsWithoutSortOrLocation,
+          withoutSortShotDate: columnsWithoutSortShotDate,
+          withoutSortShotMeta: columnsWithoutSortShotMeta,
+          minimal: minimalColumns,
+        };
+        const fallbackColumnSet = {
+          full: fullColumnsWithoutLegacyUrl,
+          withoutSort: columnsWithoutSortWithoutLegacyUrl,
+          withoutStory: columnsWithoutStoryWithoutLegacyUrl,
+          withoutShotLocation: columnsWithoutShotLocationWithoutLegacyUrl,
+          withoutShotDate: columnsWithoutShotDateWithoutLegacyUrl,
+          withoutShotMeta: columnsWithoutShotMetaWithoutLegacyUrl,
+          withoutSortOrLocation: columnsWithoutSortOrLocationWithoutLegacyUrl,
+          withoutSortShotDate: columnsWithoutSortShotDateWithoutLegacyUrl,
+          withoutSortShotMeta: columnsWithoutSortShotMetaWithoutLegacyUrl,
+          minimal: minimalColumnsWithoutLegacyUrl,
+        };
+        let activeColumnSet = legacyColumnSet;
 
         let result = await dbQuery({
           table: "album_photos",
           action: "select",
-          columns: fullColumns,
+          columns: activeColumnSet.full,
           filters: photoFilters,
           orders: primaryOrders,
           range: {
@@ -937,11 +1049,27 @@ const pageDefinition = {
           count: "exact",
         });
 
-        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
+        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鑾峰彇鐓х墖澶辫触"), "url")) {
+          activeColumnSet = fallbackColumnSet;
           result = await dbQuery({
             table: "album_photos",
             action: "select",
-            columns: columnsWithoutSort,
+            columns: activeColumnSet.full,
+            filters: photoFilters,
+            orders: primaryOrders,
+            range: {
+              from: offset,
+              to: offset + photosPerPage - 1,
+            },
+            count: "exact",
+          });
+        }
+
+        if (hasRpcError(result) && isColumnUnavailableError(readRpcError(result, "获取照片失败"), "sort_order", "album_photos")) {
+          result = await dbQuery({
+            table: "album_photos",
+            action: "select",
+            columns: activeColumnSet.withoutSort,
             filters: photoFilters,
             orders: ordersWithoutSort,
             range: {
@@ -962,7 +1090,7 @@ const pageDefinition = {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
-            columns: columnsWithoutStory,
+            columns: activeColumnSet.withoutStory,
             filters: photoFilters,
             orders: ordersWithoutSort,
             range: {
@@ -977,7 +1105,7 @@ const pageDefinition = {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
-            columns: columnsWithoutShotLocation,
+            columns: activeColumnSet.withoutShotLocation,
             filters: photoFilters,
             orders: useTimeDescOrders ? ordersWithoutSort : primaryOrders,
             range: {
@@ -986,11 +1114,11 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
+          if (hasRpcError(result) && isColumnUnavailableError(readRpcError(result, "获取照片失败"), "sort_order", "album_photos")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
-              columns: columnsWithoutSortOrLocation,
+              columns: activeColumnSet.withoutSortOrLocation,
               filters: photoFilters,
               orders: ordersWithoutSort,
               range: {
@@ -1006,7 +1134,7 @@ const pageDefinition = {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
-            columns: columnsWithoutShotDate,
+            columns: activeColumnSet.withoutShotDate,
             filters: photoFilters,
             orders: ordersWithoutShotDate,
             range: {
@@ -1015,11 +1143,11 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
+          if (hasRpcError(result) && isColumnUnavailableError(readRpcError(result, "获取照片失败"), "sort_order", "album_photos")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
-              columns: columnsWithoutSortShotDate,
+              columns: activeColumnSet.withoutSortShotDate,
               filters: photoFilters,
               orders: ordersWithoutShotDate,
               range: {
@@ -1041,7 +1169,7 @@ const pageDefinition = {
           result = await dbQuery({
             table: "album_photos",
             action: "select",
-            columns: columnsWithoutShotMeta,
+            columns: activeColumnSet.withoutShotMeta,
             filters: photoFilters,
             orders: ordersWithoutShotDate,
             range: {
@@ -1050,11 +1178,11 @@ const pageDefinition = {
             },
             count: "exact",
           });
-          if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "sort_order")) {
+          if (hasRpcError(result) && isColumnUnavailableError(readRpcError(result, "获取照片失败"), "sort_order", "album_photos")) {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
-              columns: columnsWithoutSortShotMeta,
+              columns: activeColumnSet.withoutSortShotMeta,
               filters: photoFilters,
               orders: ordersWithoutShotDate,
               range: {
@@ -1068,7 +1196,7 @@ const pageDefinition = {
             result = await dbQuery({
               table: "album_photos",
               action: "select",
-              columns: minimalColumns,
+              columns: activeColumnSet.minimal,
               filters: photoFilters,
               orders: [{ column: "created_at", ascending: false }],
               range: {
@@ -1253,7 +1381,46 @@ const pageDefinition = {
       };
     });
 
-    this.setData({ filteredPhotos });
+    this.setData({
+      filteredPhotos,
+      ...this.resolveSelectedFolderMoveState(selectedFolder, this.data.folders),
+    });
+  },
+
+  resolveSelectedFolderMoveState(folderId, folders, options) {
+    const canMove =
+      options && Object.prototype.hasOwnProperty.call(options, "folderSortOrderAvailable")
+        ? Boolean(options.folderSortOrderAvailable)
+        : this.data.folderSortOrderAvailable !== false;
+    if (!canMove) {
+      return {
+        selectedFolderCanMoveTop: false,
+        selectedFolderCanMoveUp: false,
+        selectedFolderCanMoveDown: false,
+      };
+    }
+    const normalizedFolderId = String(folderId == null ? "" : folderId).trim();
+    if (!normalizedFolderId) {
+      return {
+        selectedFolderCanMoveTop: false,
+        selectedFolderCanMoveUp: false,
+        selectedFolderCanMoveDown: false,
+      };
+    }
+    const list = sortAlbumFolders(Array.isArray(folders) ? folders : []);
+    const currentIndex = list.findIndex((item) => String(item && item.id) === normalizedFolderId);
+    if (currentIndex < 0) {
+      return {
+        selectedFolderCanMoveTop: false,
+        selectedFolderCanMoveUp: false,
+        selectedFolderCanMoveDown: false,
+      };
+    }
+    return {
+      selectedFolderCanMoveTop: currentIndex > 0,
+      selectedFolderCanMoveUp: currentIndex > 0,
+      selectedFolderCanMoveDown: currentIndex < list.length - 1,
+    };
   },
 
   async updateFolderPhotoCounts() {
@@ -1346,6 +1513,7 @@ const pageDefinition = {
     this.setData({
       selectedFolder: folderId,
       selectedFolderName: String(selectedFolderName || ""),
+      ...this.resolveSelectedFolderMoveState(folderId, this.data.folders),
       currentPage: 1,
       isSelectionMode: false,
       selectedPhotoIds: []
@@ -1576,6 +1744,120 @@ const pageDefinition = {
     } finally {
       this.setData({ actionLoading: false });
     }
+  },
+
+  async persistFolderOrder(reordered, successMessage) {
+    const currentFolders = Array.isArray(this.data.folders) ? this.data.folders : [];
+    const currentMap = new Map();
+    currentFolders.forEach((item, index) => {
+      currentMap.set(
+        String(item.id),
+        normalizeFolderSortOrder(item && item.sort_order != null ? item.sort_order : buildFolderSortOrderValue(index))
+      );
+    });
+
+    const desiredMap = new Map();
+    (Array.isArray(reordered) ? reordered : []).forEach((item, index) => {
+      desiredMap.set(String(item.id), buildFolderSortOrderValue(index));
+    });
+
+    const changed = (Array.isArray(reordered) ? reordered : []).filter(
+      (item) => currentMap.get(String(item.id)) !== desiredMap.get(String(item.id))
+    );
+    if (!changed.length) return;
+
+    this.setData({ actionLoading: true });
+    try {
+      for (let i = 0; i < changed.length; i += 1) {
+        const item = changed[i];
+        const sortOrder = desiredMap.get(String(item.id));
+        const result = await dbQuery({
+          table: "album_folders",
+          action: "update",
+          values: { sort_order: sortOrder },
+          filters: [
+            { column: "id", operator: "eq", value: item.id },
+            { column: "album_id", operator: "eq", value: this.data.albumId },
+          ],
+        });
+        if (hasRpcError(result)) {
+          const message = readRpcError(result, "文件夹排序失败");
+          if (isColumnUnavailableError(message, "sort_order", "album_folders")) {
+            this.setData({
+              folderSortOrderAvailable: false,
+              ...this.resolveSelectedFolderMoveState(this.data.selectedFolder, currentFolders, {
+                folderSortOrderAvailable: false,
+              }),
+            });
+            this.showToastMessage(
+              isColumnMissingError(message, "sort_order")
+                ? ALBUM_FOLDER_SORT_MIGRATION_HINT
+                : ALBUM_FOLDER_SORT_READONLY_HINT,
+              "warning"
+            );
+          } else {
+            this.showToastMessage(message, "error");
+          }
+          return;
+        }
+      }
+
+      const nextFolders = sortAlbumFolders(currentFolders.map((item, index) => {
+        const nextSort = desiredMap.get(String(item.id));
+        if (!Number.isFinite(Number(nextSort))) {
+          return Object.assign({}, item, {
+            sort_order: normalizeFolderSortOrder(item && item.sort_order != null ? item.sort_order : buildFolderSortOrderValue(index)),
+          });
+        }
+        return Object.assign({}, item, { sort_order: Number(nextSort) });
+      }));
+
+      this.setData({
+        folders: nextFolders,
+        ...this.resolveSelectedFolderMoveState(this.data.selectedFolder, nextFolders),
+      });
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
+      this.showToastMessage(successMessage, "success");
+    } catch (error) {
+      this.showToastMessage(`文件夹排序失败：${readErrorMessage(error, "请稍后重试")}`, "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
+  async onMoveFolder(e) {
+    if (this.data.actionLoading) return;
+    if (this.data.folderSortOrderAvailable === false) {
+      this.showToastMessage(ALBUM_FOLDER_SORT_READONLY_HINT, "warning");
+      return;
+    }
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const folderId = String(dataset.folderId || "").trim();
+    const rawDirection = String(dataset.direction || "").trim();
+    const direction = rawDirection === "down" ? "down" : rawDirection === "top" ? "top" : "up";
+    if (!folderId || folderId === ROOT_FOLDER_SENTINEL) {
+      return;
+    }
+
+    const list = sortAlbumFolders(Array.isArray(this.data.folders) ? this.data.folders : []);
+    const currentIndex = list.findIndex((item) => String(item.id) === folderId);
+    if (currentIndex < 0) return;
+
+    const targetIndex = direction === "top" ? 0 : direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= list.length || targetIndex === currentIndex) {
+      return;
+    }
+
+    const reordered = list.slice();
+    const moved = reordered[currentIndex];
+    reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    await this.persistFolderOrder(
+      reordered,
+      direction === "top" ? "文件夹已置顶" : direction === "up" ? "文件夹已上移" : "文件夹已下移"
+    );
   },
 
   // 删除文件夹
@@ -1815,7 +2097,6 @@ const pageDefinition = {
 
       const baseValues = {
         album_id: albumId,
-        url: uploadVariants.url,
         thumbnail_url: uploadVariants.thumbnail_url,
         preview_url: uploadVariants.preview_url,
         original_url: uploadVariants.original_url,
@@ -1852,9 +2133,9 @@ const pageDefinition = {
         singleHighlight ? { is_highlight: 1 } : {},
         shotLocation ? { shot_location: shotLocation } : {}
       );
-      const photoColumnsWithShotMeta = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
-      const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_location,is_public,view_count,like_count,created_at";
-      const photoColumnsWithoutShotMeta = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
+      const photoColumnsWithShotMeta = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
+      const photoColumnsWithoutShotDate = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_location,is_public,view_count,like_count,created_at";
+      const photoColumnsWithoutShotMeta = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
 
       let result = await dbQuery({
         table: "album_photos",
@@ -2045,7 +2326,6 @@ const pageDefinition = {
 
           const insertValues = {
             album_id: albumId,
-            url: uploadVariants.url,
             thumbnail_url: uploadVariants.thumbnail_url,
             preview_url: uploadVariants.preview_url,
             original_url: uploadVariants.original_url,
@@ -2056,9 +2336,9 @@ const pageDefinition = {
           if (normalizedBatchShotLocation) {
             insertValues.shot_location = normalizedBatchShotLocation;
           }
-          const photoColumnsWithShotMeta = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
-          const photoColumnsWithoutShotDate = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_location,is_public,view_count,like_count,created_at";
-          const photoColumnsWithoutShotMeta = "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
+          const photoColumnsWithShotMeta = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
+          const photoColumnsWithoutShotDate = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_location,is_public,view_count,like_count,created_at";
+          const photoColumnsWithoutShotMeta = "id,album_id,folder_id,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,is_public,view_count,like_count,created_at";
           const width = Number(image && image.width);
           const height = Number(image && image.height);
           if (Number.isFinite(width) && width > 0) {
@@ -2563,7 +2843,7 @@ const pageDefinition = {
         });
         if (hasRpcError(result)) {
           const message = readRpcError(result, "排序失败");
-          if (isColumnMissingError(message, "sort_order")) {
+          if (isColumnUnavailableError(message, "sort_order", "album_photos")) {
             this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
           } else {
             this.showToastMessage(message, "error");
@@ -2616,7 +2896,7 @@ const pageDefinition = {
       });
       if (hasRpcError(conflictResult)) {
         const conflictMessage = readRpcError(conflictResult, "置顶失败");
-        if (isColumnMissingError(conflictMessage, "sort_order")) {
+        if (isColumnUnavailableError(conflictMessage, "sort_order", "album_photos")) {
           this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
         } else {
           this.showToastMessage(conflictMessage, "error");
@@ -2635,7 +2915,7 @@ const pageDefinition = {
       });
       if (hasRpcError(topResult)) {
         const message = readRpcError(topResult, "置顶失败");
-        if (isColumnMissingError(message, "sort_order")) {
+        if (isColumnUnavailableError(message, "sort_order", "album_photos")) {
           this.showToastMessage(ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT, "warning");
         } else {
           this.showToastMessage(message, "error");
@@ -2967,7 +3247,7 @@ const pageDefinition = {
     this.setData({ actionLoading: true });
 
     try {
-      const result = await dbQuery({
+      let result = await dbQuery({
         table: "album_photos",
         action: "delete",
         filters: [
@@ -2978,6 +3258,19 @@ const pageDefinition = {
         maybeSingle: true,
         columns: "id,url,thumbnail_url,preview_url,original_url",
       });
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鍒犻櫎澶辫触"), "url")) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "delete",
+          filters: [
+            { column: "id", operator: "eq", value: deletingPhoto.id },
+            { column: "album_id", operator: "eq", value: this.data.albumId },
+          ],
+          selectAfterWrite: true,
+          maybeSingle: true,
+          columns: "id,thumbnail_url,preview_url,original_url",
+        });
+      }
 
       if (!hasRpcError(result)) {
         const deleted = readRpcRecord(result);
@@ -3045,7 +3338,7 @@ const pageDefinition = {
 
     this.setData({ actionLoading: true });
     try {
-      const result = await dbQuery({
+      let result = await dbQuery({
         table: "album_photos",
         action: "delete",
         filters: [
@@ -3055,6 +3348,18 @@ const pageDefinition = {
         selectAfterWrite: true,
         columns: "id,url,thumbnail_url,preview_url,original_url",
       });
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鍒犻櫎澶辫触"), "url")) {
+        result = await dbQuery({
+          table: "album_photos",
+          action: "delete",
+          filters: [
+            { column: "album_id", operator: "eq", value: this.data.albumId },
+            { column: "id", operator: "in", value: photoIdPayload },
+          ],
+          selectAfterWrite: true,
+          columns: "id,thumbnail_url,preview_url,original_url",
+        });
+      }
 
       if (!hasRpcError(result)) {
         const deletedList = readRpcRows(result).filter((row) => row && typeof row === "object");

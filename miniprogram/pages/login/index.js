@@ -5,6 +5,7 @@ const {
   normalizeChinaMobile,
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
+const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,24 @@ Page({
     activeLegalFooter: [],
     agreedToLegal: false,
     hideAudit: false,
+    authMode: "phone_password",
+    phoneLoginEnabled: true,
+    wechatLoginEnabled: false,
+  },
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const authMode = String(normalized.authMode || "phone_password");
+    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      authMode,
+      phoneLoginEnabled,
+      wechatLoginEnabled,
+    });
+    this.initLegalDocuments(Boolean(normalized.hideAudit));
+    return normalized;
   },
 
   onLoad() {
@@ -63,16 +82,12 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
-    this.setData({ safeTop, serviceMissing, hideAudit });
-    this.initLegalDocuments(hideAudit);
+    this.setData({ safeTop, serviceMissing });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((enabled) => {
-        const nextHideAudit = Boolean(enabled);
-        if (nextHideAudit === this.data.hideAudit) return;
-        this.setData({ hideAudit: nextHideAudit });
-        this.initLegalDocuments(nextHideAudit);
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
       });
     }
   },
@@ -219,11 +234,19 @@ Page({
   },
 
   goRegister() {
+    if (!this.data.phoneLoginEnabled) {
+      this.setData({ error: "当前配置未开放手机号注册" });
+      return;
+    }
     wx.navigateTo({ url: "/pages/register/index" });
   },
 
   async submit() {
     if (this.data.serviceMissing) return;
+    if (!this.data.phoneLoginEnabled) {
+      this.setData({ error: "当前仅支持微信登录" });
+      return;
+    }
     if (this.data.wechatSubmitting) return;
     if (this.data.submitting) return;
 
@@ -271,6 +294,10 @@ Page({
 
   async submitWechatLogin() {
     if (this.data.serviceMissing) return;
+    if (!this.data.wechatLoginEnabled) {
+      this.setData({ error: "当前未开放微信登录" });
+      return;
+    }
     if (this.data.submitting || this.data.wechatSubmitting) return;
     if (!this.data.agreedToLegal) {
       this.setData({

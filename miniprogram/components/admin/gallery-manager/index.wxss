@@ -202,7 +202,7 @@
 
 .folder-current-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10rpx;
   margin-top: 4rpx;

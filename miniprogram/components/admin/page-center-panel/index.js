@@ -1,0 +1,1613 @@
+const { requireAdminSession } = require("../../../services/photo-admin-api");
+const { requestJson } = require("../../../services/photo-api");
+const {
+  isTabBarPagePath,
+  TAB_PAGE_OPTIONS,
+} = require("../../../utils/runtime-config");
+
+const CHANNEL_META = {
+  web: {
+    title: "Web 页面管理",
+    badge: "只管理 Web 页面",
+    desc: "列表管理，仅保留编辑、状态切换、查看。",
+  },
+  miniprogram: {
+    title: "小程序页面管理",
+    badge: "只管理微信小程序页面",
+    desc: "列表管理，仅保留编辑、状态切换、查看。",
+  },
+};
+
+const STATE_LABEL_MAP = {
+  offline: "下线",
+  beta: "内测",
+  online: "上线",
+};
+
+const STATE_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "online", label: "上线中" },
+  { value: "beta", label: "内测中" },
+  { value: "offline", label: "已下线" },
+];
+
+const ICON_OPTIONS = ["", "home", "album", "gallery", "booking", "profile", "about"];
+const TAB_OPTIONS = [{ value: "", label: "不绑定底部菜单" }].concat(
+  TAB_PAGE_OPTIONS.map((item) => ({
+    value: normalizeText(item && item.key),
+    label: `${normalizeText(item && item.key)} / ${normalizeText(item && item.defaultText)}`,
+    iconKey: normalizeText(item && item.iconKey),
+    pagePath: normalizeText(item && item.pagePath),
+    defaultText: normalizeText(item && item.defaultText),
+    defaultGuestText: normalizeText(item && item.defaultGuestText),
+  }))
+);
+const TAB_OPTION_MAP = new Map(
+  TAB_OPTIONS.filter((item) => normalizeText(item && item.value)).map((item) => [normalizeText(item.value), item])
+);
+const BETA_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const BETA_CODE_LENGTH = 8;
+
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number(fallback || 0);
+}
+
+function normalizeBoolean(value, fallback) {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return Boolean(fallback);
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function generateRandomBetaCode(length) {
+  const targetLength = Math.max(1, Math.floor(Number(length) || BETA_CODE_LENGTH));
+  let next = "";
+  for (let index = 0; index < targetLength; index += 1) {
+    const randomIndex = Math.floor(Math.random() * BETA_CODE_CHARS.length);
+    next += BETA_CODE_CHARS[randomIndex] || "A";
+  }
+  return next;
+}
+
+function readArrayFromPayload(payload) {
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (Array.isArray(current)) return current;
+    if (!current || typeof current !== "object") break;
+    if (Array.isArray(current.data)) return current.data;
+    if (Array.isArray(current.rows)) return current.rows;
+    if (Array.isArray(current.list)) return current.list;
+    if (Array.isArray(current.items)) return current.items;
+    current = current.data;
+  }
+  return [];
+}
+
+function readErrorMessage(error, fallback) {
+  if (typeof error === "string" && error.trim()) return error.trim();
+  let current = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    const message = normalizeText(current.message);
+    if (message) return message;
+    if (typeof current.error === "string" && normalizeText(current.error)) {
+      return normalizeText(current.error);
+    }
+    current = current.error && typeof current.error === "object" ? current.error : current.data;
+  }
+  return normalizeText(fallback || "请求失败");
+}
+
+function extractDateText(value) {
+  const matched = normalizeText(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  return matched ? matched[1] : "";
+}
+
+function createEmptyRegistryDraft() {
+  return {
+    pageKey: "",
+    pageName: "",
+    pageDescription: "",
+    routePathWeb: "",
+    routePathMiniProgram: "",
+    previewRoutePathWeb: "",
+    previewRoutePathMiniProgram: "",
+    tabKey: "",
+    iconKey: "",
+    defaultTabText: "",
+    defaultGuestTabText: "",
+    isNavCandidateWeb: false,
+    isTabCandidateMiniProgram: false,
+    supportsBeta: true,
+    supportsPreview: true,
+    isBuiltIn: false,
+    isActive: true,
+  };
+}
+
+function createRegistryDraftFromRow(row) {
+  return {
+    pageKey: normalizeText(row.pageKey),
+    pageName: normalizeText(row.pageName),
+    pageDescription: normalizeText(row.pageDescription),
+    routePathWeb: normalizeText(row.routePathWeb),
+    routePathMiniProgram: normalizeText(row.routePathMiniProgram),
+    previewRoutePathWeb: normalizeText(row.previewRoutePathWeb),
+    previewRoutePathMiniProgram: normalizeText(row.previewRoutePathMiniProgram),
+    tabKey: normalizeText(row.tabKey),
+    iconKey: normalizeText(row.iconKey),
+    defaultTabText: normalizeText(row.defaultTabText),
+    defaultGuestTabText: normalizeText(row.defaultGuestTabText),
+    isNavCandidateWeb: normalizeBoolean(row.isNavCandidateWeb, false),
+    isTabCandidateMiniProgram: normalizeBoolean(row.isTabCandidateMiniProgram, false),
+    supportsBeta: normalizeBoolean(row.supportsBeta, true),
+    supportsPreview: normalizeBoolean(row.supportsPreview, true),
+    isBuiltIn: normalizeBoolean(row.isBuiltIn, false),
+    isActive: normalizeBoolean(row.isActive, true),
+  };
+}
+
+function buildRegistryPayload(draft) {
+  return {
+    pageKey: normalizeText(draft.pageKey),
+    pageName: normalizeText(draft.pageName),
+    pageDescription: normalizeText(draft.pageDescription),
+    routePathWeb: normalizeText(draft.routePathWeb),
+    routePathMiniProgram: normalizeText(draft.routePathMiniProgram),
+    previewRoutePathWeb: normalizeText(draft.previewRoutePathWeb),
+    previewRoutePathMiniProgram: normalizeText(draft.previewRoutePathMiniProgram),
+    tabKey: normalizeText(draft.tabKey),
+    iconKey: normalizeText(draft.iconKey),
+    defaultTabText: normalizeText(draft.defaultTabText),
+    defaultGuestTabText: normalizeText(draft.defaultGuestTabText),
+    isNavCandidateWeb: normalizeBoolean(draft.isNavCandidateWeb, false),
+    isTabCandidateMiniProgram: normalizeBoolean(draft.isTabCandidateMiniProgram, false),
+    supportsBeta: normalizeBoolean(draft.supportsBeta, true),
+    supportsPreview: normalizeBoolean(draft.supportsPreview, true),
+    isBuiltIn: normalizeBoolean(draft.isBuiltIn, false),
+    isActive: normalizeBoolean(draft.isActive, true),
+  };
+}
+
+function validateRegistryPayload(draft, channel) {
+  if (!normalizeText(draft.pageKey)) return "请填写页面标识";
+  if (channel !== "miniprogram" && !normalizeText(draft.routePathWeb)) return "请填写 Web 路由";
+  if (channel !== "web" && !normalizeText(draft.routePathMiniProgram)) return "请填写小程序路由";
+  return "";
+}
+
+function buildRegistryOptionPatch(currentDraft, field, value) {
+  const current = currentDraft && typeof currentDraft === "object" ? currentDraft : createEmptyRegistryDraft();
+  const normalizedField = normalizeText(field);
+  const normalizedValue = normalizeText(value);
+  const patch = { [normalizedField]: normalizedValue };
+
+  if (normalizedField === "iconKey" && !normalizedValue) {
+    patch.isNavCandidateWeb = false;
+    patch.isTabCandidateMiniProgram = false;
+  }
+
+  if (normalizedField === "tabKey") {
+    if (!normalizedValue) {
+      patch.isTabCandidateMiniProgram = false;
+    }
+    const option = TAB_OPTION_MAP.get(normalizedValue);
+    if (option) {
+      if (!normalizeText(current.iconKey)) {
+        patch.iconKey = normalizeText(option.iconKey);
+      }
+      if (!normalizeText(current.routePathMiniProgram)) {
+        patch.routePathMiniProgram = normalizeText(option.pagePath);
+      }
+      if (!normalizeText(current.defaultTabText)) {
+        patch.defaultTabText = normalizeText(option.defaultText);
+      }
+      if (!normalizeText(current.defaultGuestTabText)) {
+        patch.defaultGuestTabText = normalizeText(option.defaultGuestText || option.defaultText);
+      }
+    }
+  }
+
+  return patch;
+}
+
+function createEmptyBetaDraft(channel) {
+  const currentChannel = normalizeText(channel);
+  return {
+    codeId: "",
+    betaName: "",
+    betaCode: "",
+    expiresAt: "",
+    channel: currentChannel === "miniprogram" ? "miniprogram" : "web",
+  };
+}
+
+function filterBetaCodesByChannel(codes, channel) {
+  return (Array.isArray(codes) ? codes : []).filter((item) => {
+    const codeChannel = normalizeText(item && item.channel) || "shared";
+    return codeChannel === channel;
+  });
+}
+
+function getTodayDateText() {
+  const current = new Date();
+  const year = current.getFullYear();
+  const month = String(current.getMonth() + 1).padStart(2, "0");
+  const date = String(current.getDate()).padStart(2, "0");
+  return `${year}-${month}-${date}`;
+}
+
+function getDateDiffFromToday(dateText) {
+  const normalized = normalizeText(dateText);
+  if (!normalized) return null;
+  const today = new Date(`${getTodayDateText()}T00:00:00`);
+  const target = new Date(`${normalized}T00:00:00`);
+  const diff = target.getTime() - today.getTime();
+  if (Number.isNaN(diff)) return null;
+  return Math.round(diff / 86400000);
+}
+
+function buildBetaScopeMeta(codeChannel, channel) {
+  if (normalizeText(codeChannel) === "shared") {
+    return {
+      scopeLabel: "双端通用",
+      scopeHint: "Web 与小程序登录用户都可绑定这条内测码进入当前页面。",
+    };
+  }
+  return {
+    scopeLabel: channel === "web" ? "仅 Web" : "仅小程序",
+    scopeHint:
+      channel === "web"
+        ? "只有 Web 端登录用户可绑定并进入当前页面。"
+        : "只有小程序端登录用户可绑定并进入当前页面。",
+  };
+}
+
+function decorateBetaCodeForChannel(code, channel) {
+  const expiresDateText = extractDateText(code && code.expiresAt);
+  const scopeMeta = buildBetaScopeMeta(code && code.channel, channel);
+  const isActive = normalizeBoolean(code && code.isActive, true);
+
+  if (!isActive) {
+    return Object.assign({}, code, scopeMeta, {
+      lifecycleKey: "destroyed",
+      lifecycleLabel: "已销毁",
+      lifecycleHint: "已销毁后新用户不能再绑定；重新编辑并保存可恢复使用。",
+      lifecycleClassName: "beta-pill beta-pill--destroyed",
+      isUsable: false,
+      expiresDateText,
+      editActionText: "恢复并编辑",
+    });
+  }
+
+  const diffDays = getDateDiffFromToday(expiresDateText);
+  if (typeof diffDays === "number" && diffDays < 0) {
+    return Object.assign({}, code, scopeMeta, {
+      lifecycleKey: "expired",
+      lifecycleLabel: "已失效",
+      lifecycleHint: "内测码已过期，需调整到期日期后才可继续绑定。",
+      lifecycleClassName: "beta-pill beta-pill--expired",
+      isUsable: false,
+      expiresDateText,
+      editActionText: "续期并编辑",
+    });
+  }
+
+  if (typeof diffDays === "number" && diffDays <= 3) {
+    return Object.assign({}, code, scopeMeta, {
+      lifecycleKey: "expiring",
+      lifecycleLabel: diffDays === 0 ? "今日到期" : "即将到期",
+      lifecycleHint:
+        diffDays === 0 ? "今天到期，建议立即续期。" : `还有 ${diffDays} 天到期，建议提前续期。`,
+      lifecycleClassName: "beta-pill beta-pill--expiring",
+      isUsable: true,
+      expiresDateText,
+      editActionText: "续期并编辑",
+    });
+  }
+
+  return Object.assign({}, code, scopeMeta, {
+    lifecycleKey: "usable",
+    lifecycleLabel: expiresDateText ? "有效中" : "长期有效",
+    lifecycleHint: expiresDateText ? `有效期至 ${expiresDateText}` : "未设置到期日期，当前长期有效。",
+    lifecycleClassName: "beta-pill beta-pill--usable",
+    isUsable: true,
+    expiresDateText,
+    editActionText: "编辑",
+  });
+}
+
+function decorateBetaCodesByChannel(codes, channel) {
+  return filterBetaCodesByChannel(codes, channel).map((item) => decorateBetaCodeForChannel(item, channel));
+}
+
+function summarizeDecoratedBetaCodes(codes) {
+  return (Array.isArray(codes) ? codes : []).reduce(
+    (summary, item) => {
+      summary.total += 1;
+      if (item && item.isUsable) summary.usable += 1;
+      if (item && item.lifecycleKey === "expiring") summary.expiring += 1;
+      if (item && item.lifecycleKey === "expired") summary.expired += 1;
+      if (item && item.lifecycleKey === "destroyed") summary.destroyed += 1;
+      return summary;
+    },
+    { total: 0, usable: 0, expiring: 0, expired: 0, destroyed: 0 }
+  );
+}
+
+function buildBetaDraftHelperText(draft, channel, codes) {
+  const currentDraft = draft && typeof draft === "object" ? draft : createEmptyBetaDraft(channel);
+  const currentCode = (Array.isArray(codes) ? codes : []).find((item) => item.id === normalizeText(currentDraft.codeId));
+  if (currentCode) {
+    if (currentCode.lifecycleKey === "destroyed") {
+      return "这条内测码当前已销毁；重新保存后会恢复使用。";
+    }
+    if (currentCode.lifecycleKey === "expired") {
+      return "这条内测码当前已失效；建议调整到期日期后再保存。";
+    }
+    return `${currentCode.scopeHint} ${currentCode.lifecycleHint}`;
+  }
+
+  return channel === "web"
+    ? "新建后，仅 Web 端登录用户可绑定这条内测码进入当前页面。"
+    : "新建后，仅小程序端登录用户可绑定这条内测码进入当前页面。";
+}
+
+function buildBetaSaveButtonText(draft, codes) {
+  const currentDraft = draft && typeof draft === "object" ? draft : null;
+  const currentCode = (Array.isArray(codes) ? codes : []).find(
+    (item) => item.id === normalizeText(currentDraft && currentDraft.codeId)
+  );
+  if (!currentCode) return "创建内测码";
+  if (currentCode.lifecycleKey === "destroyed") return "恢复并保存";
+  if (currentCode.lifecycleKey === "expired") return "续期并保存";
+  return "更新内测码";
+}
+
+function applyBetaPresentation(row, channel) {
+  const betaCodesVisible = decorateBetaCodesByChannel(row.betaCodes, channel);
+  row.betaCodesVisible = betaCodesVisible;
+  row.betaCodesAvailable = betaCodesVisible.filter((item) => item.isUsable);
+  row.betaCodeSummary = summarizeDecoratedBetaCodes(betaCodesVisible);
+  row.betaDraftHelperText = buildBetaDraftHelperText(row.betaDraft, channel, betaCodesVisible);
+  row.betaSaveButtonText = buildBetaSaveButtonText(row.betaDraft, betaCodesVisible);
+  return row;
+}
+
+function canShowInNav(row, channel) {
+  if (channel === "web") {
+    return normalizeBoolean(row.isNavCandidateWeb, Boolean(normalizeText(row.iconKey)));
+  }
+  return Boolean(
+    normalizeBoolean(row.isTabCandidateMiniProgram, false) &&
+      normalizeText(row.tabKey) &&
+      normalizeText(row.iconKey)
+  );
+}
+
+function resolveForcedPublishState(pageKey, channel, hideAudit) {
+  if (channel !== "miniprogram" || normalizeText(pageKey) !== "pose") {
+    return "";
+  }
+  return hideAudit ? "beta" : "online";
+}
+
+function isForcedHomeEntry(pageKey, channel, hideAudit) {
+  return channel === "miniprogram" && normalizeText(pageKey) === "pose" && hideAudit === false;
+}
+
+function buildForcedStateHint(forcedState, hideAudit) {
+  if (!forcedState) return "";
+  return hideAudit
+    ? "当前受兼容规则控制：pose 页面只能以内测无底栏方式进入，不能手动切换为上线或下线。"
+    : "当前受兼容规则控制：pose 页面必须进入首页 / 底栏体系，并固定为首页，菜单顺序不可调整。";
+}
+
+function buildQuickActionSuccessNotice(pageName, channel, state) {
+  if (state === "online") {
+    return `${pageName} 已上线并进入${channel === "web" ? "Web" : "小程序"}底部菜单`;
+  }
+  if (state === "beta") {
+    return `${pageName} 已切换为内测，需登录并绑定内测码后从无底栏入口进入`;
+  }
+  return `${pageName} 已下线，普通用户无法访问`;
+}
+
+function resolveQuickActionMeta(row, channel, hideAudit) {
+  const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  const forcedState = resolveForcedPublishState(row && row.pageKey, channel, hideAudit);
+  const betaSummary = row && row.betaCodeSummary ? row.betaCodeSummary : summarizeDecoratedBetaCodes(decorateBetaCodesByChannel(row && row.betaCodes, channel));
+  const canOnline = canShowInNav(row, channel) && (!forcedState || forcedState === "online");
+  const canBeta = normalizeBoolean(row && row.supportsBeta, false) && normalizeNumber(betaSummary && betaSummary.usable, 0) > 0 && (!forcedState || forcedState === "beta");
+  const canOffline = !forcedState || forcedState === "offline";
+
+  const createMeta = (state, disabled) => ({
+    type: state,
+    disabled: normalizeBoolean(disabled, false),
+    label: state === "online" ? "上线" : state === "beta" ? "内测" : "下线",
+    loadingLabel: state === "online" ? "上线中..." : state === "beta" ? "切换中..." : "下线中...",
+    className: state === "online" ? "action-btn--online" : state === "beta" ? "action-btn--beta" : "action-btn--offline",
+  });
+
+  if (currentState === "offline") {
+    if (canOnline) return createMeta("online", false);
+    if (canBeta) return createMeta("beta", false);
+    if (normalizeBoolean(row && row.supportsBeta, false) && (!forcedState || forcedState === "beta")) {
+      return createMeta("beta", true);
+    }
+    return createMeta("online", true);
+  }
+
+  if (currentState === "beta") {
+    if (canOnline) return createMeta("online", false);
+    return createMeta("offline", !canOffline);
+  }
+
+  return createMeta("offline", !canOffline);
+}
+
+function createRuleForm(rule, row) {
+  const current = rule && typeof rule === "object" ? rule : {};
+  return {
+    publishState: normalizeText(current.publishState) || "offline",
+    showInNav: normalizeBoolean(current.showInNav, false),
+    navOrder: normalizeNumber(current.navOrder, 99),
+    navText: normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName),
+    guestNavText:
+      normalizeText(current.guestNavText) ||
+      normalizeText(row.defaultGuestTabText) ||
+      normalizeText(current.navText) ||
+      normalizeText(row.defaultTabText) ||
+      normalizeText(row.pageName),
+    headerTitle: normalizeText(current.headerTitle),
+    headerSubtitle: normalizeText(current.headerSubtitle),
+    isHomeEntry: normalizeBoolean(current.isHomeEntry, false),
+    notes: normalizeText(current.notes),
+  };
+}
+
+function normalizeRuleForm(row, channel, form) {
+  const current = form && typeof form === "object" ? form : {};
+  const publishState = normalizeText(current.publishState) || "offline";
+  const navSupported = canShowInNav(row, channel);
+  const showInNav = publishState === "online" && navSupported;
+  const resolvedNavOrder = normalizeNumber(current.navOrder, 0);
+  const navText = normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
+  const guestNavText =
+    normalizeText(current.guestNavText) ||
+    normalizeText(row.defaultGuestTabText) ||
+    navText ||
+    normalizeText(row.pageName);
+  return {
+    publishState,
+    showInNav,
+    navOrder: resolvedNavOrder,
+    navText,
+    guestNavText,
+    headerTitle: normalizeText(current.headerTitle),
+    headerSubtitle: normalizeText(current.headerSubtitle),
+    isHomeEntry: false,
+    notes: normalizeText(current.notes),
+  };
+}
+
+function sortNavRows(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((item) => item.currentRule.publishState === "online" && item.currentRule.showInNav)
+    .slice()
+    .sort((left, right) => {
+      if (left.currentRule.navOrder !== right.currentRule.navOrder) {
+        return left.currentRule.navOrder - right.currentRule.navOrder;
+      }
+      return normalizeText(left.pageName).localeCompare(normalizeText(right.pageName), "zh-CN");
+    });
+}
+
+function buildRow(item, channel, hideAudit) {
+  const current = item && typeof item === "object" ? item : {};
+  const channels = current.channels && typeof current.channels === "object" ? current.channels : {};
+  const currentChannelRule = channels[channel] && typeof channels[channel] === "object" ? channels[channel] : {};
+  const row = {
+    pageKey: normalizeText(current.pageKey),
+    pageName: normalizeText(current.pageName),
+    pageDescription: normalizeText(current.pageDescription),
+    routePathWeb: normalizeText(current.routePathWeb),
+    routePathMiniProgram: normalizeText(current.routePathMiniProgram),
+    previewRoutePathWeb: normalizeText(current.previewRoutePathWeb),
+    previewRoutePathMiniProgram: normalizeText(current.previewRoutePathMiniProgram),
+    tabKey: normalizeText(current.tabKey),
+    iconKey: normalizeText(current.iconKey),
+    defaultTabText: normalizeText(current.defaultTabText),
+    defaultGuestTabText: normalizeText(current.defaultGuestTabText),
+    isNavCandidateWeb: normalizeBoolean(current.isNavCandidateWeb, false),
+    isTabCandidateMiniProgram: normalizeBoolean(current.isTabCandidateMiniProgram, false),
+    supportsBeta: normalizeBoolean(current.supportsBeta, true),
+    supportsPreview: normalizeBoolean(current.supportsPreview, true),
+    isBuiltIn: normalizeBoolean(current.isBuiltIn, false),
+    isActive: normalizeBoolean(current.isActive, true),
+    channels: {
+      web: Object.assign({ routePath: "", previewRoutePath: "" }, channels.web || {}),
+      miniprogram: Object.assign({ routePath: "", previewRoutePath: "" }, channels.miniprogram || {}),
+    },
+    registryDraft: createRegistryDraftFromRow(current),
+    currentRule: createRuleForm(currentChannelRule, current),
+    betaDraft: createEmptyBetaDraft(channel),
+    betaCodes: Array.isArray(current.betaCodes) ? current.betaCodes : [],
+    navSupported: false,
+    statusLabel: "下线",
+    statusType: "offline",
+    isExpanded: false,
+    currentRoutePath: "",
+    currentPreviewRoutePath: "",
+    betaCodesVisible: [],
+    betaCodesAvailable: [],
+    betaCodeSummary: { total: 0, usable: 0, expiring: 0, expired: 0, destroyed: 0 },
+    betaDraftHelperText: "",
+    betaSaveButtonText: "创建内测码",
+    quickActionType: "offline",
+    quickActionLabel: "下线",
+    quickActionLoadingLabel: "下线中...",
+    quickActionClassName: "action-btn--offline",
+    quickActionDisabled: false,
+    forcedState: "",
+    forcedStateLabel: "",
+    forcedStateHint: "",
+    forcedHomeEntry: false,
+    navRank: 0,
+    navTotal: 0,
+    isNavHome: false,
+    loginNavLabel: "",
+    guestNavLabel: "",
+    headerTitlePreview: "",
+    headerSubtitlePreview: "",
+  };
+  row.navSupported = canShowInNav(row, channel);
+  row.currentRoutePath = normalizeText(row.channels[channel] && row.channels[channel].routePath);
+  row.currentPreviewRoutePath = normalizeText(row.channels[channel] && row.channels[channel].previewRoutePath);
+  applyBetaPresentation(row, channel);
+  row.forcedState = resolveForcedPublishState(row.pageKey, channel, hideAudit);
+  row.forcedStateLabel = STATE_LABEL_MAP[row.forcedState] || "";
+  row.forcedStateHint = buildForcedStateHint(row.forcedState, hideAudit);
+  row.forcedHomeEntry = isForcedHomeEntry(row.pageKey, channel, hideAudit);
+  return row;
+}
+function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
+  const allRows = Array.isArray(rows) ? rows : [];
+  const normalizedKeyword = normalizeText(keyword).toLowerCase();
+  const normalizedStateFilter = normalizeText(stateFilter) || "all";
+  const visibleRows = allRows.filter((item) => {
+    if (normalizedStateFilter !== "all" && item.currentRule.publishState !== normalizedStateFilter) {
+      return false;
+    }
+
+    if (!normalizedKeyword) return true;
+    return [
+      item.pageKey,
+      item.pageName,
+      item.pageDescription,
+      item.routePathWeb,
+      item.routePathMiniProgram,
+      item.currentRoutePath,
+      item.currentPreviewRoutePath,
+    ]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedKeyword);
+  });
+
+  const nextExpandedKey = normalizeText(expandedKey) && visibleRows.some((item) => item.pageKey === normalizeText(expandedKey))
+    ? normalizeText(expandedKey)
+    : "";
+
+  const navRows = sortNavRows(allRows);
+  const navMetaMap = new Map(
+    navRows.map((item, index) => [item.pageKey, { navRank: index + 1, isNavHome: index === 0 }])
+  );
+
+  const orderedRows = visibleRows
+    .slice()
+    .sort((left, right) => {
+      const leftWeight = left.currentRule.publishState === "online" ? 0 : left.currentRule.publishState === "beta" ? 1 : 2;
+      const rightWeight = right.currentRule.publishState === "online" ? 0 : right.currentRule.publishState === "beta" ? 1 : 2;
+      if (leftWeight !== rightWeight) return leftWeight - rightWeight;
+      if (left.currentRule.showInNav !== right.currentRule.showInNav) {
+        return left.currentRule.showInNav ? -1 : 1;
+      }
+      if (left.currentRule.navOrder !== right.currentRule.navOrder) {
+        return left.currentRule.navOrder - right.currentRule.navOrder;
+      }
+      return normalizeText(left.pageName).localeCompare(normalizeText(right.pageName), "zh-CN");
+    })
+    .map((item) => {
+      const row = clone(item);
+      const navMeta = navMetaMap.get(row.pageKey) || { navRank: 0, isNavHome: false };
+      row.isExpanded = row.pageKey === nextExpandedKey;
+      row.statusType = normalizeText(row.currentRule.publishState) || "offline";
+      row.statusLabel = STATE_LABEL_MAP[row.statusType] || "下线";
+      applyBetaPresentation(row, channel);
+      row.navRank = navMeta.navRank;
+      row.navTotal = navRows.length;
+      row.isNavHome = Boolean(navMeta.isNavHome);
+      row.loginNavLabel =
+        normalizeText(row.currentRule.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
+      row.guestNavLabel =
+        normalizeText(row.currentRule.guestNavText) ||
+        normalizeText(row.defaultGuestTabText) ||
+        row.loginNavLabel;
+      row.headerTitlePreview =
+        normalizeText(row.currentRule.headerTitle) || normalizeText(row.pageName);
+      row.headerSubtitlePreview =
+        normalizeText(row.currentRule.headerSubtitle) || "留空时不单独显示";
+      const quickAction = resolveQuickActionMeta(row, channel, hideAudit);
+      row.quickActionType = quickAction.type;
+      row.quickActionLabel = quickAction.label;
+      row.quickActionLoadingLabel = quickAction.loadingLabel;
+      row.quickActionClassName = quickAction.className;
+      row.quickActionDisabled = quickAction.disabled;
+      return row;
+    });
+
+  const summary = allRows.reduce(
+    (stats, item) => {
+      stats.total += 1;
+      if (item.currentRule.publishState === "online") stats.online += 1;
+      if (item.currentRule.publishState === "beta") stats.beta += 1;
+      if (item.currentRule.publishState === "offline") stats.offline += 1;
+      if (item.currentRule.publishState === "online" && item.currentRule.showInNav) stats.nav += 1;
+      stats.betaCodes += decorateBetaCodesByChannel(item.betaCodes, channel).filter((code) => code.isUsable).length;
+      return stats;
+    },
+    { total: 0, online: 0, beta: 0, offline: 0, nav: 0, betaCodes: 0 }
+  );
+
+  return {
+    rows: orderedRows,
+    navRows,
+    summary,
+    filteredCount: orderedRows.length,
+    expandedKey: nextExpandedKey,
+    keyword: normalizeText(keyword),
+    stateFilter: normalizedStateFilter,
+  };
+}
+
+function countMiniprogramNavItems(rows, pageKey, nextRule) {
+  return (Array.isArray(rows) ? rows : []).reduce((count, item) => {
+    const matched = item.pageKey === pageKey ? nextRule : item.currentRule;
+    return count + (matched.publishState === "online" && matched.showInNav ? 1 : 0);
+  }, 0);
+}
+
+function normalizeMiniProgramRoutePath(value) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  return text.startsWith("/") ? text : `/${text}`;
+}
+
+function prepareMiniProgramAdminPreview(pageKey, routePath, channel) {
+  const app = typeof getApp === "function" ? getApp() : null;
+  if (!app || typeof app.setPagePresentation !== "function") return;
+  const normalizedRoute = normalizeMiniProgramRoutePath(routePath).replace(/^\//, "");
+  if (!normalizedRoute) return;
+  app.setPagePresentation({
+    mode: "preview",
+    pageKey: normalizeText(pageKey),
+    routePath: normalizedRoute,
+    fallbackRoute: `/pages/admin/page-center/index?channel=${channel}`,
+    fallbackTab: "pages/profile/index",
+  });
+}
+
+function openMiniProgramAdminRoute(url) {
+  const target = normalizeMiniProgramRoutePath(url);
+  if (!target) {
+    return Promise.reject(new Error("缺少小程序预览路由"));
+  }
+  const path = target.split("?")[0] || target;
+  const app = typeof getApp === "function" ? getApp() : null;
+  const runtimeConfig = app && app.globalData ? app.globalData.runtimeConfig : null;
+  if (isTabBarPagePath(path, runtimeConfig)) {
+    return new Promise((resolve, reject) => {
+      wx.switchTab({ url: path, success: resolve, fail: reject });
+    });
+  }
+  return new Promise((resolve, reject) => {
+    wx.navigateTo({ url: target, success: resolve, fail: reject });
+  });
+}
+
+function buildAdminWebPreviewUrl(routePath) {
+  const app = typeof getApp === "function" ? getApp() : null;
+  const globalData = app && app.globalData ? app.globalData : {};
+  const appUrl = normalizeText(globalData.appUrl).replace(/\/$/, "");
+  const normalizedRoute = normalizeText(routePath);
+  if (!appUrl || !normalizedRoute) return "";
+  if (/^https?:\/\//i.test(normalizedRoute)) return normalizedRoute;
+  return `${appUrl}${normalizedRoute.startsWith("/") ? normalizedRoute : `/${normalizedRoute}`}`;
+}
+
+function buildChannelPanelCopy(channel, hideAudit) {
+  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
+  const meta = CHANNEL_META[currentChannel];
+  const navLabel = currentChannel === "web" ? "Web 底部菜单" : "小程序底部菜单";
+  const currentScopeDesc = currentChannel === "web"
+    ? "这里只维护 Web 页面路由、查看入口与底栏规则；不会改动小程序页面排序。"
+    : "这里只维护小程序页面路由、查看入口、菜单键与底栏规则；不会改动 Web 页面排序。";
+  const rangeScopeDesc = currentChannel === "web"
+    ? "先确认这里只影响 Web 页面，避免误以为会同步修改小程序页面。"
+    : "先确认这里只影响小程序页面，避免误以为会同步修改 Web 页面。";
+  const navJourneyDesc = currentChannel === "web"
+    ? "上线页面会进入 Web 底部菜单；顺序第 1 项自动作为首页。"
+    : "上线页面会进入小程序底部菜单；顺序第 1 项自动作为首页。";
+  const summaryTotalNote = currentChannel === "web" ? "Web 端当前已登记页总数" : "小程序端当前已登记页总数";
+  const summaryNavNote = currentChannel === "web" ? "Web 底部菜单容量" : "小程序底部菜单容量";
+  const runtimeHint = currentChannel === "miniprogram"
+    ? (hideAudit
+      ? "当前兼容规则生效：pose 页面固定为“内测 + 无底栏”，管理员只能维护其余小程序页面的常规编排。"
+      : "当前兼容规则生效：pose 页面固定为“上线 + 首页/底栏”，且在小程序端仍保留首页优先级约束。")
+    : (hideAudit
+      ? "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“内测 + 无底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。"
+      : "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“上线 + 首页/底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。");
+
+  return {
+    channelTitle: meta.title,
+    channelBadge: meta.badge,
+    channelDesc: meta.desc,
+    heroOnlineTip: `上线：进入${navLabel}，最多 5 个`,
+    channelOnlyDesc: currentScopeDesc,
+    journeyRangeDesc: rangeScopeDesc,
+    journeyNavDesc: navJourneyDesc,
+    summaryTotalNote,
+    summaryNavNote,
+    runtimeHint,
+    compactNavHint: `• 上线后进入${navLabel}，顺序第 1 项自动成为首页`,
+    navPanelHint: `查看与内测均走无底栏路由；上线后进入${navLabel}并支持顺序调整，第 1 项自动作为首页。`,
+    embeddedChannelTag: `当前入口：${meta.title}`,
+  };
+}
+Component({
+  properties: {
+    channel: {
+      type: String,
+      value: "web",
+    },
+    embedded: {
+      type: Boolean,
+      value: false,
+    },
+  },
+  data: {
+    safeTop: 0,
+    loading: true,
+    savingKey: "",
+    noticeType: "",
+    noticeText: "",
+    dialogMode: "",
+    dialogPageKey: "",
+    dialogRow: null,
+    channelTitle: CHANNEL_META.web.title,
+    channelBadge: CHANNEL_META.web.badge,
+    channelDesc: CHANNEL_META.web.desc,
+    heroOnlineTip: "上线：进入 Web 底部菜单，最多 5 个",
+    channelOnlyDesc: "这里只维护 Web 页面路由、查看入口与底栏规则；不会改动小程序页面排序。",
+    journeyRangeDesc: "先确认这里只影响 Web 页面，避免误以为会同步修改小程序页面。",
+    journeyNavDesc: "上线页面会进入 Web 底部菜单；顺序第 1 项自动作为首页。",
+    summaryTotalNote: "Web 端当前已登记页总数",
+    summaryNavNote: "Web 底部菜单容量",
+    runtimeHint: "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“上线 + 首页/底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。",
+    compactNavHint: "• 上线后进入 Web 底部菜单，顺序第 1 项自动成为首页",
+    navPanelHint: "查看与内测均走无底栏路由；上线后进入 Web 底部菜单并支持顺序调整，第 1 项自动作为首页。",
+    embeddedChannelTag: "当前入口：Web 页面管理",
+    searchKeyword: "",
+    stateFilter: "all",
+    expandedKey: "",
+    filteredCount: 0,
+    createExpanded: false,
+    createDraft: createEmptyRegistryDraft(),
+    allRows: [],
+    pageRows: [],
+    navRows: [],
+    summary: { total: 0, online: 0, beta: 0, offline: 0, nav: 0, betaCodes: 0 },
+    hideAudit: false,
+    betaEditorFocusPageKey: "",
+    iconOptions: ICON_OPTIONS,
+    stateFilterOptions: STATE_FILTER_OPTIONS,
+    tabOptions: TAB_OPTIONS,
+  },
+  observers: {
+    channel(nextChannel) {
+      const currentChannel = normalizeText(nextChannel) === "miniprogram" ? "miniprogram" : "web";
+      this.setData(buildChannelPanelCopy(currentChannel, this.data.hideAudit));
+    },
+  },
+  lifetimes: {
+    attached() {
+      const app = getApp();
+      const globalData = app && app.globalData ? app.globalData : {};
+      const safeTop = Number(globalData.statusBarHeight || 0);
+      const channel = normalizeText(this.properties.channel) === "miniprogram" ? "miniprogram" : "web";
+      this.setData(Object.assign({
+        safeTop,
+      }, buildChannelPanelCopy(channel, false)), () => {
+        void this.bootstrap();
+      });
+    },
+    detached() {
+      if (this._noticeTimer) {
+        clearTimeout(this._noticeTimer);
+        this._noticeTimer = null;
+      }
+      if (this._betaEditorFocusTimer) {
+        clearTimeout(this._betaEditorFocusTimer);
+        this._betaEditorFocusTimer = null;
+      }
+    },
+  },
+  pageLifetimes: {
+    show() {
+      void this.refresh();
+    },
+  },
+  methods: {
+  refresh() {
+    return this.bootstrap();
+  },
+
+  showNotice(type, text) {
+    this.setData({ noticeType: type, noticeText: normalizeText(text) });
+    if (this._noticeTimer) clearTimeout(this._noticeTimer);
+    this._noticeTimer = setTimeout(() => {
+      this.setData({ noticeType: "", noticeText: "" });
+      this._noticeTimer = null;
+    }, 2600);
+  },
+
+  async bootstrap() {
+    this.setData({ loading: true });
+    try {
+      await requireAdminSession();
+      await this.loadOverview();
+    } catch (error) {
+      this.setData({ loading: false });
+      this.showNotice("error", readErrorMessage(error, "加载页面管理失败"));
+    }
+  },
+
+  refreshPresentation(options) {
+    const optionBag = options && typeof options === "object" ? options : {};
+    const rows = Array.isArray(optionBag.rows) ? optionBag.rows : this.data.allRows;
+    const keyword = Object.prototype.hasOwnProperty.call(optionBag, "keyword") ? optionBag.keyword : this.data.searchKeyword;
+    const expandedKey = Object.prototype.hasOwnProperty.call(optionBag, "expandedKey") ? optionBag.expandedKey : this.data.expandedKey;
+    const stateFilter = Object.prototype.hasOwnProperty.call(optionBag, "stateFilter") ? optionBag.stateFilter : this.data.stateFilter;
+    const dialogMode = Object.prototype.hasOwnProperty.call(optionBag, "dialogMode")
+      ? normalizeText(optionBag.dialogMode)
+      : normalizeText(this.data.dialogMode);
+    const dialogPageKey = Object.prototype.hasOwnProperty.call(optionBag, "dialogPageKey")
+      ? normalizeText(optionBag.dialogPageKey)
+      : normalizeText(this.data.dialogPageKey);
+    const presentation = buildPresentation(rows, this.data.channel, keyword, expandedKey, stateFilter);
+    const dialogRow = dialogPageKey
+      ? presentation.rows.find((item) => item.pageKey === dialogPageKey) || null
+      : null;
+    this.setData({
+      allRows: rows,
+      pageRows: presentation.rows,
+      navRows: presentation.navRows,
+      summary: presentation.summary,
+      filteredCount: presentation.filteredCount,
+      expandedKey: presentation.expandedKey,
+      searchKeyword: presentation.keyword,
+      stateFilter: presentation.stateFilter,
+      dialogMode: dialogRow ? dialogMode : "",
+      dialogPageKey: dialogRow ? dialogPageKey : "",
+      dialogRow,
+      loading: false,
+    });
+  },
+
+  async loadOverview() {
+    const payload = await requestJson("/api/admin/page-center/overview", { method: "GET", timeout: 10000 });
+    if (payload && payload.error) {
+      throw new Error(String(payload.error || "读取页面管理数据失败"));
+    }
+    const app = typeof getApp === "function" ? getApp() : null;
+    const runtimeConfig = app && app.globalData ? app.globalData.runtimeConfig : null;
+    const runtimeHideAudit = Boolean(runtimeConfig && normalizeBoolean(runtimeConfig.hideAudit, false));
+    const hideAudit = normalizeBoolean(payload && payload.meta ? payload.meta.hideAudit : runtimeHideAudit, runtimeHideAudit);
+    this.setData(Object.assign({ hideAudit }, buildChannelPanelCopy(this.data.channel, hideAudit)));
+    const rows = readArrayFromPayload(payload).map((item) => buildRow(item, this.data.channel, hideAudit));
+    this.refreshPresentation({ rows });
+  },
+
+  findRow(pageKey) {
+    return (Array.isArray(this.data.allRows) ? this.data.allRows : []).find((item) => item.pageKey === pageKey) || null;
+  },
+
+  noop() {},
+
+  openActionDialog(pageKey, mode) {
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    this.refreshPresentation({ dialogPageKey: pageKey, dialogMode: mode });
+  },
+
+  closeActionDialog() {
+    this.setData({ dialogMode: "", dialogPageKey: "", dialogRow: null });
+  },
+
+  updateRow(pageKey, updater) {
+    const nextRows = (Array.isArray(this.data.allRows) ? this.data.allRows : []).map((item) => {
+      if (item.pageKey !== pageKey) return item;
+      return updater(clone(item));
+    });
+    this.refreshPresentation({ rows: nextRows });
+  },
+
+  focusBetaEditor(pageKey) {
+    const targetPageKey = normalizeText(pageKey);
+    if (!targetPageKey) return;
+    this.setData({ betaEditorFocusPageKey: "" }, () => {
+      wx.nextTick(() => {
+        this.setData({ betaEditorFocusPageKey: targetPageKey });
+        if (this._betaEditorFocusTimer) {
+          clearTimeout(this._betaEditorFocusTimer);
+        }
+        this._betaEditorFocusTimer = setTimeout(() => {
+          this.setData({ betaEditorFocusPageKey: "" });
+          this._betaEditorFocusTimer = null;
+        }, 180);
+      });
+    });
+  },
+
+  updateRuleDraft(pageKey, updater) {
+    const nextRows = (Array.isArray(this.data.allRows) ? this.data.allRows : []).map((item) => clone(item));
+    const targetRow = nextRows.find((item) => item.pageKey === pageKey);
+    if (!targetRow) return;
+
+    const nextRule = updater(clone(targetRow.currentRule), targetRow) || targetRow.currentRule;
+    targetRow.currentRule = normalizeRuleForm(targetRow, this.data.channel, nextRule);
+
+    this.refreshPresentation({ rows: nextRows });
+  },
+
+  onSearchInput(e) {
+    this.refreshPresentation({ keyword: e && e.detail ? e.detail.value : "" });
+  },
+
+  onStateFilterTap(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const value = normalizeText(dataset.value) || "all";
+    this.refreshPresentation({ stateFilter: value, expandedKey: this.data.expandedKey });
+  },
+
+  onToggleCreate() {
+    this.setData({ createExpanded: !this.data.createExpanded });
+  },
+
+  onCreateInput(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const field = normalizeText(dataset.field);
+    if (!field) return;
+    this.setData({ [`createDraft.${field}`]: e && e.detail ? e.detail.value : "" });
+  },
+
+  onCreateSwitch(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const field = normalizeText(dataset.field);
+    if (!field) return;
+    this.setData({ [`createDraft.${field}`]: normalizeBoolean(e && e.detail ? e.detail.value : false, false) });
+  },
+
+  onCreateOptionTap(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const field = normalizeText(dataset.field);
+    const value = normalizeText(dataset.value);
+    if (!field) return;
+    const currentDraft = clone(this.data.createDraft || createEmptyRegistryDraft());
+    this.setData({
+      createDraft: Object.assign({}, currentDraft, buildRegistryOptionPatch(currentDraft, field, value)),
+    });
+  },
+
+  async onSaveCreate() {
+    const payload = buildRegistryPayload(this.data.createDraft);
+    const message = validateRegistryPayload(payload, this.data.channel);
+    if (message) {
+      this.showNotice("error", message);
+      return;
+    }
+    this.setData({ savingKey: "create:registry" });
+    try {
+      const response = await requestJson("/api/admin/page-center/registry", { method: "POST", data: Object.assign({}, payload, { scopeChannel: this.data.channel }), timeout: 10000 });
+      if (response && response.error) {
+        throw new Error(String(response.error || "创建页面失败"));
+      }
+      this.setData({ createDraft: createEmptyRegistryDraft(), createExpanded: false });
+      await this.loadOverview();
+      this.showNotice("success", "新页面已注册成功");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "创建页面失败"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  onResetCreate() {
+    this.setData({ createDraft: createEmptyRegistryDraft() });
+  },
+  onToggleExpand(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    this.refreshPresentation({ expandedKey: this.data.expandedKey === pageKey ? "" : pageKey });
+  },
+
+  onRegistryInput(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const field = normalizeText(dataset.field);
+    if (!pageKey || !field) return;
+    const value = e && e.detail ? e.detail.value : "";
+    this.updateRow(pageKey, (row) => {
+      row.registryDraft[field] = value;
+      return row;
+    });
+  },
+
+  onRegistrySwitch(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const field = normalizeText(dataset.field);
+    if (!pageKey || !field) return;
+    this.updateRow(pageKey, (row) => {
+      row.registryDraft[field] = normalizeBoolean(e && e.detail ? e.detail.value : false, false);
+      return row;
+    });
+  },
+
+  onRegistryOptionTap(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const field = normalizeText(dataset.field);
+    const value = normalizeText(dataset.value);
+    if (!pageKey || !field) return;
+    this.updateRow(pageKey, (row) => {
+      row.registryDraft = Object.assign(
+        {},
+        row.registryDraft,
+        buildRegistryOptionPatch(row.registryDraft, field, value)
+      );
+      return row;
+    });
+  },
+
+  async onSaveRegistry(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    const payload = buildRegistryPayload(row.registryDraft);
+    const message = validateRegistryPayload(payload, this.data.channel);
+    if (message) {
+      this.showNotice("error", message);
+      return;
+    }
+    this.setData({ savingKey: `${pageKey}:registry` });
+    try {
+      const response = await requestJson("/api/admin/page-center/registry", { method: "POST", data: Object.assign({}, payload, { scopeChannel: this.data.channel }), timeout: 10000 });
+      if (response && response.error) {
+        throw new Error(String(response.error || "保存页面注册信息失败"));
+      }
+      await this.loadOverview();
+      this.showNotice("success", "页面注册信息已保存");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "保存页面注册信息失败"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  onResetRegistry(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    this.updateRow(pageKey, (current) => {
+      current.registryDraft = createRegistryDraftFromRow(current);
+      return current;
+    });
+  },
+
+  onRuleInput(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const field = normalizeText(dataset.field);
+    if (!pageKey || !field) return;
+    const value = e && e.detail ? e.detail.value : "";
+    this.updateRuleDraft(pageKey, (rule) => {
+      rule[field] = field === "navOrder" ? Math.max(0, normalizeNumber(value, 99)) : value;
+      return rule;
+    });
+  },
+
+  onToggleShowInNav(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    this.updateRuleDraft(pageKey, (rule, row) => {
+      if (rule.publishState !== "online" || !row.navSupported) {
+        rule.showInNav = false;
+      } else {
+        rule.showInNav = !normalizeBoolean(rule.showInNav, false);
+      }
+      if (!rule.showInNav) {
+        rule.isHomeEntry = false;
+      }
+      return rule;
+    });
+  },
+
+  onToggleHomeEntry(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    this.updateRuleDraft(pageKey, (rule) => {
+      if (rule.publishState === "online" && rule.showInNav) {
+        rule.isHomeEntry = !normalizeBoolean(rule.isHomeEntry, false);
+      }
+      return rule;
+    });
+  },
+
+  async persistRule(pageKey, form, successText, saveKey) {
+    const row = this.findRow(pageKey);
+    if (!row) return false;
+    const nextRule = normalizeRuleForm(row, this.data.channel, form);
+    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, this.data.hideAudit);
+    if (forcedState && nextRule.publishState !== forcedState) {
+      this.showNotice("error", buildForcedStateHint(forcedState, this.data.hideAudit));
+      return false;
+    }
+    const nextCount = countMiniprogramNavItems(this.data.allRows, pageKey, nextRule);
+    if (nextCount > 5) {
+      this.showNotice("error", `${this.data.channel === 'miniprogram' ? '小程序' : 'Web'} 底部菜单最多显示 5 个页面`);
+      return false;
+    }
+    if (
+      row.currentRule.publishState === "online" &&
+      row.currentRule.showInNav &&
+      !(nextRule.publishState === "online" && nextRule.showInNav) &&
+      nextCount < 1
+    ) {
+      this.showNotice("error", "当前端至少需要保留 1 个已上线页面，不能下线最后一个底部菜单页面");
+      return false;
+    }
+    this.setData({ savingKey: saveKey || `${pageKey}:rule` });
+    try {
+      const response = await requestJson("/api/admin/page-center/pages", {
+        method: "POST",
+        data: Object.assign({ pageKey, channel: this.data.channel }, nextRule),
+        timeout: 10000,
+      });
+      if (response && response.error) {
+        throw new Error(String(response.error || "保存页面规则失败"));
+      }
+      await this.loadOverview();
+      this.showNotice("success", successText || "页面规则已保存");
+      return true;
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "保存页面规则失败"));
+      return false;
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  onSaveRule(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    void this.persistRule(pageKey, row.currentRule, "页面规则已保存");
+  },
+
+  onSaveTitleRule(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    const savedRule = createRuleForm(row.channels[this.data.channel], row);
+    const nextRule = Object.assign({}, savedRule, {
+      headerTitle: normalizeText(row.currentRule.headerTitle),
+      headerSubtitle: normalizeText(row.currentRule.headerSubtitle),
+    });
+    void this.persistRule(pageKey, nextRule, "标题设置已保存", `${pageKey}:rule:title`);
+  },
+
+  onSaveMenuRule(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    const savedRule = createRuleForm(row.channels[this.data.channel], row);
+    const nextRule = Object.assign({}, savedRule, {
+      navText: normalizeText(row.currentRule.navText),
+      guestNavText: normalizeText(row.currentRule.guestNavText),
+    });
+    void this.persistRule(pageKey, nextRule, "菜单设置已保存", `${pageKey}:rule:menu`);
+  },
+
+  onResetRule(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    this.updateRow(pageKey, (current) => {
+      current.currentRule = createRuleForm(current.channels[this.data.channel], current);
+      return current;
+    });
+    this.showNotice("info", "已恢复当前页面已保存规则");
+  },
+
+
+  onQuickAction(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const action = normalizeText(dataset.action);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    if (action === "view") {
+      void this.viewPage(pageKey);
+      return;
+    }
+    if (action === "edit") {
+      this.openActionDialog(pageKey, "edit");
+      return;
+    }
+    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, this.data.hideAudit);
+    if (forcedState && action !== forcedState) {
+      this.showNotice("error", buildForcedStateHint(forcedState, this.data.hideAudit));
+      return;
+    }
+    if (action === "online" || action === "beta") {
+      void this.quickSwitchState(row, action);
+      return;
+    }
+    if (action !== "offline") {
+      return;
+    }
+    this.openActionDialog(pageKey, "offline");
+  },
+
+  async quickSwitchState(row, state) {
+    const targetState = normalizeText(state);
+    const currentRow = row && typeof row === "object" ? row : null;
+    if (!currentRow || !targetState) return false;
+    if (targetState === "online" && !currentRow.navSupported) {
+      this.showNotice("error", `当前页面未标记为${this.data.channel === "web" ? "Web" : "小程序"}底栏候选，无法直接上线到底栏`);
+      return false;
+    }
+    if (targetState === "beta") {
+      if (!currentRow.supportsBeta) {
+        this.showNotice("error", "当前页面未开启内测能力");
+        return false;
+      }
+      if (!Array.isArray(currentRow.betaCodesAvailable) || !currentRow.betaCodesAvailable.length) {
+        this.showNotice("error", "请先创建至少一个当前端可用的内测码，再切换为内测");
+        return false;
+      }
+    }
+    const nextRule = clone(currentRow.currentRule);
+    if (targetState === "online") {
+      nextRule.publishState = "online";
+    } else if (targetState === "beta") {
+      nextRule.publishState = "beta";
+      nextRule.showInNav = false;
+      nextRule.isHomeEntry = false;
+    } else {
+      nextRule.publishState = "offline";
+      nextRule.showInNav = false;
+      nextRule.isHomeEntry = false;
+    }
+    return this.persistRule(
+      currentRow.pageKey,
+      nextRule,
+      buildQuickActionSuccessNotice(currentRow.pageName, this.data.channel, targetState),
+      `${currentRow.pageKey}:state:${targetState}`
+    );
+  },
+
+  async onDialogSaveRule() {
+    const pageKey = normalizeText(this.data.dialogPageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    const success = await this.persistRule(pageKey, row.currentRule, "页面规则已保存");
+    if (success) {
+      this.closeActionDialog();
+    }
+  },
+
+
+  async onDialogSubmit(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const explicitAction = normalizeText(dataset.action);
+    const pageKey = normalizeText(this.data.dialogPageKey);
+    const mode = explicitAction || normalizeText(this.data.dialogMode);
+    const row = this.findRow(pageKey);
+    if (!row || !mode) return;
+
+    if (mode === "beta") {
+      if (!row.supportsBeta) {
+        this.showNotice("error", "当前页面未开启内测能力");
+        return;
+      }
+      if (!Array.isArray(row.betaCodesAvailable) || row.betaCodesAvailable.length === 0) {
+        this.showNotice("error", "请先创建至少一个当前端可用的内测码，再切换到内测");
+        return;
+      }
+    }
+
+    if (mode === "online" && !row.navSupported) {
+      this.showNotice("error", `当前页面未标记为${this.data.channel === "web" ? "Web" : "小程序"}底栏候选，无法直接上线到底栏`);
+      return;
+    }
+
+    const nextRule = clone(row.currentRule);
+    if (mode === "online") {
+      nextRule.publishState = "online";
+    } else if (mode === "beta") {
+      nextRule.publishState = "beta";
+      nextRule.showInNav = false;
+      nextRule.isHomeEntry = false;
+    } else {
+      nextRule.publishState = "offline";
+      nextRule.showInNav = false;
+      nextRule.isHomeEntry = false;
+    }
+
+    const success = await this.persistRule(
+      pageKey,
+      nextRule,
+      buildQuickActionSuccessNotice(row.pageName, this.data.channel, mode)
+    );
+    if (success) {
+      this.closeActionDialog();
+    }
+  },
+
+  async onMoveNav(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const direction = normalizeText(dataset.direction);
+    const navRows = sortNavRows(this.data.allRows);
+    const currentIndex = navRows.findIndex((item) => item.pageKey === pageKey);
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= navRows.length) return;
+    const currentRow = navRows[currentIndex];
+    const targetRow = navRows[targetIndex];
+    if (
+      isForcedHomeEntry(currentRow.pageKey, this.data.channel, this.data.hideAudit) ||
+      isForcedHomeEntry(targetRow.pageKey, this.data.channel, this.data.hideAudit)
+    ) {
+      this.showNotice("error", "当前环境下 pose 页面固定为首页，菜单顺序不可调整");
+      return;
+    }
+    const currentRule = normalizeRuleForm(currentRow, this.data.channel, currentRow.currentRule);
+    const targetRule = normalizeRuleForm(targetRow, this.data.channel, targetRow.currentRule);
+    this.setData({ savingKey: `${pageKey}:move` });
+    try {
+      await requestJson("/api/admin/page-center/pages", {
+        method: "POST",
+        data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule, { navOrder: targetRule.navOrder }),
+        timeout: 10000,
+      });
+      await requestJson("/api/admin/page-center/pages", {
+        method: "POST",
+        data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule, { navOrder: currentRule.navOrder }),
+        timeout: 10000,
+      });
+      await this.loadOverview();
+      this.showNotice("success", "底部菜单顺序已更新");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "调整菜单顺序失败"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  onBetaInput(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const field = normalizeText(dataset.field);
+    if (!pageKey || !field) return;
+    const value = e && e.detail ? e.detail.value : "";
+    this.updateRow(pageKey, (row) => {
+      row.betaDraft[field] = value;
+      return row;
+    });
+  },
+
+  onBetaChannelTap(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const channelValue = normalizeText(dataset.channelValue);
+    if (!pageKey || !channelValue) return;
+    this.updateRow(pageKey, (row) => {
+      row.betaDraft.channel = channelValue;
+      return row;
+    });
+  },
+
+  onResetBeta(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    this.updateRow(pageKey, (row) => {
+      row.betaDraft = createEmptyBetaDraft(this.data.channel);
+      return row;
+    });
+  },
+
+  onGenerateBetaCode(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    this.updateRow(pageKey, (row) => {
+      row.betaDraft = Object.assign({}, row.betaDraft || createEmptyBetaDraft(this.data.channel), {
+        betaCode: generateRandomBetaCode(),
+        channel: normalizeText((row.betaDraft || {}).channel) || this.data.channel,
+      });
+      return row;
+    });
+  },
+
+  onEditBetaCode(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const codeId = normalizeText(dataset.codeId);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    const code = row.betaCodesVisible.find((item) => item.id === codeId);
+    if (!code) return;
+    this.updateRow(pageKey, (current) => {
+      current.betaDraft = {
+        codeId: code.id,
+        betaName: normalizeText(code.betaName),
+        betaCode: normalizeText(code.betaCode),
+        expiresAt: extractDateText(code.expiresAt),
+        channel: normalizeText(code.channel) || this.data.channel,
+      };
+      return current;
+    });
+    this.focusBetaEditor(pageKey);
+    this.showNotice(
+      "info",
+      code.lifecycleKey === "destroyed"
+        ? "已载入已销毁内测码，重新保存后会恢复使用。"
+        : code.lifecycleKey === "expired"
+          ? "已载入已失效内测码，调整到期日期后可继续使用。"
+          : "已载入内测码，可直接修改并保存。"
+    );
+  },
+
+  async onSaveBetaCode(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    if (!row.supportsBeta) {
+      this.showNotice("error", "当前页面未开启内测能力");
+      return;
+    }
+    const draft = row.betaDraft || createEmptyBetaDraft(this.data.channel);
+    if (!normalizeText(draft.betaName)) {
+      this.showNotice("error", "请先填写内测码名称");
+      return;
+    }
+    this.setData({ savingKey: `${pageKey}:beta` });
+    try {
+      const response = await requestJson("/api/admin/page-center/beta-codes", {
+        method: "POST",
+        data: {
+          pageKey,
+          codeId: normalizeText(draft.codeId),
+          betaName: normalizeText(draft.betaName),
+          betaCode: normalizeText(draft.betaCode),
+          expiresAt: normalizeText(draft.expiresAt),
+          channel: normalizeText(draft.channel) || this.data.channel,
+        },
+        timeout: 10000,
+      });
+      if (response && response.error) {
+        throw new Error(String(response.error || "保存内测码失败"));
+      }
+      await this.loadOverview();
+      this.showNotice("success", normalizeText(response && response.message) || "内测码已保存");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "保存内测码失败"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  async onDestroyBetaCode(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const codeId = normalizeText(dataset.codeId);
+    const betaName = normalizeText(dataset.betaName) || "该内测码";
+    if (!codeId) return;
+    const confirmed = await new Promise((resolve) => {
+      wx.showModal({
+        title: "确认删除",
+        content: `确认删除“${betaName}”？\n\n删除后该内测码将立即失效，且无法继续使用。`,
+        confirmText: "确认删除",
+        confirmColor: "#A34C4C",
+        cancelText: "取消",
+        success: (res) => resolve(Boolean(res && res.confirm)),
+        fail: () => resolve(false),
+      });
+    });
+    if (!confirmed) return;
+    this.setData({ savingKey: `destroy:${codeId}` });
+    try {
+      const response = await requestJson(`/api/admin/page-center/beta-codes/${encodeURIComponent(codeId)}`, {
+        method: "DELETE",
+        timeout: 10000,
+      });
+      if (response && response.error) {
+        throw new Error(String(response.error || "删除内测码失败"));
+      }
+      await this.loadOverview();
+      this.showNotice("success", normalizeText(response && response.message) || "内测码已删除");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "删除内测码失败"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
+  },
+
+  async viewPage(pageKey) {
+    const row = this.findRow(pageKey);
+    if (!row) return;
+    if (!row.supportsPreview) {
+      this.showNotice("error", "当前页面未开启查看能力");
+      return;
+    }
+    const previewRoute = normalizeText(row.currentPreviewRoutePath);
+    if (!previewRoute) {
+      this.showNotice("error", "当前页面缺少查看路由");
+      return;
+    }
+
+    if (this.data.channel === "web") {
+      const targetUrl = buildAdminWebPreviewUrl(previewRoute);
+      if (!targetUrl) {
+        this.showNotice("error", "当前未配置 Web 预览域名，无法打开查看页");
+        return;
+      }
+      wx.navigateTo({
+        url: `/pages/admin/web-preview/index?url=${encodeURIComponent(targetUrl)}`,
+        fail: () => {
+          wx.setClipboardData({
+            data: targetUrl,
+            success: () => this.showNotice("success", "已复制 Web 查看链接"),
+            fail: () => this.showNotice("error", "打开失败，复制链接也失败了"),
+          });
+        },
+      });
+      return;
+    }
+
+    try {
+      prepareMiniProgramAdminPreview(row.pageKey, previewRoute, this.data.channel);
+      await openMiniProgramAdminRoute(previewRoute);
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "打开小程序查看页失败"));
+    }
+  },
+  },
+});

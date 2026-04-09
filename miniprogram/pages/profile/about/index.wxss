@@ -3,9 +3,17 @@
   background: #fffbf0;
 }
 
+.page--preview {
+  min-height: 100vh;
+}
+
 .content {
   padding: 48rpx 48rpx calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+.content--preview {
+  padding-bottom: 48rpx;
 }
 
 .config-tip {

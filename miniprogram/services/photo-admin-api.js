@@ -28,8 +28,23 @@ const ADMIN_RELEASE_ALLOWED_EXTENSIONS = [
 ];
 const ADMIN_PHOTO_WALL_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const ADMIN_SESSION_CACHE_TTL_MS = 1200;
+const STATS_RETRY_TIMES = 2;
+const STATS_RETRY_DELAY_MS = 1200;
 const BETA_FEATURE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const BETA_FEATURE_CODE_LENGTH = 8;
+const ADMIN_ALBUM_FULL_COLUMNS =
+  "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,recipient_name,welcome_letter,donation_qr_code_url";
+const ADMIN_ALBUM_LEGACY_COLUMNS = "id,title,access_key,cover_url,created_at,enable_tipping";
+const ADMIN_ALBUM_LEGACY_OPTIONAL_COLUMNS = [
+  "recipient_name",
+  "welcome_letter",
+  "enable_welcome_letter",
+  "donation_qr_code_url",
+  "expires_at",
+];
+const ADMIN_ALBUM_LEGACY_ONLY_MESSAGE = "当前数据库结构较旧，请先执行最新数据库迁移后再试";
+const ADMIN_RELEASE_LEGACY_OPTIONAL_COLUMNS = ["storage_provider", "storage_file_id"];
+const ADMIN_RELEASE_LEGACY_ONLY_MESSAGE = "?????????????????????????????";
 
 let cachedAdminSessionUser = null;
 let cachedAdminSessionAt = 0;
@@ -122,6 +137,190 @@ function assertDbSuccess(result, fallback) {
   return result ? result.data : null;
 }
 
+function getAdminAlbumLegacyMissingColumns(error, candidateColumns) {
+  const allowed = Array.isArray(candidateColumns)
+    ? new Set(
+        candidateColumns
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      )
+    : null;
+
+  return ADMIN_ALBUM_LEGACY_OPTIONAL_COLUMNS.filter((column) => {
+    if (allowed && !allowed.has(column)) {
+      return false;
+    }
+    return isColumnMissingError(error, column);
+  });
+}
+
+function getAdminReleaseLegacyMissingColumns(error, candidateColumns) {
+  const allowed = Array.isArray(candidateColumns)
+    ? new Set(
+        candidateColumns
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      )
+    : null;
+
+  return ADMIN_RELEASE_LEGACY_OPTIONAL_COLUMNS.filter((column) => {
+    if (allowed && !allowed.has(column)) {
+      return false;
+    }
+    return isColumnMissingError(error, column);
+  });
+}
+
+async function insertAdminReleaseWithCompat(values) {
+  const payload = values && typeof values === "object" ? Object.assign({}, values) : {};
+
+  while (true) {
+    const result = await dbQuery({
+      table: "app_releases",
+      action: "insert",
+      values: payload,
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id,version,platform,download_url,force_update,update_log,created_at",
+    });
+
+    if (!result || !result.error) {
+      return assertDbSuccess(result, "????????");
+    }
+
+    const missingColumns = getAdminReleaseLegacyMissingColumns(result.error, Object.keys(payload));
+    if (!missingColumns.length) {
+      throw new Error(toErrorMessage(result.error, "????????"));
+    }
+
+    missingColumns.forEach((column) => {
+      delete payload[column];
+    });
+
+    if (!Object.keys(payload).length) {
+      throw new Error(ADMIN_RELEASE_LEGACY_ONLY_MESSAGE);
+    }
+  }
+}
+
+function normalizeAdminAlbumRecord(row) {
+  const source = row && typeof row === "object" ? row : {};
+  const donationQrUrl = String((source && source.donation_qr_code_url) || "").trim();
+  const expiresAt = String((source && source.expires_at) || "").trim();
+
+  return Object.assign({}, source, {
+    id: String((source && source.id) || "").trim(),
+    title: String((source && source.title) || "").trim() || "未命名空间",
+    access_key: String((source && source.access_key) || "").trim(),
+    cover_url: String((source && source.cover_url) || "").trim(),
+    created_at: String((source && source.created_at) || "").trim(),
+    expires_at: expiresAt || null,
+    enable_tipping: Boolean(source && source.enable_tipping),
+    enable_welcome_letter: source ? source.enable_welcome_letter !== false : true,
+    recipient_name: String((source && source.recipient_name) || "").trim() || "拾光者",
+    welcome_letter: String((source && source.welcome_letter) || "").trim(),
+    donation_qr_code_url: donationQrUrl || null,
+  });
+}
+
+async function selectAdminAlbumByIdWithCompat(albumId) {
+  const id = String(albumId || "").trim();
+  if (!id) {
+    return null;
+  }
+
+  let result = await dbQuery({
+    table: "albums",
+    action: "select",
+    columns: ADMIN_ALBUM_FULL_COLUMNS,
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+
+  if (result && result.error && getAdminAlbumLegacyMissingColumns(result.error).length > 0) {
+    result = await dbQuery({
+      table: "albums",
+      action: "select",
+      columns: ADMIN_ALBUM_LEGACY_COLUMNS,
+      filters: [{ column: "id", operator: "eq", value: id }],
+      maybeSingle: true,
+    });
+  }
+
+  const row = assertDbSuccess(result, "获取空间信息失败");
+  if (!row || !String(row.id || "").trim()) {
+    return null;
+  }
+  return normalizeAdminAlbumRecord(row);
+}
+
+async function mutateAdminAlbumWithCompat(action, values, options) {
+  const payload = values && typeof values === "object" ? Object.assign({}, values) : {};
+  const fallback = options && options.fallbackMessage ? options.fallbackMessage : "专属空间写入失败";
+
+  while (true) {
+    const result = await dbQuery({
+      table: "albums",
+      action,
+      values: payload,
+      filters: options && Array.isArray(options.filters) ? options.filters : undefined,
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id",
+    });
+
+    if (!result || !result.error) {
+      return assertDbSuccess(result, fallback);
+    }
+
+    const missingColumns = getAdminAlbumLegacyMissingColumns(result.error, Object.keys(payload));
+    if (!missingColumns.length) {
+      throw new Error(toErrorMessage(result.error, fallback));
+    }
+
+    missingColumns.forEach((column) => {
+      delete payload[column];
+    });
+
+    if (!Object.keys(payload).length) {
+      throw new Error(ADMIN_ALBUM_LEGACY_ONLY_MESSAGE);
+    }
+  }
+}
+
+async function getAdminAlbumSnapshotWithCompat(albumId, columnName) {
+  const id = String(albumId || "").trim();
+  const targetColumn = String(columnName || "").trim();
+  if (!id) {
+    return null;
+  }
+
+  let result = await dbQuery({
+    table: "albums",
+    action: "select",
+    columns: targetColumn ? `id,${targetColumn}` : "id",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+
+  if (targetColumn && result && result.error && isColumnMissingError(result.error, targetColumn)) {
+    result = await dbQuery({
+      table: "albums",
+      action: "select",
+      columns: "id",
+      filters: [{ column: "id", operator: "eq", value: id }],
+      maybeSingle: true,
+    });
+  }
+
+  const snapshot = assertDbSuccess(result, "获取空间信息失败");
+  if (!snapshot || !String(snapshot.id || "").trim()) {
+    return null;
+  }
+
+  return Object.assign({ id, [targetColumn]: null }, snapshot);
+}
+
 function hasExplicitRpcFailure(payload) {
   if (payload === false) return true;
   let current = payload;
@@ -210,6 +409,38 @@ function assertRpcSuccess(result, fallback) {
     throw new Error(toErrorMessage(payload, fallback));
   }
   return payload;
+}
+
+function isTransientStatsRpcError(input) {
+  let current = input;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    const code = String(current.code || "").trim().toUpperCase();
+    if (code === "TRANSIENT_BACKEND") {
+      return true;
+    }
+    const nestedError = current.error;
+    if (nestedError && nestedError !== current && isTransientStatsRpcError(nestedError)) {
+      return true;
+    }
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  const message = toErrorMessage(input, "").toUpperCase();
+  return message.includes("TRANSIENT_BACKEND");
+}
+
+function waitForStatsRetry(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function invokeAdminStatsRpc() {
+  try {
+    return await dbRpc("get_admin_dashboard_stats");
+  } catch (error) {
+    return { error };
+  }
 }
 
 function toUniqueNonEmptyStrings(values) {
@@ -522,15 +753,28 @@ async function requireAdminSession() {
 
 async function getAdminDashboardStats() {
   await requireAdminSession();
-  const result = await dbRpc("get_admin_dashboard_stats");
+  let result = await invokeAdminStatsRpc();
+
+  for (let attempt = 0; attempt < STATS_RETRY_TIMES; attempt += 1) {
+    if (!isTransientStatsRpcError(result)) {
+      break;
+    }
+    await waitForStatsRetry(STATS_RETRY_DELAY_MS * (attempt + 1));
+    result = await invokeAdminStatsRpc();
+  }
+
   const payload = assertRpcSuccess(result, "获取管理统计失败");
   return payload && typeof payload === "object" ? payload : {};
 }
 
 async function runAdminMaintenanceTasks() {
   await requireAdminSession();
-  const result = await dbRpc("run_maintenance_tasks");
-  const payload = assertRpcSuccess(result, "执行维护任务失败");
+  const response = await requestJson("/api/maintenance", {
+    method: "POST",
+    timeout: 120000,
+  });
+  const body = assertAdminMutationPayload(response, "执行维护任务失败");
+  const payload = body && typeof body === "object" ? body.result : null;
   return payload && typeof payload === "object" ? payload : {};
 }
 
@@ -945,378 +1189,6 @@ async function createAdminPose(input) {
   }
 }
 
-async function listAdminPoses(limit) {
-  await requireAdminSession();
-  const pageLimit = Math.max(1, Math.min(2000, Number(limit || 500)));
-  const result = await dbQuery({
-    table: "poses",
-    action: "select",
-    columns: "id,image_url,tags,view_count,created_at,storage_path",
-    orders: [{ column: "created_at", ascending: false }],
-    limit: pageLimit,
-  });
-  const data = assertDbSuccess(result, "获取摆姿列表失败");
-  return Array.isArray(data) ? data : [];
-}
-
-async function listAdminPoseTags(limit) {
-  await requireAdminSession();
-  const pageLimit = Math.max(1, Math.min(500, Number(limit || 200)));
-  try {
-    const result = await dbQuery({
-      table: "pose_tags",
-      action: "select",
-      columns: "id,name,usage_count,sort_order,created_at",
-      orders: [
-        { column: "sort_order", ascending: true },
-        { column: "created_at", ascending: true },
-        { column: "id", ascending: true },
-      ],
-      limit: pageLimit,
-    });
-    const data = assertDbSuccess(result, "获取摆姿标签失败");
-    return Array.isArray(data) ? data : [];
-  } catch (error) {
-    if (!isColumnMissingError(error, "sort_order")) {
-      throw error;
-    }
-
-    // 老库兼容：sort_order 字段尚未迁移时，回退旧排序逻辑，避免页面不可用。
-    const fallbackResult = await dbQuery({
-      table: "pose_tags",
-      action: "select",
-      columns: "id,name,usage_count,created_at",
-      orders: [
-        { column: "usage_count", ascending: false },
-        { column: "name", ascending: true },
-      ],
-      limit: pageLimit,
-    });
-    const fallbackRows = assertDbSuccess(fallbackResult, "获取摆姿标签失败");
-    const rows = Array.isArray(fallbackRows) ? fallbackRows : [];
-    return rows.map((row, index) =>
-      Object.assign({}, row, {
-        sort_order: (index + 1) * 10,
-      })
-    );
-  }
-}
-
-async function moveAdminPoseTag(tagId, directionInput) {
-  await requireAdminSession();
-  const id = Number(tagId);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error("标签 ID 不合法");
-  }
-
-  const direction = String(directionInput || "").trim().toLowerCase();
-  if (direction !== "up" && direction !== "down" && direction !== "top") {
-    throw new Error("排序方向不合法");
-  }
-
-  const migrationHint = "数据库缺少 sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/04_pose_tag_sort_order.sql";
-  try {
-    const listResult = await dbQuery({
-      table: "pose_tags",
-      action: "select",
-      columns: "id,name,sort_order,created_at",
-      orders: [
-        { column: "sort_order", ascending: true },
-        { column: "created_at", ascending: true },
-        { column: "id", ascending: true },
-      ],
-      limit: 500,
-    });
-    const listRows = assertDbSuccess(listResult, "读取标签排序失败");
-    const list = (Array.isArray(listRows) ? listRows : [])
-      .map((row, index) => {
-        const rowId = Number((row && row.id) || 0);
-        const orderNum = Number(row && row.sort_order);
-        return {
-          id: rowId,
-          sort_order: Number.isFinite(orderNum) && orderNum > 0 ? Math.round(orderNum) : (index + 1) * 10,
-        };
-      })
-      .filter((row) => Number.isInteger(row.id) && row.id > 0);
-
-    const currentIndex = list.findIndex((item) => item.id === id);
-    if (currentIndex < 0) {
-      throw new Error("标签不存在或已删除");
-    }
-
-    const nextIndex =
-      direction === "top"
-        ? 0
-        : direction === "up"
-          ? currentIndex - 1
-          : currentIndex + 1;
-    if (nextIndex < 0 || nextIndex >= list.length) {
-      return {
-        moved: false,
-        boundary: true,
-        updatedCount: 0,
-      };
-    }
-    if (nextIndex === currentIndex) {
-      return {
-        moved: false,
-        boundary: true,
-        updatedCount: 0,
-      };
-    }
-
-    const reordered = list.slice();
-    const current = reordered[currentIndex];
-    reordered.splice(currentIndex, 1);
-    reordered.splice(nextIndex, 0, current);
-
-    const currentMap = new Map();
-    list.forEach((item) => currentMap.set(item.id, Number(item.sort_order || 0)));
-    const desiredRows = reordered.map((item, index) => ({
-      id: item.id,
-      sort_order: (index + 1) * 10,
-    }));
-    const changedRows = desiredRows.filter((item) => Number(currentMap.get(item.id) || 0) !== item.sort_order);
-
-    for (let i = 0; i < changedRows.length; i += 1) {
-      const row = changedRows[i];
-      const updateResult = await dbQuery({
-        table: "pose_tags",
-        action: "update",
-        values: {
-          sort_order: row.sort_order,
-        },
-        filters: [{ column: "id", operator: "eq", value: row.id }],
-      });
-      assertDbSuccess(updateResult, "更新标签排序失败");
-    }
-
-    return {
-      moved: changedRows.length > 0,
-      boundary: false,
-      updatedCount: changedRows.length,
-    };
-  } catch (error) {
-    if (isColumnMissingError(error, "sort_order")) {
-      throw new Error(migrationHint);
-    }
-    throw error;
-  }
-}
-
-async function createAdminPoseTags(input) {
-  await requireAdminSession();
-  const names = parseUniqueTagNames(input);
-  if (names.length === 0) {
-    throw new Error("请输入标签名称");
-  }
-
-  const existingResult = await dbQuery({
-    table: "pose_tags",
-    action: "select",
-    columns: "id,name",
-    filters: [{ column: "name", operator: "in", value: names }],
-    limit: names.length,
-  });
-  const existingRows = assertDbSuccess(existingResult, "检查标签是否存在失败");
-  const existingSet = new Set(
-    (Array.isArray(existingRows) ? existingRows : [])
-      .map((row) => normalizeTagName(row && row.name))
-      .filter(Boolean)
-      .map((name) => name.toLowerCase())
-  );
-
-  const namesToInsert = names.filter((name) => !existingSet.has(name.toLowerCase()));
-  let insertedCount = 0;
-  let skippedCount = names.length - namesToInsert.length;
-
-  for (let i = 0; i < namesToInsert.length; i += 1) {
-    const name = namesToInsert[i];
-    try {
-      const insertResult = await dbQuery({
-        table: "pose_tags",
-        action: "insert",
-        values: {
-          name,
-        },
-      });
-      assertDbSuccess(insertResult, "新增标签失败");
-      insertedCount += 1;
-    } catch (error) {
-      if (isDuplicateEntryError(error)) {
-        skippedCount += 1;
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  return {
-    insertedCount,
-    skippedCount,
-    totalCount: names.length,
-  };
-}
-
-async function updateAdminPoseTag(tagId, nextNameInput) {
-  await requireAdminSession();
-  const id = Number(tagId);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error("标签 ID 不合法");
-  }
-
-  const nextName = normalizeTagName(nextNameInput);
-  if (!nextName) {
-    throw new Error("标签名称不能为空");
-  }
-
-  const duplicateResult = await dbQuery({
-    table: "pose_tags",
-    action: "select",
-    columns: "id",
-    filters: [{ column: "name", operator: "eq", value: nextName }],
-    limit: 1,
-  });
-  const duplicateRows = assertDbSuccess(duplicateResult, "检查标签名称失败");
-  const hasOther = (Array.isArray(duplicateRows) ? duplicateRows : []).some((row) => {
-    const rowId = Number((row && row.id) || 0);
-    return Number.isInteger(rowId) && rowId !== id;
-  });
-  if (hasOther) {
-    throw new Error("标签名称已存在");
-  }
-
-  const updateResult = await dbQuery({
-    table: "pose_tags",
-    action: "update",
-    values: {
-      name: nextName,
-    },
-    filters: [{ column: "id", operator: "eq", value: id }],
-    selectAfterWrite: true,
-    maybeSingle: true,
-    columns: "id,name,usage_count,created_at",
-  });
-  const updated = assertDbSuccess(updateResult, "更新标签失败");
-  if (!updated) {
-    throw new Error("标签不存在或更新失败");
-  }
-  return updated;
-}
-
-async function deleteAdminPoseTag(tagId) {
-  await requireAdminSession();
-  const id = Number(tagId);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error("标签 ID 不合法");
-  }
-
-  const deleteResult = await dbQuery({
-    table: "pose_tags",
-    action: "delete",
-    filters: [{ column: "id", operator: "eq", value: id }],
-    selectAfterWrite: true,
-    maybeSingle: true,
-    columns: "id,name",
-  });
-  const deleted = assertDbSuccess(deleteResult, "删除标签失败");
-  if (!deleted) {
-    throw new Error("标签不存在或删除失败");
-  }
-  return deleted;
-}
-
-async function deleteAdminPoseTags(tagIds) {
-  await requireAdminSession();
-  const ids = Array.from(
-    new Set(
-      (Array.isArray(tagIds) ? tagIds : [])
-        .map((id) => Number(id))
-        .filter((id) => Number.isInteger(id) && id > 0)
-    )
-  );
-  if (ids.length === 0) {
-    throw new Error("请先选择要删除的标签");
-  }
-
-  const snapshotResult = await dbQuery({
-    table: "pose_tags",
-    action: "select",
-    columns: "id,name",
-    filters: [{ column: "id", operator: "in", value: ids }],
-    limit: ids.length,
-  });
-  const snapshotRows = assertDbSuccess(snapshotResult, "读取标签快照失败");
-  const rows = Array.isArray(snapshotRows) ? snapshotRows : [];
-  const targetIds = rows
-    .map((row) => Number((row && row.id) || 0))
-    .filter((id) => Number.isInteger(id) && id > 0);
-
-  const missingCount = Math.max(0, ids.length - targetIds.length);
-  if (targetIds.length === 0) {
-    return {
-      deletedCount: 0,
-      failedCount: 0,
-      missingCount,
-      remainingIds: [],
-    };
-  }
-
-  const deleteResult = await dbQuery({
-    table: "pose_tags",
-    action: "delete",
-    filters: [{ column: "id", operator: "in", value: targetIds }],
-  });
-  assertDbSuccess(deleteResult, "批量删除标签失败");
-
-  const verifyResult = await dbQuery({
-    table: "pose_tags",
-    action: "select",
-    columns: "id",
-    filters: [{ column: "id", operator: "in", value: targetIds }],
-    limit: targetIds.length,
-  });
-  const verifyRows = assertDbSuccess(verifyResult, "校验标签删除结果失败");
-  const remainingIds = (Array.isArray(verifyRows) ? verifyRows : [])
-    .map((row) => Number((row && row.id) || 0))
-    .filter((id) => Number.isInteger(id) && id > 0);
-
-  const failedCount = remainingIds.length;
-  const deletedCount = Math.max(0, targetIds.length - failedCount);
-  return {
-    deletedCount,
-    failedCount,
-    missingCount,
-    remainingIds,
-  };
-}
-
-async function updateAdminPoseTags(poseId, tagsInput) {
-  await requireAdminSession();
-  const id = Number(poseId);
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error("摆姿 ID 不合法");
-  }
-
-  const tags = normalizePoseTags(tagsInput);
-  const updateResult = await dbQuery({
-    table: "poses",
-    action: "update",
-    values: {
-      tags,
-    },
-    filters: [{ column: "id", operator: "eq", value: id }],
-    selectAfterWrite: true,
-    maybeSingle: true,
-    columns: "id,tags",
-  });
-  const updated = assertDbSuccess(updateResult, "更新摆姿标签失败");
-  if (!updated) {
-    throw new Error("摆姿不存在或更新失败");
-  }
-  return updated;
-}
-
 async function createAdminRelease(input) {
   await requireAdminSession();
 
@@ -1343,24 +1215,17 @@ async function createAdminRelease(input) {
 
   const uploadResult = await uploadAdminAsset(filePath, fileName, "releases", "release");
   try {
-    const insertResult = await dbQuery({
-      table: "app_releases",
-      action: "insert",
-      values: {
-        version,
-        platform,
-        download_url: uploadResult.url,
-        storage_provider: "cloudbase",
-        storage_file_id: uploadResult.fileId || null,
-        update_log: updateLog || null,
-        force_update: forceUpdate,
-      },
-      selectAfterWrite: true,
-      maybeSingle: true,
-      columns: "id,version,platform,download_url,force_update,update_log,created_at,storage_file_id",
+    const insertResult = await insertAdminReleaseWithCompat({
+      version,
+      platform,
+      download_url: uploadResult.url,
+      storage_provider: "cloudbase",
+      storage_file_id: uploadResult.fileId || null,
+      update_log: updateLog || null,
+      force_update: forceUpdate,
     });
 
-    return assertDbSuccess(insertResult, "新增版本发布失败");
+    return insertResult;
   } catch (error) {
     const cleanup = await bestEffortDeleteStorageTargets([
       uploadResult.path,
@@ -1381,37 +1246,21 @@ async function listAdminAlbums(limit) {
   let result = await dbQuery({
     table: "albums",
     action: "select",
-    columns:
-      "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,recipient_name,welcome_letter,donation_qr_code_url",
+    columns: ADMIN_ALBUM_FULL_COLUMNS,
     orders: [{ column: "created_at", ascending: false }],
     limit: pageLimit,
   });
-  if (
-    result &&
-    result.error &&
-    (isColumnMissingError(result.error, "recipient_name") ||
-      isColumnMissingError(result.error, "welcome_letter") ||
-      isColumnMissingError(result.error, "donation_qr_code_url"))
-  ) {
+  if (result && result.error && getAdminAlbumLegacyMissingColumns(result.error).length > 0) {
     result = await dbQuery({
       table: "albums",
       action: "select",
-      columns: "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter",
+      columns: ADMIN_ALBUM_LEGACY_COLUMNS,
       orders: [{ column: "created_at", ascending: false }],
       limit: pageLimit,
     });
   }
   const dataRaw = assertDbSuccess(result, "获取相册列表失败");
-  const data = (Array.isArray(dataRaw) ? dataRaw : []).map((row) =>
-    Object.assign(
-      {
-        recipient_name: "",
-        welcome_letter: "",
-        donation_qr_code_url: null,
-      },
-      row || {}
-    )
-  );
+  const data = (Array.isArray(dataRaw) ? dataRaw : []).map((row) => normalizeAdminAlbumRecord(row));
   return Array.isArray(data) ? data : [];
 }
 
@@ -1475,17 +1324,15 @@ async function createAdminAlbum(payload) {
     values.expires_at = expiresAt;
   }
 
-  const insertResult = await dbQuery({
-    table: "albums",
-    action: "insert",
-    values,
-    selectAfterWrite: true,
-    maybeSingle: true,
-    columns:
-      "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,recipient_name,welcome_letter,donation_qr_code_url",
+  const createdSnapshot = await mutateAdminAlbumWithCompat("insert", values, {
+    fallbackMessage: "创建专属空间失败",
   });
-  const created = assertDbSuccess(insertResult, "创建专属空间失败");
-  if (!created || !String(created.id || "").trim()) {
+  const createdId = String((createdSnapshot && createdSnapshot.id) || "").trim();
+  if (!createdId) {
+    throw new Error("创建专属空间失败，请稍后重试");
+  }
+  const created = await selectAdminAlbumByIdWithCompat(createdId);
+  if (!created) {
     throw new Error("创建专属空间失败，请稍后重试");
   }
   return created;
@@ -1534,17 +1381,14 @@ async function updateAdminAlbumFields(albumId, payload) {
     throw new Error("没有可更新的字段");
   }
 
-  const result = await dbQuery({
-    table: "albums",
-    action: "update",
-    values,
+  const updatedSnapshot = await mutateAdminAlbumWithCompat("update", values, {
     filters: [{ column: "id", operator: "eq", value: id }],
-    selectAfterWrite: true,
-    maybeSingle: true,
-    columns:
-      "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,recipient_name,welcome_letter,donation_qr_code_url",
+    fallbackMessage: "更新专属空间失败",
   });
-  const updated = assertDbSuccess(result, "更新专属空间失败");
+  if (!updatedSnapshot || !String(updatedSnapshot.id || "").trim()) {
+    throw new Error("空间不存在或更新失败");
+  }
+  const updated = await selectAdminAlbumByIdWithCompat(id);
   if (!updated) {
     throw new Error("空间不存在或更新失败");
   }
@@ -1632,14 +1476,7 @@ async function uploadAdminAlbumDonationQr(albumId, filePath, fileName) {
     throw new Error("请先选择赞赏码图片");
   }
 
-  const snapshotResult = await dbQuery({
-    table: "albums",
-    action: "select",
-    columns: "id,donation_qr_code_url",
-    filters: [{ column: "id", operator: "eq", value: id }],
-    maybeSingle: true,
-  });
-  const snapshot = assertDbSuccess(snapshotResult, "获取空间信息失败");
+  const snapshot = await getAdminAlbumSnapshotWithCompat(id, "donation_qr_code_url");
   if (!snapshot || !String(snapshot.id || "").trim()) {
     throw new Error("空间不存在或已删除");
   }
@@ -1706,20 +1543,39 @@ async function deleteAdminRelease(releaseId) {
 async function listAdminGalleryPhotos(limit) {
   await requireAdminSession();
   const pageLimit = Math.max(1, Math.min(2000, Number(limit || 500)));
+  const columnsWithLegacyUrl =
+    "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,shot_date,created_at,width,height";
+  const columnsWithoutLegacyUrl =
+    "id,album_id,folder_id,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,shot_date,created_at,width,height";
+  const columnsWithoutShotDateWithLegacyUrl =
+    "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height";
+  const columnsWithoutShotDate =
+    "id,album_id,folder_id,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height";
+  let activeColumns = columnsWithLegacyUrl;
   let result = await dbQuery({
     table: "album_photos",
     action: "select",
-    columns:
-      "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,shot_date,created_at,width,height",
+    columns: activeColumns,
     orders: [{ column: "created_at", ascending: false }, { column: "shot_date", ascending: false }],
     limit: pageLimit,
   });
+  if (result && result.error && isColumnMissingError(result.error, "url")) {
+    activeColumns = columnsWithoutLegacyUrl;
+    result = await dbQuery({
+      table: "album_photos",
+      action: "select",
+      columns: activeColumns,
+      orders: [{ column: "created_at", ascending: false }, { column: "shot_date", ascending: false }],
+      limit: pageLimit,
+    });
+  }
   if (result && result.error && isColumnMissingError(result.error, "shot_date")) {
     result = await dbQuery({
       table: "album_photos",
       action: "select",
-      columns:
-        "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height",
+      columns: activeColumns === columnsWithLegacyUrl
+        ? columnsWithoutShotDateWithLegacyUrl
+        : columnsWithoutShotDate,
       orders: [{ column: "created_at", ascending: false }],
       limit: pageLimit,
     });
@@ -1766,7 +1622,7 @@ async function createAdminGalleryPhoto(input) {
       values.height = Math.round(height);
     }
 
-    const insertResult = await dbQuery({
+    let insertResult = await dbQuery({
       table: "album_photos",
       action: "insert",
       values,
@@ -1775,6 +1631,19 @@ async function createAdminGalleryPhoto(input) {
       columns:
         "id,album_id,url,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height",
     });
+    if (insertResult && insertResult.error && isColumnMissingError(insertResult.error, "url")) {
+      const fallbackValues = Object.assign({}, values);
+      delete fallbackValues.url;
+      insertResult = await dbQuery({
+        table: "album_photos",
+        action: "insert",
+        values: fallbackValues,
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns:
+          "id,album_id,thumbnail_url,preview_url,original_url,is_public,view_count,like_count,created_at,width,height",
+      });
+    }
     return assertDbSuccess(insertResult, "上传照片失败");
   } catch (error) {
     const cleanup = await bestEffortDeleteStorageTargets([
@@ -1862,13 +1731,22 @@ async function deleteAdminGalleryPhoto(photoId, assetTargets) {
     throw new Error("照片 ID 不能为空");
   }
 
-  const snapshotResult = await dbQuery({
+  let snapshotResult = await dbQuery({
     table: "album_photos",
     action: "select",
     columns: "id,album_id,is_public,url,thumbnail_url,preview_url,original_url",
     filters: [{ column: "id", operator: "eq", value: id }],
     maybeSingle: true,
   });
+  if (snapshotResult && snapshotResult.error && isColumnMissingError(snapshotResult.error, "url")) {
+    snapshotResult = await dbQuery({
+      table: "album_photos",
+      action: "select",
+      columns: "id,album_id,is_public,thumbnail_url,preview_url,original_url",
+      filters: [{ column: "id", operator: "eq", value: id }],
+      maybeSingle: true,
+    });
+  }
   const snapshot = assertDbSuccess(snapshotResult, "读取照片信息失败");
   if (!snapshot) {
     throw new Error("照片不存在或删除失败");
@@ -1899,7 +1777,7 @@ async function deleteAdminGalleryPhoto(photoId, assetTargets) {
     };
   }
 
-  const result = await dbQuery({
+  let result = await dbQuery({
     table: "album_photos",
     action: "delete",
     filters: [{ column: "id", operator: "eq", value: id }],
@@ -1907,6 +1785,16 @@ async function deleteAdminGalleryPhoto(photoId, assetTargets) {
     maybeSingle: true,
     columns: "id,url,thumbnail_url,preview_url,original_url",
   });
+  if (result && result.error && isColumnMissingError(result.error, "url")) {
+    result = await dbQuery({
+      table: "album_photos",
+      action: "delete",
+      filters: [{ column: "id", operator: "eq", value: id }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id,thumbnail_url,preview_url,original_url",
+    });
+  }
   const deletedRow = assertDbSuccess(result, "删除照片失败");
   if (!deletedRow) {
     throw new Error("照片不存在或删除失败");

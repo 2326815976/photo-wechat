@@ -8,6 +8,12 @@ const {
 const { clearStoredCookie } = require("../../utils/auth");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
+const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜定格美好瞬间";
@@ -133,6 +139,13 @@ Page({
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    authMode: "phone_password",
+    guestProfileMode: "login",
+    phoneLoginEnabled: true,
+    wechatLoginEnabled: false,
+    profileEditEnabled: true,
+    profileBookingsEnabled: true,
+    donationQrCodeEnabled: true,
     showAuditAboutMode: false,
     auditWechatSubmitting: false,
     showAuditLegalModal: false,
@@ -159,6 +172,50 @@ Page({
     savingDonationQr: false,
     hasDonationQrCode: false,
     about: Object.assign({}, DEFAULT_ABOUT),
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/index/index",
+    hasBottomTabbar: true,
+  },
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const authMode = String(normalized.authMode || "phone_password");
+    const guestProfileMode = String(normalized.guestProfileMode || "login");
+    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
+    const nextShowAuditAboutMode =
+      guestProfileMode === "about" && !Boolean(this.data && this.data.isLoggedIn);
+    const enableGuestWechatEntry =
+      nextShowAuditAboutMode && wechatLoginEnabled && !phoneLoginEnabled;
+
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      authMode,
+      guestProfileMode,
+      phoneLoginEnabled,
+      wechatLoginEnabled,
+      profileEditEnabled: Boolean(
+        normalized.featureFlags && normalized.featureFlags.showProfileEdit
+      ),
+      profileBookingsEnabled: Boolean(
+        normalized.featureFlags && normalized.featureFlags.showProfileBookings
+      ),
+      donationQrCodeEnabled: Boolean(
+        normalized.featureFlags && normalized.featureFlags.showDonationQrCode
+      ),
+      showAuditAboutMode: nextShowAuditAboutMode,
+      showAuditLegalModal: enableGuestWechatEntry
+        ? Boolean(this.data.showAuditLegalModal)
+        : false,
+    });
+    this.initAuditLegalDocuments(enableGuestWechatEntry);
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/profile/index");
   },
 
   onLoad() {
@@ -168,27 +225,20 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
     this.setData({
       safeTop,
       serviceMissing,
-      hideAudit,
-      showAuditAboutMode: hideAudit,
     });
-    this.initAuditLegalDocuments(hideAudit);
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
-        const nextHideAudit = Boolean(hideAudit);
-        this.setData({
-          hideAudit: nextHideAudit,
-          showAuditAboutMode: nextHideAudit ? this.data.showAuditAboutMode : false,
-          showAuditLegalModal: nextHideAudit ? this.data.showAuditLegalModal : false,
-        });
-        this.initAuditLegalDocuments(nextHideAudit);
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
         this.refreshCurrentModeData();
       });
     }
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/profile/index");
 
     this.refreshCurrentModeData();
   },
@@ -206,12 +256,21 @@ Page({
         // ignore
       }
     }
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({
-      hideAudit,
-      showAuditAboutMode: hideAudit ? this.data.showAuditAboutMode : false,
-    });
-    this.initAuditLegalDocuments(hideAudit);
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    const presentationState = this.applyPagePresentation();
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "profile",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
+    }
 
     this.syncTabBar("pages/profile/index");
     if (hasNewAppEntry && this._profilePageBootstrapped && !this.data.loading) {
@@ -229,6 +288,10 @@ Page({
       clearTimeout(this._auditLoginRefreshTimer);
       this._auditLoginRefreshTimer = null;
     }
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {
@@ -257,10 +320,12 @@ Page({
     this.loadUser();
   },
 
-  initAuditLegalDocuments(hideAudit) {
-    const nextHideAudit =
-      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
-    if (!nextHideAudit) {
+  initAuditLegalDocuments(enabled) {
+    const nextEnabled =
+      typeof enabled === "boolean"
+        ? enabled
+        : Boolean(this.data.showAuditAboutMode && this.data.wechatLoginEnabled && !this.data.phoneLoginEnabled);
+    if (!nextEnabled) {
       this.auditLegalDocMap = {};
       this.setData({
         auditLegalDocTabs: [],
@@ -274,7 +339,7 @@ Page({
       return;
     }
 
-    const docs = getLegalDocuments({ hideAudit: true });
+    const docs = getLegalDocuments({ hideAudit: Boolean(this.data.hideAudit) });
     this.auditLegalDocMap = {};
     docs.forEach((doc) => {
       const key = String((doc && doc.key) || "").trim();
@@ -296,16 +361,18 @@ Page({
     }
   },
 
-  applyAuditLegalDocument(key, hideAudit) {
+  applyAuditLegalDocument(key, enabled) {
     const normalizedKey = String(key || "").trim();
     if (!normalizedKey) return false;
-    const nextHideAudit =
-      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
-    if (!nextHideAudit) return false;
+    const nextEnabled =
+      typeof enabled === "boolean"
+        ? enabled
+        : Boolean(this.data.showAuditAboutMode && this.data.wechatLoginEnabled && !this.data.phoneLoginEnabled);
+    if (!nextEnabled) return false;
 
     const doc =
       (this.auditLegalDocMap && this.auditLegalDocMap[normalizedKey]) ||
-      getLegalDocumentByKey(normalizedKey, { hideAudit: true });
+      getLegalDocumentByKey(normalizedKey, { hideAudit: Boolean(this.data.hideAudit) });
     if (!doc) return false;
 
     this.setData({
@@ -319,7 +386,14 @@ Page({
   },
 
   onOpenAuditWechatLogin() {
-    if (!this.data.hideAudit || !this.data.showAuditAboutMode || this.data.serviceMissing) return;
+    if (
+      !this.data.showAuditAboutMode ||
+      !this.data.wechatLoginEnabled ||
+      this.data.phoneLoginEnabled ||
+      this.data.serviceMissing
+    ) {
+      return;
+    }
     if (this.data.auditWechatSubmitting) return;
     this.initAuditLegalDocuments(true);
     this.applyAuditLegalDocument("terms", true);
@@ -365,7 +439,14 @@ Page({
   },
 
   async submitAuditWechatLogin() {
-    if (!this.data.hideAudit || !this.data.showAuditAboutMode || this.data.serviceMissing) return;
+    if (
+      !this.data.showAuditAboutMode ||
+      !this.data.wechatLoginEnabled ||
+      this.data.phoneLoginEnabled ||
+      this.data.serviceMissing
+    ) {
+      return;
+    }
     if (this.data.auditWechatSubmitting) return;
 
     this.setData({ auditWechatSubmitting: true });
@@ -386,7 +467,8 @@ Page({
 
       const userRole = String((user && user.role) || "").trim();
       const userPhone = String((user && user.phone) || "").trim();
-      const defaultName = userPhone || (this.data.hideAudit ? "拾光者" : "用户");
+      const defaultName =
+        userPhone || (this.data.guestProfileMode === "about" ? "拾光者" : "用户");
       const isAdmin = userRole === "admin";
 
       this.setData({
@@ -433,6 +515,7 @@ Page({
       const session = await getSession();
       const user = extractSessionUser(session);
       if (!user || !user.id) {
+        const showGuestAboutMode = this.data.guestProfileMode === "about";
         this.setData({
           loading: false,
           isLoggedIn: false,
@@ -443,16 +526,19 @@ Page({
           userPhone: "",
           userRegisterDateText: "",
           canChangePassword: false,
-          showAuditAboutMode: Boolean(this.data.hideAudit),
+          showAuditAboutMode: showGuestAboutMode,
+          aboutLoading: showGuestAboutMode,
+          aboutError: "",
         });
         this.refreshTabBarLoginState();
-        if (this.data.hideAudit) {
+        if (showGuestAboutMode) {
           this.loadAbout();
         }
         return;
       }
 
-      let userName = String((user && user.phone) || (this.data.hideAudit ? "拾光者" : "用户"));
+      const preferGuestDisplayName = this.data.guestProfileMode === "about";
+      let userName = String((user && user.phone) || (preferGuestDisplayName ? "拾光者" : "用户"));
       let userPhone = String((user && user.phone) || "");
       let userRegisterDateText = formatRegisterDateText(user && user.created_at);
       const userRole = String((user && user.role) || "").trim();
@@ -499,7 +585,7 @@ Page({
         }
       }
 
-      if (this.data.hideAudit) {
+      if (preferGuestDisplayName) {
         const normalizedName = String(userName || "").trim();
         if (!normalizedName || normalizedName === "微信用户" || normalizedName === "用户") {
           userName = "拾光者";
@@ -519,9 +605,11 @@ Page({
         userRegisterDateText,
         canChangePassword: !isWechatMiniProgramAccount(user),
         showAuditAboutMode: false,
+        aboutLoading: false,
       });
       this.refreshTabBarLoginState();
     } catch (e) {
+      const showGuestAboutMode = this.data.guestProfileMode === "about";
       this.setData({
         loading: false,
         isLoggedIn: false,
@@ -532,10 +620,12 @@ Page({
         userPhone: "",
         userRegisterDateText: "",
         canChangePassword: false,
-        showAuditAboutMode: Boolean(this.data.hideAudit),
+        showAuditAboutMode: showGuestAboutMode,
+        aboutLoading: showGuestAboutMode,
+        aboutError: "",
       });
       this.refreshTabBarLoginState();
-      if (this.data.hideAudit) {
+      if (showGuestAboutMode) {
         this.loadAbout();
       }
     } finally {
@@ -617,19 +707,31 @@ Page({
   },
 
   goLogin() {
+    if (this.data.showAuditAboutMode && !this.data.phoneLoginEnabled && this.data.wechatLoginEnabled) {
+      this.onOpenAuditWechatLogin();
+      return;
+    }
     wx.navigateTo({ url: "/pages/login/index" });
   },
 
   goRegister() {
+    if (!this.data.phoneLoginEnabled) {
+      wx.showToast({ title: "当前配置未开放手机号注册", icon: "none" });
+      return;
+    }
     wx.navigateTo({ url: "/pages/register/index" });
   },
 
   goEditProfile() {
+    if (!this.data.profileEditEnabled) {
+      wx.showToast({ title: "当前未开放资料编辑", icon: "none" });
+      return;
+    }
     wx.navigateTo({ url: "/pages/profile/edit/index" });
   },
 
   goBookings() {
-    if (this.data.hideAudit) {
+    if (!this.data.profileBookingsEnabled) {
       wx.showToast({ title: "该功能正在开发中", icon: "none" });
       return;
     }
@@ -785,7 +887,7 @@ Page({
     } catch (e) {
       // ignore
     } finally {
-      const hideAudit = Boolean(this.data.hideAudit);
+      const showGuestAboutMode = this.data.guestProfileMode === "about";
       clearStoredCookie();
       this.setData({
         isLoggedIn: false,
@@ -796,11 +898,13 @@ Page({
         userPhone: "",
         userRegisterDateText: "",
         canChangePassword: false,
-        showAuditAboutMode: hideAudit,
+        showAuditAboutMode: showGuestAboutMode,
+        aboutLoading: showGuestAboutMode,
+        aboutError: "",
       });
       this.refreshTabBarLoginState();
       wx.showToast({ title: "已退出登录", icon: "none" });
-      if (hideAudit) {
+      if (showGuestAboutMode) {
         this.loadAbout();
         wx.switchTab({ url: "/pages/profile/index" });
         return;

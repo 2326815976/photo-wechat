@@ -1,4 +1,5 @@
 const { getSession, dbQuery, extractSessionUser } = require("../../../services/photo-api");
+const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
 
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
@@ -58,6 +59,7 @@ Page({
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    profileBookingsEnabled: true,
 
     loading: true,
     currentUserId: "",
@@ -121,6 +123,17 @@ Page({
 
   noop() {},
 
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      profileBookingsEnabled: Boolean(
+        normalized.featureFlags && normalized.featureFlags.showProfileBookings
+      ),
+    });
+    return normalized;
+  },
+
   async syncAuditAccess() {
     const app = typeof getApp === "function" ? getApp() : null;
     if (app && typeof app.ensureAuditConfig === "function") {
@@ -131,9 +144,12 @@ Page({
       }
     }
 
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({ hideAudit });
-    if (!hideAudit) {
+    const normalized = this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    if (normalized.featureFlags && normalized.featureFlags.showProfileBookings) {
       return false;
     }
 

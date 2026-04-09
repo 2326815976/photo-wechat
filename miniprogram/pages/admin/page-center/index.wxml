@@ -1,0 +1,12 @@
+<app-header
+  title="{{channelTitle}}"
+  subtitle=""
+  showBack="{{true}}"
+  safeTop="{{safeTop}}"
+  fallbackRoute="/pages/admin/index"
+  preferFallback="{{true}}"
+/>
+
+<scroll-view scroll-y class="page-scroll">
+  <page-center-panel id="pageCenterPanel" channel="{{channel}}" />
+</scroll-view>

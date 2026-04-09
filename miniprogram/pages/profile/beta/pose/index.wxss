@@ -101,6 +101,7 @@
   min-height: 0;
 }
 
+.content--standalone,
 .content--audit-compact {
   padding-top: 12rpx;
   padding-bottom: 8rpx;
@@ -363,6 +364,8 @@
   transform-origin: center;
 }
 
+.content--standalone .pose-wrap,
+.content--standalone .skeleton-pose,
 .content--audit-compact .pose-wrap,
 .content--audit-compact .skeleton-pose {
   margin-bottom: 12rpx;
@@ -475,6 +478,7 @@
   gap: 24rpx;
 }
 
+.content--standalone .bottom,
 .content--audit-compact .bottom {
   padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
   gap: 18rpx;

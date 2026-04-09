@@ -1,11 +1,16 @@
-<view class="page">
+<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <app-header
+  managedPageKey="profile"
     title="{{showAuditAboutMode ? '关于我' : '我的小天地'}}"
     subtitle="{{showAuditAboutMode ? '✨ 作者的天地 ✨' : '📒 管理你的拾光小秘密 📒'}}"
     safeTop="{{safeTop}}"
+    showBack="{{pageIsStandalone}}"
+    fallbackRoute="{{pageFallbackRoute}}"
+    fallbackTab="{{pageFallbackTab}}"
+    preferFallback="{{pageIsStandalone}}"
   />
 
-  <view class="content">
+  <view class="content {{pageIsStandalone ? 'content--preview' : ''}}">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
@@ -95,7 +100,7 @@
           </view>
         </view>
 
-        <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && !hideAudit}}">
+        <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && donationQrCodeEnabled}}">
           <text class="section-title">赞赏码</text>
           <view class="qr-wrap" bindtap="onPreviewDonationQr">
             <image
@@ -145,7 +150,7 @@
 
         <view class="guest-actions">
           <button class="btn-primary" hover-class="btn-primary--active" bindtap="goLogin">立即登录</button>
-          <button class="btn-outline" hover-class="btn-outline--active" bindtap="goRegister">注册账号</button>
+          <button wx:if="{{phoneLoginEnabled}}" class="btn-outline" hover-class="btn-outline--active" bindtap="goRegister">注册账号</button>
         </view>
       </view>
 
@@ -162,7 +167,7 @@
         </view>
 
         <view class="menu">
-          <view class="menu-item motion-fade-up motion-delay-3" hover-class="menu-item--active" bindtap="goEditProfile" wx:if="{{!hideAudit}}">
+          <view class="menu-item motion-fade-up motion-delay-3" hover-class="menu-item--active" bindtap="goEditProfile" wx:if="{{profileEditEnabled}}">
             <view class="menu-icon">
               <image class="menu-icon-img" src="/images/icons/user-yellow.svg" mode="aspectFit" />
             </view>
@@ -172,7 +177,7 @@
             </view>
           </view>
 
-          <view class="menu-item motion-fade-up motion-delay-4" hover-class="menu-item--active" bindtap="goBookings" wx:if="{{!hideAudit}}">
+          <view class="menu-item motion-fade-up motion-delay-4" hover-class="menu-item--active" bindtap="goBookings" wx:if="{{profileBookingsEnabled}}">
             <view class="menu-icon">
               <image class="menu-icon-img" src="/images/icons/calendar-yellow.svg" mode="aspectFit" />
             </view>
@@ -247,9 +252,19 @@
     </block>
   </view>
 
-  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading}}">
+  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading && (phoneLoginEnabled || wechatLoginEnabled)}}">
     <view class="audit-fixed-login__panel">
       <button
+        wx:if="{{phoneLoginEnabled}}"
+        class="audit-fixed-login__btn"
+        hover-class="audit-fixed-login__btn--active"
+        bindtap="goLogin"
+        disabled="{{serviceMissing}}"
+      >
+        前往登录
+      </button>
+      <button
+        wx:if="{{!phoneLoginEnabled && wechatLoginEnabled}}"
         class="audit-fixed-login__btn"
         hover-class="audit-fixed-login__btn--active"
         bindtap="onOpenAuditWechatLogin"
@@ -326,4 +341,5 @@
       </view>
     </view>
   </view>
+  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/profile/index" />
 </view>

@@ -1,0 +1,8 @@
+{
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "页面管理",
+  "usingComponents": {
+    "app-header": "/components/app-header/index",
+    "page-center-panel": "/components/admin/page-center-panel/index"
+  }
+}

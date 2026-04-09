@@ -1,6 +1,7 @@
 {
   "usingComponents": {
     "app-header": "/components/app-header/index",
-    "toggle-switch": "/components/toggle-switch/index"
+    "toggle-switch": "/components/toggle-switch/index",
+    "app-bottom-nav": "/components/app-bottom-nav/index"
   }
 }

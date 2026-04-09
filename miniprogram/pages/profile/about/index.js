@@ -1,5 +1,11 @@
 const { dbQuery } = require("../../../services/photo-api");
 const { resolvePublicUrl } = require("../../../utils/storage-url");
+const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 const DEFAULT_ABOUT = {
   author_name: "",
@@ -62,6 +68,11 @@ Page({
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    donationQrCodeEnabled: true,
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/profile/index",
+    hasBottomTabbar: true,
     loading: true,
     error: "",
     savingDonationQr: false,
@@ -69,19 +80,38 @@ Page({
     about: Object.assign({}, DEFAULT_ABOUT),
   },
 
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      donationQrCodeEnabled: Boolean(
+        normalized.featureFlags && normalized.featureFlags.showDonationQrCode
+      ),
+    });
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/profile/about/index");
+  },
+
   onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
-    this.setData({ safeTop, serviceMissing, hideAudit });
+    this.setData({ safeTop, serviceMissing });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
-        this.setData({ hideAudit: Boolean(nextHideAudit) });
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeRuntimeConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
       });
     }
+
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/profile/about/index");
 
     if (!serviceMissing) {
       this.loadAbout();
@@ -99,15 +129,32 @@ Page({
         // ignore
       }
     }
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({ hideAudit });
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    const presentationState = this.applyPagePresentation();
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "about",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
+    }
   },
 
   onUnload() {
-    if (typeof this._unsubscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig();
+    if (typeof this._unsubscribeRuntimeConfig === "function") {
+      this._unsubscribeRuntimeConfig();
     }
-    this._unsubscribeAuditConfig = null;
+    this._unsubscribeRuntimeConfig = null;
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   async loadAbout() {
@@ -229,7 +276,7 @@ Page({
       if (granted) return true;
       await wx.authorize({ scope: "scope.writePhotosAlbum" });
       return true;
-    } catch (e) {
+    } catch (error) {
       return false;
     }
   },
@@ -247,7 +294,7 @@ Page({
         return localPath;
       }
     } catch (error) {
-      // ignore，进入 downloadFile 兜底
+      // ignore
     }
 
     const download = await wx.downloadFile({ url: target, timeout: 60000 });
@@ -290,7 +337,7 @@ Page({
     } finally {
       try {
         wx.hideLoading();
-      } catch (_) {
+      } catch (error) {
         // ignore
       }
       this.setData({ savingDonationQr: false });

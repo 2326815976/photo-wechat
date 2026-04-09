@@ -1,5 +1,10 @@
 const { dbQuery, dbRpc } = require("../../../../services/photo-api");
 const { resolvePublicUrl } = require("../../../../utils/storage-url");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../../../utils/page-presentation");
+const { normalizeRuntimeConfig } = require("../../../../utils/runtime-config");
 
 const TAGS_CACHE_KEY = "pose-tags-cache-v2";
 const TAGS_CACHE_TTL = 2 * 60 * 60 * 1000;
@@ -109,6 +114,10 @@ Page({
     shakeEnabled: false,
     auditChecking: true,
     pageReady: false,
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/profile/index",
+    hasBottomTabbar: false,
 
     skeletonTags: [1, 2, 3, 4, 5, 6, 7, 8],
     skeletonChips: [1, 2, 3],
@@ -133,6 +142,24 @@ Page({
   isPageAlive: false,
   homeBootstrapped: false,
 
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.betaPoseBypassAllowed = Boolean(
+      normalized.featureFlags && normalized.featureFlags.allowPoseBetaBypass
+    );
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
+      auditChecking: false,
+    });
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/profile/beta/pose/index");
+  },
+
   onLoad() {
     this.isPageAlive = true;
     const app = getApp();
@@ -141,33 +168,29 @@ Page({
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
-    const hideAudit = Boolean(globalData.hideAudit);
-    this.betaPoseBypassAllowed = true;
     this.homeBootstrapped = false;
     this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this.setData({
       safeTop,
       tagbarStickyTop: computeTagbarStickyTop(safeTop),
       serviceMissing,
-      hideAudit,
-      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
       backendReady,
       backendReconnecting,
-      auditChecking: false,
     });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
-        const enabled = Boolean(nextHideAudit);
-        this.betaPoseBypassAllowed = true;
-        this.setData({
-          hideAudit: enabled,
-          betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
-          auditChecking: false,
-        });
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
         this.startHomePageIfNeeded();
       });
     }
+    this._unsubscribePagePresentation = subscribePagePresentation(
+      app,
+      this,
+      "pages/profile/beta/pose/index"
+    );
     if (app && typeof app.subscribeBackendStatus === "function") {
       this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
         const ready = Boolean(status && status.backendReady);
@@ -188,18 +211,25 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
+    this.applyPagePresentation();
     const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
     const isForegroundReturn = appEnterSeq > lastSeenAppEnterSeq;
     this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
-    this.betaPoseBypassAllowed = true;
-
-    const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({
-      hideAudit: enabled,
-      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
-      auditChecking: false,
-    });
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "pose",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
+    }
     if (!this.data.serviceMissing && app && typeof app.ensureBackendReady === "function") {
       if (!this.data.backendReady) {
         this.setData({ backendReconnecting: true });
@@ -265,6 +295,10 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {

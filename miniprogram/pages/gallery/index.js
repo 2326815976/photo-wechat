@@ -1,6 +1,12 @@
-const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
+﻿const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const { getSessionId } = require("../../utils/session");
+const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 const {
   GALLERY_PAGE_CACHE_KEY,
   clearGalleryStorageCache,
@@ -12,6 +18,9 @@ const {
 } = require("../../utils/stable-waterfall");
 
 const PAGE_SIZE = 20;
+const GALLERY_LOAD_AHEAD_PX = 260;
+const GALLERY_VIEWPORT_FILL_BUFFER_PX = 48;
+const GALLERY_INITIAL_AUTOFILL_MAX_BATCHES = 2;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
 const GALLERY_CACHE_TTL = 30 * 60 * 1000;
 const ROOT_FOLDER_ID = "__ROOT__";
@@ -196,6 +205,8 @@ function normalizePhoto(photo, options) {
     is_highlight: isHighlight,
     story_open: false,
     story_highlight: hasStory || isHighlight,
+    _imageLoaded: Boolean(photo && photo._imageLoaded),
+    _imageLoadFailed: Boolean(photo && photo._imageLoadFailed),
     __ratio: ratio,
     __media_padding_top: `${ratio * 100}%`,
   });
@@ -477,6 +488,7 @@ Page({
     backendReconnecting: false,
 
     loading: true,
+    switchingFolderLoading: false,
     loadingMore: false,
     hasMore: true,
 
@@ -510,6 +522,10 @@ Page({
     previewPhoto: null,
     showLoginPrompt: false,
     tagbarPinned: false,
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/index/index",
+    hasBottomTabbar: true,
 
   },
 
@@ -522,16 +538,33 @@ Page({
   viewportHeight: 0,
   pageHeight: 0,
   loadingNextPage: false,
+  galleryLoadZoneArmed: true,
+  galleryAutoFillRemaining: GALLERY_INITIAL_AUTOFILL_MAX_BATCHES,
   tagGuideTimer: null,
   tagWaveTimer: null,
   tagWaveRunToken: 0,
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const enabled = Boolean(normalized.hideAudit);
+    this.setData({
+      hideAudit: enabled,
+      previewPhoto: enabled ? null : this.data.previewPhoto,
+      showLoginPrompt: enabled ? false : this.data.showLoginPrompt,
+    });
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/gallery/index");
+  },
 
   onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
 
@@ -542,6 +575,8 @@ Page({
     this.viewportHeight = 0;
     this.pageHeight = 0;
     this.loadingNextPage = false;
+    this.galleryLoadZoneArmed = true;
+    this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
     this._galleryBootstrapped = false;
     const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     // 首次进入页面时也需要展示一次引导：将“已见序号”回退一位，确保首帧可触发。
@@ -551,23 +586,20 @@ Page({
       safeTop,
       tagbarStickyTop: computeTagbarStickyTop(safeTop),
       serviceMissing,
-      hideAudit,
       backendReady,
       backendReconnecting,
     });
 
     this.viewportHeight = readWindowHeight();
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
-        const enabled = Boolean(nextHideAudit);
-        this.setData({
-          hideAudit: enabled,
-          previewPhoto: enabled ? null : this.data.previewPhoto,
-          showLoginPrompt: enabled ? false : this.data.showLoginPrompt,
-        });
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
       });
     }
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/gallery/index");
     if (app && typeof app.subscribeBackendStatus === "function") {
       this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
         const ready = Boolean(status && status.backendReady);
@@ -605,12 +637,21 @@ Page({
         // ignore
       }
     }
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({
-      hideAudit,
-      previewPhoto: hideAudit ? null : this.data.previewPhoto,
-      showLoginPrompt: hideAudit ? false : this.data.showLoginPrompt,
-    });
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    const presentationState = this.applyPagePresentation();
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "gallery",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
+    }
 
     const appEnterSeq = Math.max(
       0,
@@ -692,6 +733,10 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {
@@ -874,27 +919,32 @@ Page({
     this.rightHeight = 0;
     this.pageHeight = 0;
     this.loadingNextPage = false;
+    this.galleryLoadZoneArmed = true;
+    this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
 
     this.setData({
       selectedFolder: nextId,
-      loading: true,
+      loading: false,
+      switchingFolderLoading: true,
       loadingMore: false,
       hasMore: true,
       pageNo: 1,
       total: 0,
-      sourcePhotos: [],
-      photos: [],
-      left: [],
-      right: [],
       showFilterModal: false,
       previewPhoto: null,
       tagWaveActiveIndex: -1,
       tagWaveTick: 0,
     });
 
-    void this.loadPage(1, { silent: false });
+    try {
+      wx.pageScrollTo({ scrollTop: 0, duration: 0 });
+    } catch (error) {
+      // ignore
+    }
+
+    void this.loadPage(1, { keepCurrentContent: true });
   },
 
   toggleStory(e) {
@@ -932,6 +982,8 @@ Page({
     this.rightHeight = 0;
     this.pageHeight = 0;
     this.loadingNextPage = false;
+    this.galleryLoadZoneArmed = true;
+    this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
 
@@ -1287,7 +1339,28 @@ Page({
       if (!(this.viewportHeight > 0)) {
         this.viewportHeight = readWindowHeight();
       }
+      this.maybeAutoFillViewport("viewport-fill");
     });
+  },
+
+  maybeAutoFillViewport(reason) {
+    if (this.data.serviceMissing) return false;
+    if (this.data.loading) return false;
+    if (this.data.loadingMore) return false;
+    if (!this.data.hasMore) return false;
+    if (!(this.galleryAutoFillRemaining > 0)) return false;
+
+    const viewportHeight = Number(this.viewportHeight || readWindowHeight() || 0);
+    const pageHeight = Number(this.pageHeight || 0);
+    if (!(viewportHeight > 0) || !(pageHeight > 0)) return false;
+    if (pageHeight > viewportHeight + GALLERY_VIEWPORT_FILL_BUFFER_PX) return false;
+
+    this.galleryAutoFillRemaining -= 1;
+    const hasRequested = this.loadNextPage(reason || "viewport-fill");
+    if (!hasRequested) {
+      this.galleryAutoFillRemaining += 1;
+    }
+    return hasRequested;
   },
 
   loadNextPage(reason) {
@@ -1298,6 +1371,7 @@ Page({
     if (this.loadingNextPage) return false;
 
     this.loadingNextPage = true;
+    this.galleryLoadZoneArmed = false;
     const nextPage = Number(this.data.pageNo || 1) + 1;
     Promise.resolve(this.loadPage(nextPage))
       .finally(() => {
@@ -1321,10 +1395,18 @@ Page({
     if (!Number.isFinite(scrollTop) || scrollTop < 0) return;
     if (!(viewportHeight > 0) || !(pageHeight > viewportHeight)) return;
 
-    const scrollProgress = (scrollTop + viewportHeight) / pageHeight;
-    if (scrollProgress >= 0.8) {
-      this.loadNextPage("scroll-80");
+    const distanceToBottom = pageHeight - (scrollTop + viewportHeight);
+    if (distanceToBottom > GALLERY_LOAD_AHEAD_PX) {
+      this.galleryLoadZoneArmed = true;
+      return;
     }
+
+    if (!this.galleryLoadZoneArmed) {
+      return;
+    }
+
+    this.galleryLoadZoneArmed = false;
+    this.loadNextPage("scroll-ahead");
   },
 
   syncTagbarPinnedByScrollTop(scrollTop) {
@@ -1392,6 +1474,14 @@ Page({
         : "";
     if (!id) return;
 
+    const current = this.findPhotoById(id);
+    if (current && (!current._imageLoaded || current._imageLoadFailed)) {
+      this.updatePhoto(id, (photo) => Object.assign({}, photo, {
+        _imageLoaded: true,
+        _imageLoadFailed: false,
+      }), { skipPersist: true });
+    }
+
     const detail = (e && e.detail) || {};
     const width = Number(detail.width || 0);
     const height = Number(detail.height || 0);
@@ -1410,15 +1500,31 @@ Page({
     }
     this.photoRatioMap[id] = ratio;
 
-    const current = this.findPhotoById(id);
-    if (!current) return;
+    const nextCurrent = this.findPhotoById(id);
+    if (!nextCurrent) return;
 
-    const currentRatio = Number(current.__ratio || 0);
+    const currentRatio = Number(nextCurrent.__ratio || 0);
     if (currentRatio > 0 && Math.abs(currentRatio - ratio) < 0.08) {
       return;
     }
 
     this.scheduleRelayout();
+  },
+
+  onPhotoError(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!id) return;
+
+    const current = this.findPhotoById(id);
+    if (!current || current._imageLoadFailed) return;
+
+    this.updatePhoto(id, (photo) => Object.assign({}, photo, {
+      _imageLoaded: false,
+      _imageLoadFailed: true,
+    }), { skipPersist: true });
   },
 
   persistGalleryCache(opts, sourceRows, totalOverride) {
@@ -1444,8 +1550,9 @@ Page({
     if (this.data.serviceMissing) return;
 
     const silent = Boolean(opts && opts.silent);
+    const keepCurrentContent = Boolean(opts && opts.keepCurrentContent);
     if (pageNo === 1) {
-      if (!silent) {
+      if (!silent && !keepCurrentContent) {
         this.setData({ loading: true });
       }
     } else {
@@ -1522,7 +1629,7 @@ Page({
         wx.showToast({ title: "加载失败", icon: "none" });
       }
     } finally {
-      this.setData({ loading: false, loadingMore: false }, () => {
+      this.setData({ loading: false, switchingFolderLoading: false, loadingMore: false }, () => {
         if (this._pendingTagGuideOnAppEntry) {
           this.triggerTagGuideForEntry();
         }
@@ -1575,8 +1682,9 @@ Page({
     });
   },
 
-  updatePhoto(id, updater) {
+  updatePhoto(id, updater, options) {
     const updateOne = (p) => (String(p.id) === String(id) ? updater(p) : p);
+    const shouldPersist = !Boolean(options && options.skipPersist);
 
     const sourceBase =
       Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0
@@ -1594,10 +1702,12 @@ Page({
       },
       () => {
         this.applyGalleryViewFromSource();
-        this.persistGalleryCache(
-          { writeStorage: Number(this.data.pageNo || 1) === 1 },
-          sourcePhotos
-        );
+        if (shouldPersist) {
+          this.persistGalleryCache(
+            { writeStorage: Number(this.data.pageNo || 1) === 1 },
+            sourcePhotos
+          );
+        }
       }
     );
   },

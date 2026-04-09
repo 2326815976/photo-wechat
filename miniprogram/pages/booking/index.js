@@ -10,6 +10,11 @@ const {
   isValidChinaMobile,
   normalizeChinaMobile,
 } = require("../../utils/phone");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 function getDateAfterDaysUTC8(days) {
   const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -313,6 +318,15 @@ Page({
 
     minDate: "",
     maxDate: "",
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/index/index",
+    hasBottomTabbar: true,
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/booking/index");
   },
 
   onLoad() {
@@ -329,9 +343,12 @@ Page({
       minDate: getDateAfterDaysUTC8(1),
       maxDate: getDateAfterDaysUTC8(30),
     });
+    this.applyPagePresentation();
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/booking/index");
   },
 
   async onShow() {
+    const presentationState = this.applyPagePresentation();
     this.setTabBarVisible(true);
     const app = typeof getApp === "function" ? getApp() : null;
     const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
@@ -346,10 +363,14 @@ Page({
       }
     }
 
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    if (hideAudit) {
-      wx.switchTab({ url: "/pages/index/index" });
-      return;
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "booking",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
     }
 
     this.syncTabBar("pages/booking/index");
@@ -373,6 +394,10 @@ Page({
       this.setData({ showCancelConfirm: false });
     }
     this.setTabBarVisible(true);
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {
@@ -389,7 +414,7 @@ Page({
     if (typeof this.getTabBar !== "function") return;
     const tab = this.getTabBar();
     if (!tab || typeof tab.setData !== "function") return;
-    tab.setData({ visible: Boolean(visible) });
+    tab.setData({ visible: this.data.hasBottomTabbar && Boolean(visible) });
   },
 
   noop() {},

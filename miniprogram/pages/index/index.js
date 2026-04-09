@@ -1,5 +1,14 @@
 const { dbQuery, dbRpc } = require("../../services/photo-api");
 const { resolvePublicUrl } = require("../../utils/storage-url");
+const {
+  getHomeRedirectPath,
+  normalizeRuntimeConfig,
+} = require("../../utils/runtime-config");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 const TAGS_CACHE_KEY = "pose-tags-cache-v2";
 const TAGS_CACHE_TTL = 2 * 60 * 60 * 1000;
@@ -91,6 +100,9 @@ Page({
 
     serviceMissing: false,
     hideAudit: false,
+    homeMode: "pose",
+    homeRedirectPath: "pages/index/index",
+    allowPoseBetaBypass: false,
     betaPoseBypassAllowed: false,
     backendReady: false,
     backendReconnecting: false,
@@ -109,6 +121,10 @@ Page({
     shakeEnabled: false,
     auditChecking: true,
     pageReady: false,
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/index/index",
+    hasBottomTabbar: true,
 
     skeletonTags: [1, 2, 3, 4, 5, 6, 7, 8],
     skeletonChips: [1, 2, 3],
@@ -133,6 +149,63 @@ Page({
   isPageAlive: false,
   homeBootstrapped: false,
 
+  readRuntimeConfig() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const globalData = app && app.globalData ? app.globalData : {};
+    return normalizeRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+  },
+
+  applyRuntimeConfig(runtimeConfig, options) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const allowPoseBetaBypass = Boolean(
+      normalized.featureFlags && normalized.featureFlags.allowPoseBetaBypass
+    );
+    const bypassTokenValid = allowPoseBetaBypass && this.consumeBetaPoseBypass();
+    if (bypassTokenValid) {
+      this.betaPoseBypassAllowed = true;
+    }
+    if (!allowPoseBetaBypass || normalized.homeMode !== "gallery") {
+      this.betaPoseBypassAllowed = false;
+    }
+
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      homeMode: normalized.homeMode,
+      homeRedirectPath: getHomeRedirectPath(normalized),
+      allowPoseBetaBypass,
+      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
+      auditChecking: options && options.keepChecking ? true : false,
+    });
+
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/index/index");
+  },
+
+  normalizeHomeEntryPath(value) {
+    return String(value || "pages/index/index")
+      .trim()
+      .replace(/^\/+/, "") || "pages/index/index";
+  },
+
+  shouldStayOnPoseHome(presentationState) {
+    const pageIsStandalone = Boolean(
+      presentationState && typeof presentationState === "object"
+        ? presentationState.isStandalone
+        : this.data.pageIsStandalone
+    );
+    if (pageIsStandalone) {
+      return true;
+    }
+    if (this.betaPoseBypassAllowed) {
+      return true;
+    }
+    return this.normalizeHomeEntryPath(this.data.homeRedirectPath) === "pages/index/index";
+  },
+
   onLoad() {
     this.isPageAlive = true;
     const app = getApp();
@@ -142,42 +215,32 @@ Page({
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
     const auditConfigReady = Boolean(globalData.auditConfigReady);
-    const hideAudit = auditConfigReady ? Boolean(globalData.hideAudit) : false;
-    this.betaPoseBypassAllowed = this.consumeBetaPoseBypass();
+    const runtimeConfig = this.readRuntimeConfig();
     this.homeBootstrapped = false;
     this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this.setData({
       safeTop,
       tagbarStickyTop: computeTagbarStickyTop(safeTop),
       serviceMissing,
-      hideAudit,
-      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
       backendReady,
       backendReconnecting,
       auditChecking: !auditConfigReady,
     });
+    this.applyRuntimeConfig(runtimeConfig, { keepChecking: !auditConfigReady });
+    const presentationState = this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((nextHideAudit) => {
-        const enabled = Boolean(nextHideAudit);
-        if (enabled && this.consumeBetaPoseBypass()) {
-          this.betaPoseBypassAllowed = true;
-        }
-        if (!enabled) {
-          this.betaPoseBypassAllowed = false;
-        }
-        this.setData({
-          hideAudit: enabled,
-          betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
-          auditChecking: false,
-        });
-        if (enabled && !this.betaPoseBypassAllowed) {
-          this.redirectToGallery();
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((nextRuntimeConfig) => {
+        this.applyRuntimeConfig(nextRuntimeConfig);
+        const presentationState = this.applyPagePresentation();
+        if (!this.shouldStayOnPoseHome(presentationState)) {
+          this.redirectToHomeEntry();
           return;
         }
         this.startHomePageIfNeeded();
       });
     }
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/index/index");
     if (app && typeof app.subscribeBackendStatus === "function") {
       this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
         const ready = Boolean(status && status.backendReady);
@@ -200,8 +263,8 @@ Page({
       return;
     }
 
-    if (hideAudit && !this.betaPoseBypassAllowed) {
-      this.redirectToGallery();
+    if (!this.shouldStayOnPoseHome(presentationState)) {
+      this.redirectToHomeEntry();
       return;
     }
 
@@ -232,18 +295,8 @@ Page({
       }
     }
 
-    const enabled = Boolean(app && app.globalData && app.globalData.hideAudit);
-    if (enabled && bypassFromToken) {
-      this.betaPoseBypassAllowed = true;
-    }
-    if (!enabled) {
-      this.betaPoseBypassAllowed = false;
-    }
-    this.setData({
-      hideAudit: enabled,
-      betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
-      auditChecking: false,
-    });
+    this.applyRuntimeConfig(this.readRuntimeConfig());
+    const presentationState = this.applyPagePresentation();
     if (!this.data.serviceMissing && app && typeof app.ensureBackendReady === "function") {
       if (!this.data.backendReady) {
         this.setData({ backendReconnecting: true });
@@ -264,9 +317,19 @@ Page({
       backendReady: nextBackendReady,
       backendReconnecting: nextBackendReconnecting,
     });
-    if (enabled && !this.betaPoseBypassAllowed) {
-      this.redirectToGallery();
+    if (!this.shouldStayOnPoseHome(presentationState)) {
+      this.redirectToHomeEntry();
       return;
+    }
+
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "pose",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
     }
 
     this.startHomePageIfNeeded();
@@ -314,6 +377,10 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {
@@ -367,20 +434,23 @@ Page({
     return true;
   },
 
-  redirectToGallery() {
-    if (this._redirectingToGallery) return;
-    this._redirectingToGallery = true;
+  redirectToHomeEntry() {
+    if (this.data.pageIsStandalone) return;
+    if (this._redirectingToHomeEntry) return;
+    const targetPath = this.normalizeHomeEntryPath(this.data.homeRedirectPath);
+    if (!targetPath || targetPath === "pages/index/index") return;
+    this._redirectingToHomeEntry = true;
     wx.switchTab({
-      url: "/pages/gallery/index",
+      url: `/${targetPath}`,
       complete: () => {
-        this._redirectingToGallery = false;
+        this._redirectingToHomeEntry = false;
       },
     });
   },
 
   startHomePageIfNeeded() {
     if (this.homeBootstrapped) return;
-    if ((this.data.hideAudit && !this.betaPoseBypassAllowed) || this.data.auditChecking) return;
+    if (!this.shouldStayOnPoseHome() || this.data.auditChecking) return;
     if (!this.data.serviceMissing && !this.data.backendReady) return;
     this.homeBootstrapped = true;
 

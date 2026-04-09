@@ -1,12 +1,15 @@
-<view class="page">
-  <app-header
+<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
+    <app-header
+  managedPageKey="about"
     title="关于"
     safeTop="{{safeTop}}"
-    showBack="{{true}}"
-    fallbackTab="pages/profile/index"
+    showBack="{{pageIsStandalone}}"
+    fallbackRoute="{{pageFallbackRoute}}"
+    fallbackTab="{{pageFallbackTab}}"
+    preferFallback="{{pageIsStandalone}}"
   />
 
-  <view class="content">
+  <view class="content {{pageIsStandalone ? 'content--preview' : ''}}">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
@@ -97,7 +100,7 @@
 
       </view>
 
-      <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && !hideAudit}}">
+      <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && donationQrCodeEnabled}}">
         <text class="section-title">赞赏码</text>
         <view class="qr-wrap" bindtap="onPreviewDonationQr">
           <image
@@ -120,4 +123,5 @@
       </view>
     </view>
   </view>
+  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/profile/about/index" />
 </view>

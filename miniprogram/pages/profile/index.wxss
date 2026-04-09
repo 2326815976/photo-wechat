@@ -5,12 +5,20 @@
   background: #FFFBF0;
 }
 
+.page--preview {
+  min-height: 100vh;
+}
+
 .content {
   /* Web: px-6 pt-6 pb-20 */
   flex: 1;
   overflow-y: auto;
   padding: 48rpx 48rpx calc(154rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+.content--preview {
+  padding-bottom: 48rpx;
 }
 
 .config-tip {
@@ -407,6 +415,10 @@
   padding: 0 48rpx;
   z-index: 80;
   box-sizing: border-box;
+}
+
+.page--preview .audit-fixed-login {
+  bottom: calc(48rpx + env(safe-area-inset-bottom));
 }
 
 .audit-fixed-login__panel {

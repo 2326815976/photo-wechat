@@ -1,7 +1,6 @@
 <view class="page">
   <view style="height: {{safeTop}}px;"></view>
 
-  <!-- Web: top-6 -->
   <view class="back motion-fade-up motion-delay-1" style="top: {{safeTop + 24}}px;" bindtap="goBack">
     <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80">
       <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
@@ -16,43 +15,45 @@
 
     <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
-      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+      <text class="config-tip__desc">请在 `miniprogram/config.js` 中填写 `cloudRunService`（用于 `X-WX-SERVICE`）</text>
     </view>
 
     <view class="form motion-fade-up motion-delay-3">
-      <view class="field {{focusField === 'phone' ? 'field--focus' : ''}}">
-        <image class="field-icon" src="/images/icons/phone-muted.svg" mode="aspectFit" />
-        <input
-          class="input"
-          type="number"
-          placeholder="手机号"
-          placeholder-style="color: rgba(93, 64, 55, 0.4);"
-          maxlength="11"
-          value="{{phone}}"
-          data-field="phone"
-          bindinput="onPhoneInput"
-          bindfocus="onFieldFocus"
-          bindblur="onFieldBlur"
-        />
-      </view>
-
-      <view class="field {{focusField === 'password' ? 'field--focus' : ''}}">
-        <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
-        <input
-          class="input"
-          password="{{!showPassword}}"
-          placeholder="密码"
-          placeholder-style="color: rgba(93, 64, 55, 0.4);"
-          value="{{password}}"
-          data-field="password"
-          bindinput="onPasswordInput"
-          bindfocus="onFieldFocus"
-          bindblur="onFieldBlur"
-        />
-        <view class="toggle" hover-class="toggle--active" hover-stay-time="80" bindtap="togglePassword">
-          <image class="toggle-icon" src="{{showPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+      <block wx:if="{{phoneLoginEnabled}}">
+        <view class="field {{focusField === 'phone' ? 'field--focus' : ''}}">
+          <image class="field-icon" src="/images/icons/phone-muted.svg" mode="aspectFit" />
+          <input
+            class="input"
+            type="number"
+            placeholder="手机号"
+            placeholder-style="color: rgba(93, 64, 55, 0.4);"
+            maxlength="11"
+            value="{{phone}}"
+            data-field="phone"
+            bindinput="onPhoneInput"
+            bindfocus="onFieldFocus"
+            bindblur="onFieldBlur"
+          />
         </view>
-      </view>
+
+        <view class="field {{focusField === 'password' ? 'field--focus' : ''}}">
+          <image class="field-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+          <input
+            class="input"
+            password="{{!showPassword}}"
+            placeholder="密码"
+            placeholder-style="color: rgba(93, 64, 55, 0.4);"
+            value="{{password}}"
+            data-field="password"
+            bindinput="onPasswordInput"
+            bindfocus="onFieldFocus"
+            bindblur="onFieldBlur"
+          />
+          <view class="toggle" hover-class="toggle--active" hover-stay-time="80" bindtap="togglePassword">
+            <image class="toggle-icon" src="{{showPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
+          </view>
+        </view>
+      </block>
 
       <view class="legal-entry motion-fade-in motion-delay-4">
         <view class="legal-agree" bindtap="onToggleLegalAgreement">
@@ -65,37 +66,38 @@
         </view>
         <view class="legal-entry__links">
           <text class="legal-link" hover-class="legal-link--active" data-doc-key="terms" bindtap="onOpenLegalDoc">《用户协议》</text>
-          <text class="legal-sep">、</text>
+          <text class="legal-sep">·</text>
           <text class="legal-link" hover-class="legal-link--active" data-doc-key="privacy" bindtap="onOpenLegalDoc">《隐私政策》</text>
-          <text class="legal-sep">、</text>
+          <text class="legal-sep">·</text>
           <text class="legal-link" hover-class="legal-link--active" data-doc-key="collection" bindtap="onOpenLegalDoc">《用户信息收集说明》</text>
         </view>
       </view>
 
       <view class="error motion-pop-in" wx:if="{{error}}">{{error}}</view>
 
-      <button class="submit" hover-class="submit--active" bindtap="submit" disabled="{{submitting || serviceMissing}}">
-        <text wx:if="{{submitting}}">解锁中...</text>
-        <text wx:else>🔑 解锁空间</text>
+      <button wx:if="{{phoneLoginEnabled}}" class="submit" hover-class="submit--active" bindtap="submit" disabled="{{submitting || serviceMissing}}">
+        <text wx:if="{{submitting}}">登录中...</text>
+        <text wx:else>登录</text>
       </button>
 
-      <view class="wechat-divider">
+      <view class="wechat-divider" wx:if="{{phoneLoginEnabled && wechatLoginEnabled}}">
         <view class="wechat-divider__line"></view>
         <text class="wechat-divider__text">或</text>
         <view class="wechat-divider__line"></view>
       </view>
 
       <button
+        wx:if="{{wechatLoginEnabled}}"
         class="wechat-submit"
         hover-class="wechat-submit--active"
         bindtap="submitWechatLogin"
         disabled="{{submitting || wechatSubmitting || serviceMissing}}"
       >
         <text wx:if="{{wechatSubmitting}}">连接微信中...</text>
-        <text wx:else>💬 微信一键登录</text>
+        <text wx:else>微信一键登录</text>
       </button>
 
-      <view class="footer motion-fade-in motion-delay-4">
+      <view class="footer motion-fade-in motion-delay-4" wx:if="{{phoneLoginEnabled}}">
         <text class="footer-text">还没有账号？</text>
         <text class="footer-link" hover-class="footer-link--active" bindtap="goRegister">去注册</text>
       </view>

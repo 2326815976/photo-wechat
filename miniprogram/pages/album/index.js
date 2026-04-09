@@ -1,6 +1,12 @@
 const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { resolvePublicUrl } = require("../../utils/storage-url");
+const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const {
+  applyPagePresentationToPage,
+  subscribePagePresentation,
+} = require("../../utils/page-presentation");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜相册提取";
@@ -183,6 +189,21 @@ Page({
     listNotice: null,
     unbindingAlbumId: "",
     unbindTargetAlbum: null,
+    pagePresentationMode: "tabbar",
+    pageFallbackRoute: "",
+    pageFallbackTab: "pages/index/index",
+    hasBottomTabbar: true,
+  },
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
+    return normalized;
+  },
+
+  applyPagePresentation() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    return applyPagePresentationToPage(this, app, "pages/album/index");
   },
 
   onLoad() {
@@ -197,16 +218,18 @@ Page({
     this.setData({
       safeTop,
       serviceMissing,
-      hideAudit: Boolean(globalData.hideAudit),
       backendReady,
       backendReconnecting,
     });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyPagePresentation();
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
-        this.setData({ hideAudit: Boolean(hideAudit) });
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
       });
     }
+    this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/album/index");
     if (app && typeof app.subscribeBackendStatus === "function") {
       this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
         const ready = Boolean(status && status.backendReady);
@@ -236,9 +259,21 @@ Page({
         // ignore
       }
     }
-    this.setData({
-      hideAudit: Boolean(app && app.globalData && app.globalData.hideAudit),
-    });
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    const presentationState = this.applyPagePresentation();
+    if (!this.data.serviceMissing) {
+      const accessResult = await guardMiniProgramPageAccess({
+        pageKey: "album",
+        presentationMode: presentationState.accessMode || presentationState.mode,
+      });
+      if (!accessResult.allowed) {
+        return;
+      }
+    }
 
     this.syncTabBar("pages/album/index");
     if (!this.data.serviceMissing) {
@@ -290,6 +325,10 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
+    if (typeof this._unsubscribePagePresentation === "function") {
+      this._unsubscribePagePresentation();
+    }
+    this._unsubscribePagePresentation = null;
   },
 
   syncTabBar(selectedPath) {

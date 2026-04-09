@@ -1,5 +1,6 @@
 const { requestJson } = require("../../../utils/cloudrun");
 const { clearStoredCookie } = require("../../../utils/auth");
+const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
 
 function readPayloadMessage(payload, fallback) {
   let current = payload;
@@ -66,6 +67,12 @@ Page({
     postDeleteWarning: "",
   },
 
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
+    return normalized;
+  },
+
   onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
@@ -74,12 +81,12 @@ Page({
     this.setData({
       safeTop,
       serviceMissing,
-      hideAudit: Boolean(globalData.hideAudit),
     });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((hideAudit) => {
-        this.setData({ hideAudit: Boolean(hideAudit) });
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
       });
     }
   },

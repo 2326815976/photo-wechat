@@ -1,14 +1,10 @@
-const { dbRpc, getSession, extractSessionUser } = require("../../../services/photo-api");
+﻿const { getSession, extractSessionUser, requestJson } = require("../../../services/photo-api");
+const {
+  isTabBarPagePath,
+  normalizeRuntimeConfig,
+} = require("../../../utils/runtime-config");
 
 const BETA_POSE_BYPASS_STORAGE_KEY = "beta_pose_bypass_until";
-
-const TAB_PAGE_SET = new Set([
-  "/pages/index/index",
-  "/pages/album/index",
-  "/pages/gallery/index",
-  "/pages/booking/index",
-  "/pages/profile/index",
-]);
 
 const ROUTE_ALIAS_MAP = {
   "/pose": "/pages/profile/beta/pose/index",
@@ -181,6 +177,23 @@ function setPoseBypassIfNeeded(rawRoutePath) {
   }
 }
 
+function prepareFeaturePresentation(featureId, routePath) {
+  const app = typeof getApp === "function" ? getApp() : null;
+  if (!app || typeof app.setPagePresentation !== "function") return;
+
+  const { path } = parseRoutePathAndQuery(routePath);
+  const normalizedRoute = String(path || "").trim().replace(/^\/+/, "");
+  if (!normalizedRoute) return;
+
+  app.setPagePresentation({
+    mode: "beta",
+    pageKey: String(featureId || "").trim(),
+    routePath: normalizedRoute,
+    fallbackRoute: "/pages/profile/beta/index",
+    fallbackTab: "pages/profile/index",
+  });
+}
+
 function openRoute(url) {
   const target = String(url || "").trim();
   if (!target) {
@@ -188,7 +201,9 @@ function openRoute(url) {
   }
 
   const { path, fullPath } = parseRoutePathAndQuery(target);
-  if (TAB_PAGE_SET.has(path)) {
+  const app = typeof getApp === "function" ? getApp() : null;
+  const runtimeConfig = app && app.globalData ? app.globalData.runtimeConfig : null;
+  if (isTabBarPagePath(path, runtimeConfig)) {
     return new Promise((resolve, reject) => {
       wx.switchTab({
         url: path,
@@ -218,6 +233,28 @@ function openRoute(url) {
   });
 }
 
+async function enterFeatureRoute(featureId, routePathRaw) {
+  const normalizedFeatureId = String(featureId || "").trim();
+  const rawRoute = String(routePathRaw || "").trim();
+  const normalizedRoute = normalizeFeatureRoutePath(rawRoute);
+  if (!normalizedFeatureId) {
+    throw new Error("缺少页面标识");
+  }
+  if (!normalizedRoute) {
+    throw new Error("该功能未配置可访问路由");
+  }
+
+  if (isPoseFeatureRoute(rawRoute)) {
+    prepareFeaturePresentation(normalizedFeatureId, "/pages/profile/beta/pose/index");
+    await openRoute("/pages/profile/beta/pose/index");
+    return;
+  }
+
+  setPoseBypassIfNeeded(rawRoute);
+  prepareFeaturePresentation(normalizedFeatureId, normalizedRoute);
+  await openRoute(normalizedRoute);
+}
+
 Page({
   data: {
     safeTop: 0,
@@ -230,6 +267,12 @@ Page({
     featureRows: [],
   },
 
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
+    return normalized;
+  },
+
   onLoad() {
     this._betaFeatureBootstrapped = false;
     this._lastSeenAppEnterSeq = 0;
@@ -237,12 +280,15 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     this.setData({
       safeTop: Number(globalData.statusBarHeight || 0),
-      hideAudit: Boolean(globalData.hideAudit),
     });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
   },
 
   onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.resetPagePresentation === "function") {
+      app.resetPagePresentation();
+    }
     const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
     const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
@@ -255,8 +301,11 @@ Page({
 
   async bootstrap() {
     const app = typeof getApp === "function" ? getApp() : null;
-    const hideAudit = Boolean(app && app.globalData && app.globalData.hideAudit);
-    this.setData({ hideAudit });
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
 
     this.setData({ loading: true });
 
@@ -313,14 +362,15 @@ Page({
   },
 
   async loadFeatureRows() {
-    const result = await dbRpc("get_user_beta_features");
-    const errorMessage = readRpcResultError(result, "加载内测功能失败");
-    if (errorMessage) {
-      throw new Error(errorMessage);
+    const payload = await requestJson("/api/page-center/beta/features?channel=miniprogram", {
+      method: "GET",
+      timeout: 10000,
+    });
+    if (!payload || payload.error) {
+      throw new Error(String((payload && payload.error) || "加载内测功能失败"));
     }
 
-    const payload = result ? result.data : null;
-    const rows = readArrayFromPayloadChain(payload);
+    const rows = readArrayFromPayloadChain(payload.data || payload);
     const featureRows = rows.map((row) => {
       const id = String((row && row.feature_id) || "").trim();
       const routePathRaw = String((row && row.route_path) || "").trim();
@@ -330,7 +380,7 @@ Page({
       return {
         id,
         feature_name: String((row && row.feature_name) || "").trim(),
-        feature_description: featureDescription || "暂无功能简介",
+        feature_description: featureDescription,
         feature_code: String((row && row.feature_code) || "").trim(),
         route_path_raw: routePathRaw,
         route_path: normalizeFeatureRoutePath(routePathRaw),
@@ -384,23 +434,28 @@ Page({
 
     this.setData({ submitting: true });
     try {
-      const result = await dbRpc("bind_user_to_beta_feature", {
-        p_feature_code: code,
+      const payload = await requestJson("/api/page-center/beta/bind", {
+        method: "POST",
+        data: { featureCode: code, channel: "miniprogram" },
+        timeout: 10000,
       });
-      const errorMessage = readRpcResultError(result, "绑定内测码失败");
-      if (errorMessage) {
-        throw new Error(errorMessage);
+      if (!payload || payload.error) {
+        throw new Error(String((payload && payload.error) || "绑定内测码失败"));
       }
 
-      const payload = result && result.data && typeof result.data === "object"
-        ? result.data
-        : {};
-      const newlyBound = Boolean(payload.bound_newly);
-
+      const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
+      const featureId = String(data.feature_id || data.page_key || "").trim();
+      const routePathRaw = String(data.route_path || "").trim();
       this.setData({ codeInput: "" });
+      if (featureId && routePathRaw) {
+        await this.loadFeatureRows().catch(() => null);
+        await enterFeatureRoute(featureId, routePathRaw);
+        return;
+      }
+
       await this.loadFeatureRows();
       wx.showToast({
-        title: newlyBound ? "内测功能绑定成功" : "该内测功能已绑定",
+        title: "内测功能绑定成功",
         icon: "none",
       });
     } catch (error) {
@@ -426,30 +481,20 @@ Page({
 
     this.setData({ enteringFeatureId: featureId });
     try {
-      const result = await dbRpc("check_user_beta_feature_access", {
-        p_feature_id: featureId,
-      });
-      const errorMessage = readRpcResultError(result, "校验内测权限失败");
-      if (errorMessage) {
-        throw new Error(errorMessage);
+      const payload = await requestJson(
+        `/api/page-center/beta/check?page_key=${encodeURIComponent(featureId)}&channel=miniprogram`,
+        {
+          method: "GET",
+          timeout: 10000,
+        }
+      );
+      if (!payload || payload.error || payload.allowed !== true) {
+        throw new Error(String((payload && (payload.message || payload.error)) || "进入功能失败"));
       }
 
-      const payload = result && result.data && typeof result.data === "object"
-        ? result.data
-        : {};
-      const routePathRaw = String(payload.route_path || target.route_path_raw || "").trim();
-      const normalizedRoute = normalizeFeatureRoutePath(routePathRaw);
-      if (!normalizedRoute) {
-        throw new Error("该功能未配置可访问路由");
-      }
-
-      if (isPoseFeatureRoute(routePathRaw)) {
-        await openRoute("/pages/profile/beta/pose/index");
-        return;
-      }
-
-      setPoseBypassIfNeeded(routePathRaw);
-      await openRoute(normalizedRoute);
+      const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
+      const routePathRaw = String(data.route_path || target.route_path_raw || "").trim();
+      await enterFeatureRoute(featureId, routePathRaw);
     } catch (error) {
       wx.showToast({
         title: toErrorMessage(error, "进入功能失败"),
@@ -475,3 +520,4 @@ Page({
     });
   },
 });
+

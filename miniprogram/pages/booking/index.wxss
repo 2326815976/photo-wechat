@@ -3,10 +3,18 @@
   background: #FFFBF0;
 }
 
+.page--preview {
+  min-height: 100vh;
+}
+
 .content {
   /* Web: px-6 pt-4 pb-20 */
   padding: 32rpx 48rpx calc(160rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+.content--preview {
+  padding-bottom: 48rpx;
 }
 
 /* 配置提示 */

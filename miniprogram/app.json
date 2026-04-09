@@ -9,6 +9,8 @@
     "pages/profile/beta/pose/index",
     "pages/admin/index",
     "pages/admin/beta/index",
+    "pages/admin/page-center/index",
+    "pages/admin/web-preview/index",
     "pages/admin/album-detail/index",
     "pages/album/detail",
     "pages/login/index",

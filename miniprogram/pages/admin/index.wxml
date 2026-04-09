@@ -85,20 +85,76 @@
           <view class="stats-page motion-fade-up">
             <view class="stats-header">
               <view class="stats-header__main">
-                <text class="stats-header__title">数据统计 📊</text>
-                <text class="stats-header__desc">实时查看平台运营数据</text>
+                <text class="stats-header__eyebrow">平台概览</text>
+                <text class="stats-header__title">快照与趋势状态</text>
+                <text class="stats-header__desc">集中查看统计快照、趋势覆盖和维护状态</text>
               </view>
+              <view class="stats-status-banner stats-status-banner--{{statsView.meta.statusTone || 'muted'}}">
+                <text class="stats-status-banner__label">当前状态</text>
+                <text class="stats-status-banner__text">{{statsView.meta.statusText || '暂无统计快照'}}</text>
+              </view>
+              <view class="stats-meta-panel">
+                <view class="stats-meta-item">
+                  <text class="stats-meta-item__label">生成时间</text>
+                  <text class="stats-meta-item__value">{{statsView.meta.generatedAtText || '—'}}</text>
+                </view>
+                <view class="stats-meta-item">
+                  <text class="stats-meta-item__label">快照日期</text>
+                  <text class="stats-meta-item__value">{{statsView.meta.snapshotDateText || '—'}}</text>
+                </view>
+                <view class="stats-meta-item">
+                  <text class="stats-meta-item__label">趋势覆盖</text>
+                  <text class="stats-meta-item__value">{{statsView.meta.trendCoverageText || '0/7 天'}}</text>
+                </view>
+              </view>
+              <view class="stats-toolbar">
+                <button
+                  class="stats-refresh-btn"
+                  bindtap="onRefreshStats"
+                  hover-class="stats-refresh-btn--active"
+                  loading="{{statsLoading || statsRefreshing}}"
+                  disabled="{{statsLoading || statsRefreshing || maintenanceRunning}}"
+                >
+                  {{statsLoading || statsRefreshing ? '刷新中...' : '刷新统计'}}
+                </button>
+                <button
+                  class="stats-maint-btn"
+                  bindtap="runMaintenance"
+                  hover-class="stats-maint-btn--active"
+                  loading="{{maintenanceRunning}}"
+                  disabled="{{maintenanceRunning || statsLoading || statsRefreshing}}"
+                >
+                  {{maintenanceRunning ? '执行中...' : '维护任务'}}
+                </button>
+              </view>
+            </view>
+
+            <view class="stats-inline-error" wx:if="{{statsError && statsReady}}">
+              <text class="stats-inline-error__text">{{statsError}}</text>
+            </view>
+
+
+            <view class="stats-loading-card" wx:if="{{statsLoading && !statsReady}}">
+              <view class="stats-loading-card__spinner"></view>
+              <text class="stats-loading-card__title">统计数据加载中</text>
+              <text class="stats-loading-card__desc">正在同步最新快照与趋势数据，请稍候。</text>
+            </view>
+
+            <view class="stats-empty-card" wx:elif="{{!statsReady}}">
+              <text class="stats-empty-card__icon">📊</text>
+              <text class="stats-empty-card__title">{{statsError ? "统计数据暂时不可用" : "暂无统计数据"}}</text>
+              <text class="stats-empty-card__desc">{{statsError || "请稍后刷新，或先执行维护任务生成统计快照。"}}</text>
               <button
-                class="stats-maint-btn"
-                bindtap="runMaintenance"
-                hover-class="stats-maint-btn--active"
-                loading="{{maintenanceRunning}}"
-                disabled="{{maintenanceRunning}}"
+                class="stats-empty-card__action"
+                bindtap="onRefreshStats"
+                hover-class="stats-empty-card__action--active"
+                disabled="{{statsLoading || statsRefreshing || maintenanceRunning}}"
               >
-                {{maintenanceRunning ? "执行中..." : "维护任务"}}
+                {{statsLoading || statsRefreshing ? "刷新中..." : "重新加载"}}
               </button>
             </view>
 
+            <block wx:else>
             <view class="stats-section">
               <view class="stats-section__head">
                 <text class="stats-section__icon">👥</text>
@@ -297,6 +353,7 @@
                 </view>
               </view>
             </view>
+            </block>
           </view>
         </block>
 
@@ -306,9 +363,17 @@
               <view class="booking-toolbar-actions booking-toolbar-actions--right" wx:if="{{!scheduleSelectionMode}}">
                 <button
                   class="booking-pill-btn booking-pill-btn--ghost"
+                  bindtap="onRefreshScheduleSection"
+                  hover-class="booking-pill-btn--ghost-active"
+                  disabled="{{blockedDatesLoading || blockedDatesRefreshing || scheduleSubmitting || scheduleActionLoading || scheduleBatchDeleting}}"
+                >
+                  {{blockedDatesRefreshing ? "刷新中..." : "刷新"}}
+                </button>
+                <button
+                  class="booking-pill-btn booking-pill-btn--ghost"
                   bindtap="onEnterScheduleSelectionMode"
                   hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{blockedDatesLoading || !scheduleTotalCount}}"
+                  disabled="{{blockedDatesLoading || blockedDatesRefreshing || scheduleBatchDeleting || scheduleActionLoading || !scheduleTotalCount}}"
                 >
                   批量删除
                 </button>
@@ -316,7 +381,7 @@
                   class="booking-pill-btn booking-pill-btn--primary"
                   bindtap="onOpenScheduleAddModal"
                   hover-class="booking-pill-btn--primary-active"
-                  disabled="{{blockedDatesLoading}}"
+                  disabled="{{blockedDatesLoading || blockedDatesRefreshing || scheduleBatchDeleting || scheduleActionLoading}}"
                 >
                   + 锁定档期
                 </button>
@@ -327,7 +392,7 @@
                   class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
                   bindtap="onToggleScheduleSelectAll"
                   hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{scheduleBatchDeleting}}"
+                  disabled="{{scheduleBatchDeleting || blockedDatesRefreshing}}"
                 >
                   {{scheduleAllSelected ? "取消全选" : "全选"}} ({{scheduleSelectedCount}}/{{scheduleTotalCount}})
                 </button>
@@ -335,7 +400,7 @@
                   class="booking-pill-btn booking-pill-btn--danger booking-pill-btn--compact"
                   bindtap="onOpenScheduleBatchDeleteConfirm"
                   hover-class="booking-pill-btn--danger-active"
-                  disabled="{{scheduleBatchDeleting || !scheduleSelectedCount}}"
+                  disabled="{{scheduleBatchDeleting || blockedDatesRefreshing || !scheduleSelectedCount}}"
                   loading="{{scheduleBatchDeleting}}"
                 >
                   删除 ({{scheduleSelectedCount}})
@@ -344,21 +409,49 @@
                   class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
                   bindtap="onCancelScheduleSelectionMode"
                   hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{scheduleBatchDeleting}}"
+                  disabled="{{scheduleBatchDeleting || blockedDatesRefreshing}}"
                 >
                   取消
                 </button>
               </view>
             </view>
 
-            <view class="pose-loading" wx:if="{{blockedDatesLoading}}">
-              <view class="pose-loading__spinner"></view>
-              <text class="pose-loading__text">加载中...</text>
+            <view class="schedule-inline-error" wx:if="{{blockedDatesError && blockedDatesReady}}">
+              <text class="schedule-inline-error__text">{{blockedDatesError}}</text>
             </view>
 
-            <view class="empty booking-empty-card schedule-empty-card" wx:elif="{{!scheduleRows.length}}">
-              <text class="booking-empty-card__icon">📅</text>
-              <text>暂无锁定档期</text>
+            <view class="schedule-state-card schedule-state-card--loading" wx:if="{{blockedDatesLoading && !blockedDatesReady}}">
+              <view class="schedule-state-card__spinner"></view>
+              <text class="schedule-state-card__title">正在加载档期列表</text>
+              <text class="schedule-state-card__desc">请稍候，正在同步最新锁定档期</text>
+            </view>
+
+            <view class="schedule-state-card" wx:elif="{{!blockedDatesReady}}">
+              <text class="schedule-state-card__icon">!</text>
+              <text class="schedule-state-card__title">档期列表加载失败</text>
+              <text class="schedule-state-card__desc">{{blockedDatesError || '请稍后重试或手动刷新档期列表'}}</text>
+              <button
+                class="schedule-state-card__action"
+                bindtap="onRefreshScheduleSection"
+                hover-class="schedule-state-card__action--active"
+                disabled="{{blockedDatesLoading || blockedDatesRefreshing}}"
+              >
+                {{blockedDatesLoading || blockedDatesRefreshing ? "重新加载中..." : "重新加载"}}
+              </button>
+            </view>
+
+            <view class="schedule-state-card" wx:elif="{{!scheduleRows.length}}">
+              <text class="schedule-state-card__icon">📅</text>
+              <text class="schedule-state-card__title">暂无锁定档期</text>
+              <text class="schedule-state-card__desc">当前没有未来锁定日期，可随时新增或刷新列表</text>
+              <button
+                class="schedule-state-card__action"
+                bindtap="onRefreshScheduleSection"
+                hover-class="schedule-state-card__action--active"
+                disabled="{{blockedDatesLoading || blockedDatesRefreshing}}"
+              >
+                {{blockedDatesRefreshing ? "刷新中..." : "刷新列表"}}
+              </button>
             </view>
 
             <view class="schedule-cards" wx:else>
@@ -388,7 +481,7 @@
                     data-id="{{item.id}}"
                     catchtap="onOpenScheduleDeleteConfirm"
                     hover-class="schedule-card__delete--active"
-                    disabled="{{scheduleActionLoading}}"
+                    disabled="{{scheduleActionLoading || blockedDatesRefreshing}}"
                   >
                     <image class="schedule-card__delete-icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
                   </button>
@@ -484,7 +577,7 @@
                     <image class="booking-search-box__clear-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
                   </view>
                 </view>
-                <text class="booking-search-row__meta" wx:if="{{bookingKeyword && !bookingsLoading}}">
+                <text class="booking-search-row__meta" wx:if="{{bookingKeyword && bookingsReady && !bookingsLoading}}">
                   匹配 {{bookingFilteredList.length}} 条
                 </text>
               </view>
@@ -652,7 +745,7 @@
                   hover-class="booking-pill-btn--primary-active"
                   disabled="{{bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0}}"
                 >
-                  ＋ 添加类型
+                  + 添加类型
                 </button>
               </view>
 
@@ -722,7 +815,7 @@
                   hover-class="booking-pill-btn--primary-active"
                   disabled="{{citySaving || cityDeletingId !== 0 || cityTogglingId !== 0}}"
                 >
-                  ＋ 添加城市
+                  + 添加城市
                 </button>
               </view>
 
@@ -793,7 +886,8 @@
               <text class="pose-loading__text">加载中...</text>
             </view>
 
-            <view class="about-grid" wx:else>
+            <block wx:else>
+              <view class="about-grid">
               <view class="about-card about-card--form">
                 <view class="booking-modal__body">
                   <view class="booking-modal__field">
@@ -891,6 +985,7 @@
                 </view>
 
                 <view class="about-save-wrap">
+                  <text class="about-save-tip">保存时会自动规范手机号，并校验邮箱格式。</text>
                   <button
                     class="booking-pill-btn booking-pill-btn--primary about-save-btn"
                     bindtap="onSaveAboutSettings"
@@ -936,7 +1031,8 @@
                   <image class="about-preview-qr" src="{{aboutSettings.donation_qr_code}}" mode="widthFix" />
                 </view>
               </view>
-            </view>
+              </view>
+            </block>
           </view>
         </block>
 
@@ -986,6 +1082,13 @@
                 <view class="pose-toolbar-actions" wx:if="{{!poseSelectionMode}}">
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--ghost"
+                    bindtap="onRefreshPoseSection"
+                    disabled="{{loading || posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing || poseCreating || poseBatchDeleting}}"
+                  >
+                    {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
+                  </button>
+                  <button
+                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
                     bindtap="onEnterPoseSelectionMode"
                   >
                     批量删除
@@ -1023,14 +1126,34 @@
                 </view>
               </view>
 
-              <view class="pose-loading" wx:if="{{posesLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
+              <view class="pose-inline-error" wx:if="{{posesError && posesReady}}">
+                <text class="pose-inline-error__text">{{posesError}}</text>
               </view>
 
-              <view class="empty pose-empty-card" wx:elif="{{!poseFilteredList.length}}">
-                <text class="pose-empty-card__icon">📷</text>
-                <text>暂无摆姿数据</text>
+              <view class="pose-loading-card" wx:if="{{posesLoading && !posesReady}}">
+                <view class="pose-loading-card__spinner"></view>
+                <text class="pose-loading-card__title">摆姿列表加载中</text>
+                <text class="pose-loading-card__desc">正在同步最新的摆姿图片与标签数据，请稍候。</text>
+              </view>
+
+              <view class="pose-empty-card pose-empty-card--rich" wx:elif="{{!posesReady}}">
+                <text class="pose-empty-card__icon">图</text>
+                <text class="pose-empty-card__title">{{posesError ? "摆姿数据暂时不可用" : "暂无摆姿数据"}}</text>
+                <text class="pose-empty-card__desc">{{posesError || "上传摆姿后会展示在这里。"}}</text>
+                <button
+                  class="pose-empty-card__action"
+                  bindtap="onRefreshPoseSection"
+                  hover-class="pose-empty-card__action--active"
+                  disabled="{{posesLoading || posesRefreshing || poseBatchDeleting || poseCreating}}"
+                >
+                  {{posesLoading || posesRefreshing ? "刷新中..." : "重新加载"}}
+                </button>
+              </view>
+
+              <view class="empty pose-empty-card pose-empty-card--rich" wx:elif="{{!poseFilteredList.length}}">
+                <text class="pose-empty-card__icon">图</text>
+                <text class="pose-empty-card__title">{{poseSelectedTags.length ? "当前筛选下暂无摆姿" : "暂无摆姿数据"}}</text>
+                <text class="pose-empty-card__desc">{{poseSelectedTags.length ? "可以切换标签筛选或刷新列表。" : "上传摆姿后会展示在这里。"}}</text>
               </view>
 
               <block wx:else>
@@ -1070,7 +1193,7 @@
                           data-id="{{item.id}}"
                           catchtap="onDeletePose"
                         >
-                          <text class="pose-card-action-btn__icon">{{poseDeletingId === item.id ? "…" : "🗑"}}</text>
+                          <text class="pose-card-action-btn__icon">{{poseDeletingId === item.id ? "…" : "🗑️"}}</text>
                         </view>
                       </view>
                     </view>
@@ -1097,6 +1220,13 @@
             <block wx:elif="{{posePanelTab === 'tags'}}">
               <view class="pose-tags-toolbar">
                 <block wx:if="{{!poseTagSelectionMode}}">
+                  <button
+                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
+                    bindtap="onRefreshPoseSection"
+                    disabled="{{loading || posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing || poseTagCreating || poseTagUpdating || poseTagBatchDeleting || poseTagSortingId !== 0}}"
+                  >
+                    {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
+                  </button>
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--ghost"
                     bindtap="onEnterPoseTagSelectionMode"
@@ -1136,14 +1266,34 @@
                 </block>
               </view>
 
-              <view class="pose-loading" wx:if="{{poseTagsLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
+              <view class="pose-inline-error" wx:if="{{poseTagsError && poseTagsReady}}">
+                <text class="pose-inline-error__text">{{poseTagsError}}</text>
               </view>
 
-              <view class="empty pose-empty-card" wx:elif="{{!poseTagStats.length}}">
-                <text class="pose-empty-card__icon">🏷️</text>
-                <text>暂无标签数据</text>
+              <view class="pose-loading-card" wx:if="{{poseTagsLoading && !poseTagsReady}}">
+                <view class="pose-loading-card__spinner"></view>
+                <text class="pose-loading-card__title">标签列表加载中</text>
+                <text class="pose-loading-card__desc">正在同步标签排序与使用情况，请稍候。</text>
+              </view>
+
+              <view class="pose-empty-card pose-empty-card--rich" wx:elif="{{!poseTagsReady}}">
+                <text class="pose-empty-card__icon">标</text>
+                <text class="pose-empty-card__title">{{poseTagsError ? "标签数据暂时不可用" : "暂无标签数据"}}</text>
+                <text class="pose-empty-card__desc">{{poseTagsError || "创建标签后可用于摆姿筛选与管理。"}}</text>
+                <button
+                  class="pose-empty-card__action"
+                  bindtap="onRefreshPoseSection"
+                  hover-class="pose-empty-card__action--active"
+                  disabled="{{poseTagsLoading || poseTagsRefreshing || poseTagCreating || poseTagUpdating || poseTagBatchDeleting || poseTagSortingId !== 0}}"
+                >
+                  {{poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "重新加载"}}
+                </button>
+              </view>
+
+              <view class="empty pose-empty-card pose-empty-card--rich" wx:elif="{{!poseTagStats.length}}">
+                <text class="pose-empty-card__icon">标</text>
+                <text class="pose-empty-card__title">暂无标签数据</text>
+                <text class="pose-empty-card__desc">创建标签后可用于摆姿筛选与管理。</text>
               </view>
 
               <view class="pose-tags-grid" wx:else>
@@ -1154,68 +1304,72 @@
                   data-id="{{item.id}}"
                   bindtap="onTogglePoseTagSelection"
                 >
-                  <view class="pose-tag-card__left">
-                    <view class="pose-tag-check {{item.selectedTag ? 'pose-tag-check--active' : ''}}" wx:if="{{poseTagSelectionMode}}">
-                      <text wx:if="{{item.selectedTag}}">✓</text>
-                    </view>
-                    <view class="pose-tag-card__icon">
-                      <text>🏷️</text>
-                    </view>
-                    <view class="pose-tag-card__main">
-                      <view class="pose-tag-card__title-row">
-                        <text class="pose-tag-card__name">{{item.name}}</text>
-                        <view class="pose-tag-order-badge">
-                          <text>#{{item.sortIndex}}</text>
+                  <view class="pose-tag-card__head">
+                    <view class="pose-tag-card__left">
+                      <view class="pose-tag-check {{item.selectedTag ? 'pose-tag-check--active' : ''}}" wx:if="{{poseTagSelectionMode}}">
+                        <text wx:if="{{item.selectedTag}}">✓</text>
+                      </view>
+                      <view class="pose-tag-card__icon">
+                        <text>🏷️</text>
+                      </view>
+                      <view class="pose-tag-card__main">
+                        <view class="pose-tag-card__title-row">
+                          <text class="pose-tag-card__name">{{item.name}}</text>
+                          <view class="pose-tag-order-badge">
+                            <text>#{{item.sortIndex}}</text>
+                          </view>
+                        </view>
+                        <view class="pose-tag-card__meta-row">
+                          <text class="pose-tag-card__count">使用 {{item.usage_count}} 次</text>
                         </view>
                       </view>
-                      <view class="pose-tag-card__meta-row">
-                        <text class="pose-tag-card__count">使用 {{item.usage_count}} 次</text>
+                    </view>
+
+                    <view class="pose-tag-card__quick-actions" wx:if="{{!poseTagSelectionMode}}">
+                      <view
+                        class="pose-tag-quick-btn pose-tag-quick-btn--edit {{item.virtual || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-quick-btn--disabled' : ''}}"
+                        data-id="{{item.id}}"
+                        data-name="{{item.name}}"
+                        data-virtual="{{item.virtual}}"
+                        catchtap="onOpenPoseTagEditModal"
+                      >
+                        <text class="pose-tag-quick-btn__icon">✎</text>
+                      </view>
+                      <view
+                        class="pose-tag-quick-btn pose-tag-quick-btn--delete {{item.virtual || poseTagDeletingId === item.id || poseTagBatchDeleting || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-quick-btn--disabled' : ''}}"
+                        data-id="{{item.id}}"
+                        data-name="{{item.name}}"
+                        data-virtual="{{item.virtual}}"
+                        catchtap="onAskDeletePoseTag"
+                      >
+                        <text class="pose-tag-quick-btn__icon">{{poseTagDeletingId === item.id ? "…" : "🗑️"}}</text>
                       </view>
                     </view>
                   </view>
 
-                  <view class="pose-tag-card__actions" wx:if="{{!poseTagSelectionMode}}">
+                  <view class="pose-tag-card__sort-row" wx:if="{{!poseTagSelectionMode}}">
                     <view class="pose-tag-sort-controls">
                       <view
-                        class="pose-tag-action-btn pose-tag-action-btn--move {{item.virtual || !item.canMoveTop || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveTop || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"
                         catchtap="onMovePoseTagTop"
                       >
                         置顶
                       </view>
                       <view
-                        class="pose-tag-action-btn pose-tag-action-btn--move pose-tag-action-btn--move-icon {{item.virtual || !item.canMoveUp || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveUp || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"
                         catchtap="onMovePoseTagUp"
                       >
-                        ↑
+                        上移
                       </view>
-                      <text class="pose-tag-sort-controls__label">{{poseTagSortingId === item.id ? "排序中" : "排序"}}</text>
                       <view
-                        class="pose-tag-action-btn pose-tag-action-btn--move pose-tag-action-btn--move-icon {{item.virtual || !item.canMoveDown || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveDown || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"
                         catchtap="onMovePoseTagDown"
                       >
-                        ↓
+                        下移
                       </view>
-                    </view>
-                    <view
-                      class="pose-tag-action-btn pose-tag-action-btn--edit {{item.virtual || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
-                      data-id="{{item.id}}"
-                      data-name="{{item.name}}"
-                      data-virtual="{{item.virtual}}"
-                      catchtap="onOpenPoseTagEditModal"
-                    >
-                      编辑
-                    </view>
-                    <view
-                      class="pose-tag-action-btn pose-tag-action-btn--delete {{item.virtual || poseTagDeletingId === item.id || poseTagBatchDeleting || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
-                      data-id="{{item.id}}"
-                      data-name="{{item.name}}"
-                      data-virtual="{{item.virtual}}"
-                      catchtap="onAskDeletePoseTag"
-                    >
-                      {{poseTagDeletingId === item.id ? "删除中" : "删除"}}
                     </view>
                   </view>
                 </view>
@@ -1259,7 +1413,7 @@
                   <view class="beta-card__head">
                     <view class="beta-card__main">
                       <text class="beta-card__title">{{item.feature_name}}</text>
-                      <text class="beta-card__path">{{item.route_title || '未绑定路由'}} · {{item.route_path || '未设置路径'}}</text>
+                      <text class="beta-card__path">{{item.route_title || '?????'}} ? {{item.route_path || '?????'}}</text>
                     </view>
                     <view class="beta-state-badge {{item.stateClass}}">
                       <text>{{item.stateText}}</text>
@@ -1287,7 +1441,7 @@
                       bindtap="onOpenBetaVersionDeleteConfirm"
                       disabled="{{betaVersionSaving || betaVersionDeleting}}"
                     >
-                      {{betaVersionDeletingId === item.id ? "删除中" : "删除"}}
+                      {{betaVersionDeletingId === item.id ? "删除中..." : "删除"}}
                     </button>
                   </view>
                 </view>
@@ -1297,6 +1451,14 @@
 
         <block wx:if="{{activeSection === 'gallery'}}">
           <gallery-manager id="galleryManager" class="motion-fade-up" />
+        </block>
+
+        <block wx:if="{{activeSection === 'webPages'}}">
+          <page-center-panel class="motion-fade-up" channel="web" embedded="{{true}}" />
+        </block>
+
+        <block wx:if="{{activeSection === 'miniprogramPages'}}">
+          <page-center-panel class="motion-fade-up" channel="miniprogram" embedded="{{true}}" />
         </block>
 
         <block wx:if="{{activeSection === 'albums'}}">
@@ -1318,7 +1480,7 @@
                   hover-class="booking-pill-btn--ghost-active"
                   disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
                 >
-                  照片墙管理
+                  照片墙管理器
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
@@ -1359,6 +1521,39 @@
               </view>
             </view>
 
+            <scroll-view class="booking-filter-scroll" scroll-x="{{true}}" scroll-with-animation="{{true}}">
+              <view class="booking-filter-list">
+                <view
+                  wx:for="{{albumFilterOptions}}"
+                  wx:key="key"
+                  class="booking-filter-chip {{albumFilter === item.key ? 'booking-filter-chip--active' : ''}}"
+                  data-key="{{item.key}}"
+                  bindtap="onAlbumFilterChange"
+                >
+                  <text>{{item.label}}</text>
+                </view>
+              </view>
+            </scroll-view>
+
+            <view class="booking-search-row">
+              <view class="booking-search-box">
+                <image class="booking-search-box__icon" src="/images/icons/search-gray.svg" mode="aspectFit" />
+                <input
+                  class="booking-search-box__input"
+                  value="{{albumKeyword}}"
+                  bindinput="onAlbumKeywordInput"
+                  confirm-type="search"
+                  placeholder="搜索空间名称 / 收件人 / 访问密钥 / 欢迎信"
+                  placeholder-class="booking-search-box__placeholder"
+                />
+                <view class="booking-search-box__clear" wx:if="{{albumKeyword}}" bindtap="onClearAlbumKeyword">
+                  <image class="booking-search-box__clear-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+                </view>
+              </view>
+              <text class="booking-search-row__meta" wx:if="{{(albumKeyword || albumFilter !== 'all') && !albumsLoading}}">
+                匹配 {{albumRows.length}} 个空间</text>
+            </view>
+
             <view class="pose-loading" wx:if="{{albumsLoading}}">
               <view class="pose-loading__spinner"></view>
               <text class="pose-loading__text">加载中...</text>
@@ -1366,7 +1561,7 @@
 
             <view class="empty booking-empty-card album-empty-card" wx:elif="{{!albumRows.length}}">
               <text class="booking-empty-card__icon">💝</text>
-              <text>暂无专属空间</text>
+              <text>{{albums.length ? '当前筛选下暂无专属空间' : '暂无专属空间'}}</text>
             </view>
 
             <view class="album-grid" wx:else>
@@ -1405,7 +1600,7 @@
                     <view class="album-card__title-wrap">
                       <text class="album-card__title">{{item.title}}</text>
                       <view class="album-card__meta-row">
-                        <text class="album-card__meta">创建于 {{item.createdDateText}}</text>
+                        <text class="album-card__meta">创建于{{item.createdDateText}}</text>
                         <view
                           wx:if="{{item.expiresAtText}}"
                           class="album-card__expiry-badge {{item.expired ? 'album-card__expiry-badge--expired' : (item.expirySoon ? 'album-card__expiry-badge--soon' : 'album-card__expiry-badge--normal')}}"
@@ -1424,7 +1619,7 @@
                         hover-class="album-mini-btn--active"
                         disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
                       >
-                        <text>✎</text>
+                        <text>✕</text>
                       </button>
                       <button
                         class="album-mini-btn album-mini-btn--danger"
@@ -1494,7 +1689,7 @@
                       disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
                     >
                       <image class="album-toggle-btn__icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
-                      <text class="album-toggle-btn__text">欢迎信 {{item.enable_welcome_letter ? "开启" : "关闭"}}</text>
+                      <text class="album-toggle-btn__text">欢迎信{{item.enable_welcome_letter ? "开启" : "关闭"}}</text>
                     </button>
 
                     <button
@@ -1512,7 +1707,7 @@
                   <view class="album-donation-card" wx:if="{{!albumSelectionMode}}">
                     <view class="album-donation-card__main">
                       <text class="album-donation-card__label">赞赏码</text>
-                      <text class="album-donation-card__desc">{{!item.enable_tipping ? "打赏关闭，暂不可上传" : (item.hasDonationQr ? "已上传，可随时更新" : "未上传")}}</text>
+                      <text class="album-donation-card__desc">{{!item.enable_tipping ? "打赏关闭，暂不可上传" : (item.hasDonationQr ? "已上传，可随时更换" : "未上传")}}</text>
                     </view>
                     <button
                       class="album-donation-card__btn {{!item.enable_tipping ? 'album-donation-card__btn--disabled' : ''}}"
@@ -1625,7 +1820,7 @@
                           <text class="release-chip release-chip--platform {{item.platformClass}}">{{item.platform}}</text>
                           <text class="release-chip release-chip--force" wx:if="{{item.forceUpdate}}">🔒 强制更新</text>
                         </view>
-                        <text class="release-card__date">发布于 {{item.createdAtDisplay}}</text>
+                        <text class="release-card__date">发布于{{item.createdAtDisplay}}</text>
                       </view>
                     </view>
                     <button
@@ -1664,7 +1859,7 @@
                   </view>
                   <text class="release-modal__title">删除版本</text>
                   <text class="release-modal__desc">
-                    确定要删除版本 <text class="release-modal__highlight">{{releaseDeleteTargetVersion}}</text> ({{releaseDeleteTargetPlatform}}) 吗？
+                    确定要删除版本号<text class="release-modal__highlight">{{releaseDeleteTargetVersion}}</text> ({{releaseDeleteTargetPlatform}}) 吗？
                   </text>
                   <view class="release-modal__actions">
                     <button
@@ -1696,7 +1891,7 @@
                   <image class="release-back-btn__icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
                 </button>
                 <view class="release-new-header__main">
-                  <text class="release-new-header__title">发布新版本 🚀</text>
+                  <text class="release-new-header__title">发布新版本号🚀</text>
                   <text class="release-new-header__desc">上传应用安装包</text>
                 </view>
               </view>
@@ -1704,7 +1899,7 @@
               <view class="release-form">
                 <view class="release-field">
                   <text class="release-field__label">
-                    版本号 <text class="release-required">*</text>
+                    版本号<text class="release-required">*</text>
                   </text>
                   <input
                     class="release-input"
@@ -1757,7 +1952,7 @@
 
                 <view class="release-field">
                   <text class="release-field__label">
-                    安装包文件 <text class="release-required">*</text>
+                    安装包文件<text class="release-required">*</text>
                   </text>
                   <button
                     class="release-upload-btn"
@@ -1958,10 +2153,10 @@
         </view>
         <text class="pose-confirm-title">批量删除摆姿</text>
         <text class="pose-confirm-desc">
-          确定要删除选中的 <text class="pose-confirm-accent">{{poseSelectedCount}}</text> 个摆姿吗？
+          确定要删除选中的<text class="pose-confirm-accent">{{poseSelectedCount}}</text> 个摆姿吗？
         </text>
         <view class="pose-confirm-note pose-confirm-note--danger">
-          <text class="pose-confirm-note__text">⚠ 此操作不可撤销！</text>
+          <text class="pose-confirm-note__text">⚠ 此操作不可撤销。</text>
         </view>
       </view>
       <view class="pose-confirm-actions">
@@ -1988,10 +2183,10 @@
         </view>
         <text class="pose-confirm-title">删除标签</text>
         <text class="pose-confirm-desc">
-          确定要删除标签 “<text class="pose-confirm-accent">{{poseTagDeletingTargetName}}</text>” 吗？
+          确定要删除标签「<text class="pose-confirm-accent">{{poseTagDeletingTargetName}}</text>」吗？
         </text>
         <view class="pose-confirm-note pose-confirm-note--warn">
-          <text class="pose-confirm-note__text">⚠ 所有摆姿中的该标签也会被移除</text>
+          <text class="pose-confirm-note__text">• 所有摆姿中的该标签也会被移除</text>
         </view>
       </view>
       <view class="pose-confirm-actions">
@@ -2018,7 +2213,7 @@
         </view>
         <text class="pose-confirm-title">批量删除标签</text>
         <text class="pose-confirm-desc">
-          确定要删除选中的 <text class="pose-confirm-accent">{{poseTagSelectedCount}}</text> 个标签吗？
+          确定要删除选中的<text class="pose-confirm-accent">{{poseTagSelectedCount}}</text> 个标签吗？
         </text>
         <view class="pose-confirm-note pose-confirm-note--danger">
           <text class="pose-confirm-note__text">标签列表：</text>
@@ -2162,7 +2357,7 @@
                 data-index="{{index}}"
                 catchtap="onSelectBetaVersionRoute"
               >
-                <text class="beta-route-dropdown__option-title">{{item.route_title || '未命名路由'}}</text>
+                <text class="beta-route-dropdown__option-title">{{item.route_title || '?????'}}</text>
                 <text class="beta-route-dropdown__option-path">{{item.route_path}}</text>
               </view>
             </scroll-view>
@@ -2354,7 +2549,7 @@
         </view>
         <text class="booking-confirm-modal__title">删除订单</text>
         <text class="booking-confirm-modal__desc">
-          确定要删除订单 <text class="booking-confirm-modal__accent">{{bookingDeletingTargetSummary}}</text> 吗？
+          确定要删除订单<text class="booking-confirm-modal__accent">{{bookingDeletingTargetSummary}}</text> 吗？
         </text>
         <view class="booking-confirm-modal__warn">
           <text>⚠ 此操作不可撤销</text>
@@ -2409,7 +2604,7 @@
         </view>
         <text class="booking-confirm-modal__title">批量删除预约</text>
         <text class="booking-confirm-modal__desc">
-          确定要删除选中的 <text class="booking-confirm-modal__accent">{{bookingSelectedCount}}</text> 个预约吗？
+          确定要删除选中的<text class="booking-confirm-modal__accent">{{bookingSelectedCount}}</text> 个预约吗？
         </text>
         <view class="booking-confirm-modal__warn">
           <text>⚠ 此操作不可撤销</text>
@@ -2519,7 +2714,7 @@
       <view class="booking-modal__body">
         <view class="booking-modal__field">
           <text class="booking-modal__label">
-            开始日期 <text class="booking-modal__required">*</text>
+            开始日期<text class="booking-modal__required">*</text>
           </text>
           <picker mode="date" value="{{scheduleStartDate}}" bindchange="onScheduleStartDateChange">
             <view class="schedule-modal-picker {{scheduleStartDate ? '' : 'schedule-modal-picker--placeholder'}}">
@@ -2562,7 +2757,7 @@
     <view class="booking-confirm-modal" catchtap="onPoseModalTap">
       <view class="booking-confirm-modal__head">
         <view class="booking-confirm-modal__icon schedule-confirm-icon--warn">
-          <text>⚠</text>
+          <text>✕</text>
         </view>
         <text class="booking-confirm-modal__title">删除档期锁定</text>
         <text class="booking-confirm-modal__desc">
@@ -2598,7 +2793,7 @@
         </view>
         <text class="booking-confirm-modal__title">批量删除档期</text>
         <text class="booking-confirm-modal__desc">
-          确定要删除选中的 <text class="booking-confirm-modal__accent">{{scheduleSelectedCount}}</text> 个档期锁定吗？
+          确定要删除选中的<text class="booking-confirm-modal__accent">{{scheduleSelectedCount}}</text> 个档期锁定吗？
         </text>
         <view class="booking-confirm-modal__warn">
           <text>⚠ 此操作不可撤销</text>
@@ -2686,7 +2881,7 @@
               maxlength="24"
             />
           </view>
-          <text class="album-create-section__tip">收件人名称会展示在信封 To 后面，默认值为“拾光者”。</text>
+          <text class="album-create-section__tip">收件人名称会展示在信封 “To” 后面，默认值为“拾光者”。</text>
         </view>
 
         <view class="album-create-section album-create-section--soft">
@@ -2880,7 +3075,7 @@
           </view>
           <view class="album-create-summary__row">
             <text>有效期</text>
-            <text>{{albumCreateExpiryMode === 'days' ? (albumCreateExpiryDays + " 天") : ("至 " + albumCreateExpiryDate)}}</text>
+            <text>{{albumCreateExpiryMode === 'days' ? (albumCreateExpiryDays + " 天") : ("至" + albumCreateExpiryDate)}}</text>
           </view>
         </view>
 
@@ -2950,7 +3145,7 @@
             class="booking-modal__input album-key-input"
             value="{{albumEditingKeyValue}}"
             bindinput="onAlbumKeyInput"
-            placeholder="输入8位密钥"
+            placeholder="输入 8 位密钥"
             placeholder-class="booking-modal__placeholder"
             maxlength="8"
           />
@@ -2992,7 +3187,7 @@
             placeholder-class="booking-modal__placeholder"
             maxlength="24"
           />
-          <text class="album-modal__tip">将显示在信封上的 To 后面，默认值为“拾光者”</text>
+          <text class="album-modal__tip">将显示在信封上的 To 后面，默认值为“拾光者”。</text>
         </view>
         <view class="booking-modal__field">
           <text class="booking-modal__label">欢迎信内容</text>
@@ -3000,7 +3195,7 @@
             class="booking-modal__textarea"
             value="{{albumEditingWelcomeLetter}}"
             bindinput="onAlbumWelcomeLetterInput"
-            placeholder="收件人打开专属空间时会看到这段话"
+            placeholder="收件人打开专属空间时会看到这段内容"
             placeholder-class="booking-modal__placeholder"
             maxlength="300"
           />
@@ -3233,7 +3428,7 @@
         </view>
         <text class="booking-confirm-modal__title">⚠️ 批量删除警告</text>
         <text class="booking-confirm-modal__desc">
-          将删除 <text class="booking-confirm-modal__accent">{{albumSelectedCount}}</text> 个专属空间
+          将删除<text class="booking-confirm-modal__accent">{{albumSelectedCount}}</text> 个专属空间
         </text>
         <view class="booking-confirm-modal__warn">
           <text>此操作将永久删除空间与相关照片数据，且不可撤销。</text>

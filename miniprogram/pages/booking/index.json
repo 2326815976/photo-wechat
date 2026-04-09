@@ -3,6 +3,7 @@
     "app-header": "/components/app-header/index",
     "date-picker": "/components/date-picker/index",
     "map-picker": "/components/map-picker/index",
-    "type-selector": "/components/type-selector/index"
+    "type-selector": "/components/type-selector/index",
+    "app-bottom-nav": "/components/app-bottom-nav/index"
   }
 }

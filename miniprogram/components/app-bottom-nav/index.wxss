@@ -1,0 +1,122 @@
+.tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 136rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(255, 251, 240, 0.96);
+  border-top: 4rpx dashed rgba(93, 64, 55, 0.15);
+  box-shadow: 0 -4rpx 24rpx rgba(93, 64, 55, 0.08);
+  z-index: 999;
+}
+
+.tab-scroll {
+  width: 100%;
+  height: 136rpx;
+  white-space: normal;
+}
+
+.tab-inner {
+  width: 100%;
+  height: 136rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  padding: 0 24rpx 16rpx;
+}
+
+.tab-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8rpx;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  transition: transform 0.2s ease, color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.tab-item--selected {
+  transform: scale(1.05);
+}
+
+.tab-item--active {
+  transform: scale(0.92);
+}
+
+.tab-glow {
+  position: absolute;
+  top: -4px;
+  width: 112rpx;
+  height: 112rpx;
+  background: rgba(255, 200, 87, 0.3);
+  border-radius: 999rpx;
+  filter: blur(16px);
+  opacity: 0;
+  transform: scale(0.8);
+  animation: tab-glow-in 0.3s ease-out both;
+}
+
+.tab-icon-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.tab-icon-wrap--active {
+  animation: tab-icon-rise 0.5s ease-out;
+}
+
+.tab-icon {
+  width: 48rpx;
+  height: 48rpx;
+}
+
+.tab-icon--active {
+  filter: drop-shadow(0 4rpx 8rpx rgba(255, 200, 87, 0.3));
+}
+
+.tab-text {
+  position: relative;
+  z-index: 1;
+  font-size: 20rpx;
+  font-weight: 500;
+  color: rgba(93, 64, 55, 0.6);
+  transition: color 0.2s ease;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-text--active {
+  color: #ffc857;
+  font-weight: 700;
+}
+
+@keyframes tab-glow-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tab-icon-rise {
+  0% {
+    transform: translateY(0);
+  }
+  60% {
+    transform: translateY(-6rpx);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

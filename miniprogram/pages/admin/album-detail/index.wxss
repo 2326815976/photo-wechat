@@ -251,7 +251,7 @@ button::after {
 
 .folder-current-actions {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10rpx;
   margin-top: 4rpx;
@@ -328,7 +328,7 @@ button::after {
 
 @media (min-width: 960rpx) {
   .photos-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -353,7 +353,7 @@ button::after {
 .photo-card__image-wrap {
   position: relative;
   width: 100%;
-  padding-top: 125%;
+  padding-top: 100%;
   background: #f5f5f5;
 }
 

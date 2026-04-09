@@ -12,6 +12,7 @@ const {
   normalizeChinaMobile,
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
+const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
 
 const SLIDER_WIDTH_FALLBACK = 56;
 const CAPTCHA_TOKEN_EXPIRE_MS = 2 * 60 * 1000;
@@ -226,6 +227,21 @@ Page({
     activeLegalFooter: [],
     agreedToLegal: false,
     hideAudit: false,
+    authMode: "phone_password",
+    phoneLoginEnabled: true,
+  },
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const authMode = String(normalized.authMode || "phone_password");
+    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      authMode,
+      phoneLoginEnabled,
+    });
+    this.initLegalDocuments(Boolean(normalized.hideAudit));
+    return normalized;
   },
 
   onLoad() {
@@ -233,25 +249,32 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const hideAudit = Boolean(globalData.hideAudit);
 
     this.startX = 0;
     this.startTime = 0;
     this.trajectory = [];
     this.captchaExpireTimer = null;
 
-    this.setData({ safeTop, serviceMissing, hideAudit });
-    this.initLegalDocuments(hideAudit);
+    this.setData({ safeTop, serviceMissing });
+    const runtimeConfig = this.applyRuntimeConfig(
+      globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
+    );
+    if (runtimeConfig.authMode === "wechat_only" || !this.data.phoneLoginEnabled) {
+      wx.showToast({ title: "当前未开放手机号注册", icon: "none" });
+      wx.redirectTo({ url: "/pages/login/index" });
+      return;
+    }
     if (!serviceMissing) {
       void this.loadCaptcha();
     }
 
-    if (app && typeof app.subscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeAuditConfig((enabled) => {
-        const nextHideAudit = Boolean(enabled);
-        if (nextHideAudit === this.data.hideAudit) return;
-        this.setData({ hideAudit: nextHideAudit });
-        this.initLegalDocuments(nextHideAudit);
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((nextRuntimeConfig) => {
+        const normalized = this.applyRuntimeConfig(nextRuntimeConfig);
+        if (normalized.authMode === "wechat_only") {
+          wx.showToast({ title: "当前未开放手机号注册", icon: "none" });
+          wx.redirectTo({ url: "/pages/login/index" });
+        }
       });
     }
   },
@@ -797,6 +820,10 @@ Page({
 
   async submit() {
     if (this.data.serviceMissing || this.data.submitting || this.data.isCaptchaVerifying) return;
+    if (!this.data.phoneLoginEnabled) {
+      this.setData({ error: "当前未开放手机号注册" });
+      return;
+    }
 
     const phone = normalizeChinaMobile(this.data.phone);
     const password = String(this.data.password || "");

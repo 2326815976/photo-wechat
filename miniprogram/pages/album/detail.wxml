@@ -16,7 +16,7 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading && !album}}">
       <view class="loading-ring">
         <view class="ring ring--outer"></view>
         <view class="ring ring--inner"></view>
@@ -25,12 +25,12 @@
         </view>
       </view>
       <view class="loading-text">
-        <text class="loading-title">{{backendReconnecting ? '重连中...' : '加载中...'}}</text>
-        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在为你打开相册'}}</text>
+        <text class="loading-title">加载中...</text>
+        <text class="loading-desc">正在为你打开相册</text>
       </view>
     </view>
 
-    <view wx:if="{{!loading && album}}">
+    <view wx:if="{{album}}">
       <view class="notice motion-fade-up motion-delay-2" wx:if="{{showNotice && expiryNotice}}">
         <view class="notice-marquee">
           <view class="notice-track">
@@ -68,7 +68,7 @@
         </view>
 
         <view class="toolbar-tools" wx:if="{{photos.length > 0}}">
-          <button class="tool-btn tool-btn--select {{isSelectAll ? 'tool-btn--active' : ''}}" hover-class="tool-btn--touch" bindtap="toggleSelectAll">
+          <button class="tool-btn tool-btn--select {{isSelectAll ? 'tool-btn--active' : ''}}" hover-class="tool-btn--touch" bindtap="toggleSelectAll" disabled="{{batchLoading || switchingFolderLoading}}">
             <image
               class="tool-icon"
               src="{{isSelectAll ? '/images/icons/check-square-brown.svg' : '/images/icons/square-muted.svg'}}"
@@ -81,7 +81,7 @@
             class="tool-btn tool-btn--primary {{selectedCount > 0 ? 'tool-btn--primary-selected' : ''}}"
             hover-class="tool-btn--touch"
             bindtap="handleBatchDownload"
-            disabled="{{batchLoading}}"
+            disabled="{{batchLoading || switchingFolderLoading}}"
           >
             <image class="tool-icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
             <text wx:if="{{selectedCount > 0}}">下载</text>
@@ -94,12 +94,29 @@
             hover-class="tool-btn--touch"
             wx:if="{{selectedCount > 0}}"
             bindtap="handleBatchDelete"
-            disabled="{{batchLoading}}"
+            disabled="{{batchLoading || switchingFolderLoading}}"
           >
             <image class="tool-icon tool-icon--danger" src="/images/icons/trash-red.svg" mode="aspectFit" />
           </button>
         </view>
       </view>
+
+      <view class="gallery-content-shell">
+        <view class="album-overlay-loading" wx:if="{{switchingFolderLoading}}">
+          <view class="album-overlay-loading__card motion-pop-in">
+            <view class="loading-ring album-overlay-loading__ring">
+              <view class="ring ring--outer"></view>
+              <view class="ring ring--inner"></view>
+              <view class="ring-center">
+                <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+              </view>
+            </view>
+            <view class="loading-text album-overlay-loading__text">
+              <text class="loading-title">拾光中...</text>
+              <text class="loading-desc">正在切换当前照片分组</text>
+            </view>
+          </view>
+        </view>
 
       <view class="grid {{rightPhotos.length === 0 ? 'grid--single' : ''}} motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
         <view class="grid-col album-grid-col album-grid-col--left">
@@ -116,13 +133,45 @@
               <block wx:else>
                 <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
                   <image
-                    class="photo-img"
+                    class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
                     src="{{item.card_url_resolved}}"
                     mode="aspectFill"
                     lazy-load="{{true}}"
                     bindload="onPhotoLoad"
+                    binderror="onPhotoError"
                     data-id="{{item.id}}"
                   />
+                  <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
+                    <block wx:if="{{item._imageLoadFailed}}">
+                      <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
+                        <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
+                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                        </view>
+                        <text class="photo-img-loading-card__title">图片开小差了</text>
+                        <text class="photo-img-loading-card__desc">稍后再试试</text>
+                      </view>
+                    </block>
+                    <block wx:else>
+                      <view class="photo-img-loading-card__glow"></view>
+                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
+                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+                      </view>
+                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
+                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                      </view>
+                      <view class="photo-img-loading-card__center">
+                        <view class="photo-img-loading-card__camera-wrap">
+                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                        </view>
+                        <text class="photo-img-loading-card__title">拾光中...</text>
+                        <view class="photo-img-loading-card__dots">
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                        </view>
+                      </view>
+                    </block>
+                  </view>
                 </view>
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
@@ -167,13 +216,45 @@
               <block wx:else>
                 <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
                   <image
-                    class="photo-img"
+                    class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
                     src="{{item.card_url_resolved}}"
                     mode="aspectFill"
                     lazy-load="{{true}}"
                     bindload="onPhotoLoad"
+                    binderror="onPhotoError"
                     data-id="{{item.id}}"
                   />
+                  <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
+                    <block wx:if="{{item._imageLoadFailed}}">
+                      <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
+                        <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
+                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                        </view>
+                        <text class="photo-img-loading-card__title">图片开小差了</text>
+                        <text class="photo-img-loading-card__desc">稍后再试试</text>
+                      </view>
+                    </block>
+                    <block wx:else>
+                      <view class="photo-img-loading-card__glow"></view>
+                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
+                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+                      </view>
+                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
+                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                      </view>
+                      <view class="photo-img-loading-card__center">
+                        <view class="photo-img-loading-card__camera-wrap">
+                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                        </view>
+                        <text class="photo-img-loading-card__title">拾光中...</text>
+                        <view class="photo-img-loading-card__dots">
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
+                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                        </view>
+                      </view>
+                    </block>
+                  </view>
                 </view>
                 <view wx:else class="photo-img photo-img--empty"></view>
               </block>
@@ -222,6 +303,7 @@
       </view>
       <view class="end" wx:if="{{!hasMore && photos.length > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
+      </view>
       </view>
     </view>
   </view>
@@ -343,4 +425,3 @@
   </view>
 
 </view>
-

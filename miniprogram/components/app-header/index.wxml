@@ -7,11 +7,11 @@
     </view>
 
     <view class="title-wrap {{isHomePage ? 'title-wrap--home' : ''}}">
-      <text class="title {{isHomePage ? 'title--home' : ''}}">{{title}}</text>
+      <text class="title {{isHomePage ? 'title--home' : ''}}">{{displayedTitle}}</text>
     </view>
 
-    <view class="tag {{isHomePage ? 'tag--home' : ''}}" wx:if="{{subtitle}}">
-      <text class="tag-text">{{subtitle}}</text>
+    <view class="tag {{isHomePage ? 'tag--home' : ''}}" wx:if="{{displayedSubtitle}}">
+      <text class="tag-text">{{displayedSubtitle}}</text>
     </view>
   </view>
 </view>

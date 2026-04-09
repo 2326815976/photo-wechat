@@ -55,6 +55,7 @@ const {
 } = require("../../services/photo-admin-api");
 const { logout, requestJson } = require("../../services/photo-api");
 const { clearStoredCookie } = require("../../utils/auth");
+const { normalizeChinaMobile, isValidChinaMobile } = require("../../utils/phone");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const {
   saveTransientPageState,
@@ -127,9 +128,13 @@ const ADMIN_SECTION_META = {
     title: "发布版本 📦",
     desc: "管理应用安装包发布",
   },
-  beta: {
-    title: "内测管理 🧪",
-    desc: "管理功能内测版本与内测码",
+  webPages: {
+    title: "Web 页面管理",
+    desc: "管理 Web 端页面发布与入口",
+  },
+  miniprogramPages: {
+    title: "小程序页面管理",
+    desc: "管理小程序页面发布与入口",
   },
 };
 
@@ -142,7 +147,8 @@ const ADMIN_NAV_ITEMS = [
   { key: "albums", label: "专属空间管理", desc: "返图空间", icon: "💝" },
   { key: "about", label: "关于设置", desc: "作者信息", icon: "ℹ️" },
   { key: "releases", label: "发布版本", desc: "安装包发布", icon: "📦" },
-  { key: "beta", label: "内测管理", desc: "功能灰度", icon: "🧪" },
+  { key: "webPages", label: "Web 页面管理", desc: "Web 端页面发布与入口", icon: "🌐" },
+  { key: "miniprogramPages", label: "小程序页面管理", desc: "小程序页面发布与入口", icon: "📱" },
 ];
 
 const BOOKING_PANEL_TABS = [
@@ -157,6 +163,13 @@ const BOOKING_FILTER_OPTIONS = [
   { key: "in_progress", label: "进行中" },
   { key: "finished", label: "已完成" },
   { key: "cancelled", label: "已取消" },
+];
+const ALBUM_FILTER_OPTIONS = [
+  { key: "all", label: "全部" },
+  { key: "expiring", label: "即将到期" },
+  { key: "expired", label: "已过期" },
+  { key: "no_cover", label: "无封面" },
+  { key: "welcome_off", label: "欢迎信关闭" },
 ];
 const BETA_PRESET_ROUTE_OPTIONS = [
   { route_path: "/pages/index/index", route_title: "摆姿推荐" },
@@ -989,6 +1002,77 @@ function buildAlbumQrUrl(accessKey) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(link)}`;
 }
 
+function isValidEmailText(value) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+function sanitizeAboutSettings(input) {
+  const source = input && typeof input === "object" ? input : {};
+  const phoneRaw = String(source.phone || "").trim();
+  return {
+    id: Number(source.id || 0),
+    author_name: String(source.author_name || "").trim(),
+    phone: phoneRaw ? normalizeChinaMobile(phoneRaw) : "",
+    wechat: String(source.wechat || "").trim(),
+    email: String(source.email || "").trim(),
+    donation_qr_code: String(source.donation_qr_code || "").trim(),
+    author_message: String(source.author_message || "").trim(),
+  };
+}
+
+function buildAboutSummaryPatch(input) {
+  const settings = sanitizeAboutSettings(input);
+  const contactCount = [settings.phone, settings.wechat, settings.email].filter(Boolean).length;
+  const filledFieldCount = [
+    settings.author_name,
+    settings.phone,
+    settings.wechat,
+    settings.email,
+    settings.donation_qr_code,
+    settings.author_message,
+  ].filter(Boolean).length;
+  const messageLength = settings.author_message.length;
+  const ready = Boolean(settings.author_name && (contactCount > 0 || settings.author_message || settings.donation_qr_code));
+  return {
+    aboutSettings: settings,
+    aboutStatusText: ready ? "可直接展示" : "建议补充",
+    aboutStatusDesc: ready
+      ? "作者名和核心展示信息已经具备"
+      : "建议至少补齐作者名，并完善留言、联系方式或赞赏码",
+    aboutFilledFieldCount: filledFieldCount,
+    aboutContactCount: contactCount,
+    aboutMessageLength: messageLength,
+    aboutHasDonationQr: Boolean(settings.donation_qr_code),
+  };
+}
+
+function matchAlbumFilter(item, filterKey) {
+  const key = String(filterKey || "all").trim() || "all";
+  if (key === "expiring") return Boolean(item && item.expirySoon && !item.expired);
+  if (key === "expired") return Boolean(item && item.expired);
+  if (key === "no_cover") return !Boolean(item && item.hasCover);
+  if (key === "welcome_off") return !Boolean(item && item.enable_welcome_letter);
+  return true;
+}
+
+function matchAlbumKeyword(item, keyword) {
+  const normalizedKeyword = String(keyword || "").trim().toLowerCase();
+  if (!normalizedKeyword) return true;
+  const searchText = [
+    item && item.title,
+    item && item.access_key,
+    item && item.recipient_name,
+    item && item.welcome_letter,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return searchText.includes(normalizedKeyword);
+}
+
 function parseIsoDateOnly(value) {
   const raw = String(value || "").trim();
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -1052,6 +1136,27 @@ function formatScheduleWeekdayLabel(value) {
   return weeks[parts.weekday] || "";
 }
 
+function formatScheduleShortLabel(value) {
+  const date = parseIsoDateOnly(value);
+  if (!date) return "暂无";
+  const parts = getUTC8DateParts(date);
+  if (!parts) return "暂无";
+  return `${parts.month}/${parts.day}`;
+}
+
+function getTodayIsoDateOnly() {
+  const parts = getUTC8DateParts(new Date());
+  if (!parts) return "";
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
+function getIsoDateAfterDays(dayOffset) {
+  const shifted = new Date(Date.now() + Number(dayOffset || 0) * 24 * 60 * 60 * 1000);
+  const parts = getUTC8DateParts(shifted);
+  if (!parts) return "";
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
 function isDuplicateDateError(error) {
   const message = readErrorMessage(error, "").toLowerCase();
   return (
@@ -1074,6 +1179,31 @@ function createStatCard(key, title, value, icon, colorStart, colorEnd, subtitle)
   };
 }
 
+function mapStatsSourceLabel(source) {
+  const map = {
+    analytics_daily: "趋势快照",
+    app_releases: "版本发布",
+    booking_blackouts: "档期屏蔽",
+    booking_types: "预约类型",
+    pose_tags: "摆姿标签",
+    allowed_cities: "预约城市",
+    photo_comments: "照片评论",
+    user_active_logs: "活跃日志",
+  };
+  return map[String(source || "").trim()] || String(source || "").trim();
+}
+
+function createEmptyStatsMeta() {
+  return {
+    generatedAtText: "",
+    snapshotDateText: "",
+    trendCoverageText: "0/7 天",
+    statusText: "暂无统计快照",
+    statusTone: "muted",
+    unavailableSourcesText: "",
+  };
+}
+
 function createEmptyStatsView() {
   return {
     userCards: [],
@@ -1090,6 +1220,89 @@ function createEmptyStatsView() {
     trendNewUsers: [],
     trendActiveUsers: [],
     trendNewBookings: [],
+    meta: createEmptyStatsMeta(),
+  };
+}
+
+function buildStatsMeta(stats) {
+  const data = stats && typeof stats === "object" ? stats : {};
+  const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
+  const generatedAtText = formatDateTime(meta.generated_at);
+  const snapshotDateText = formatDateOnly(meta.snapshot_latest_date);
+  const trendDaysExpected = Math.max(0, toSafeNumber(meta.trend_days_expected, 7));
+  const trendDaysAvailable = Math.max(0, toSafeNumber(meta.trend_days_available, 0));
+  const snapshotLagDays = meta.snapshot_lag_days === null || meta.snapshot_lag_days === undefined
+    ? null
+    : Math.max(0, toSafeNumber(meta.snapshot_lag_days, 0));
+  const unavailableSources = Array.isArray(meta.unavailable_sources)
+    ? meta.unavailable_sources.map((item) => toSafeText(item, "")).filter(Boolean)
+    : [];
+  const unavailableSourcesText = unavailableSources.map(mapStatsSourceLabel).join("、");
+  const snapshotStatus = toSafeText(meta.snapshot_status, "");
+  const trendCoverageText = `${trendDaysAvailable}/${trendDaysExpected || 7} 天`;
+
+  if (unavailableSourcesText) {
+    return {
+      generatedAtText,
+      snapshotDateText,
+      trendCoverageText,
+      statusText: `部分统计源不可用：${unavailableSourcesText}`,
+      statusTone: "warning",
+      unavailableSourcesText,
+    };
+  }
+
+  if (snapshotStatus === "unavailable") {
+    return {
+      generatedAtText,
+      snapshotDateText,
+      trendCoverageText,
+      statusText: "趋势快照表不可用",
+      statusTone: "warning",
+      unavailableSourcesText,
+    };
+  }
+
+  if (snapshotStatus === "empty" || trendDaysAvailable <= 0) {
+    return {
+      generatedAtText,
+      snapshotDateText,
+      trendCoverageText,
+      statusText: "暂无趋势快照，建议执行维护任务",
+      statusTone: "muted",
+      unavailableSourcesText,
+    };
+  }
+
+  if (snapshotLagDays !== null && snapshotLagDays > 0) {
+    return {
+      generatedAtText,
+      snapshotDateText,
+      trendCoverageText,
+      statusText: `趋势快照落后 ${snapshotLagDays} 天，建议执行维护任务`,
+      statusTone: "warning",
+      unavailableSourcesText,
+    };
+  }
+
+  if (trendDaysExpected > 0 && trendDaysAvailable < trendDaysExpected) {
+    return {
+      generatedAtText,
+      snapshotDateText,
+      trendCoverageText,
+      statusText: `最近 ${trendDaysExpected} 天趋势仅覆盖 ${trendDaysAvailable} 天`,
+      statusTone: "warning",
+      unavailableSourcesText,
+    };
+  }
+
+  return {
+    generatedAtText,
+    snapshotDateText,
+    trendCoverageText,
+    statusText: "统计数据已同步",
+    statusTone: "fresh",
+    unavailableSourcesText,
   };
 }
 
@@ -1102,6 +1315,7 @@ function buildStatsView(stats) {
   const poses = data.poses || {};
   const system = data.system || {};
   const trends = data.trends || {};
+  const meta = buildStatsMeta(data);
 
   const bookingTypeStats = Array.isArray(bookings.types)
     ? bookings.types.map((item, index) => ({
@@ -1230,6 +1444,7 @@ function buildStatsView(stats) {
     trendNewUsers,
     trendActiveUsers,
     trendNewBookings,
+    meta,
   };
 }
 
@@ -1252,9 +1467,16 @@ Page({
     adminName: "",
     maintenanceRunning: false,
 
+    statsLoading: true,
+    statsRefreshing: false,
+    statsError: "",
+    statsReady: false,
     statsView: createEmptyStatsView(),
 
     blockedDatesLoading: false,
+    blockedDatesRefreshing: false,
+    blockedDatesError: "",
+    blockedDatesReady: false,
     blockedDates: [],
     scheduleRows: [],
     scheduleAddModalOpen: false,
@@ -1267,6 +1489,10 @@ Page({
     scheduleSelectedCount: 0,
     scheduleTotalCount: 0,
     scheduleAllSelected: false,
+    scheduleUpcomingCount: 0,
+    scheduleReasonCount: 0,
+    scheduleNearestDateLabel: "暂无",
+    scheduleNearestDateDesc: "当前没有未来锁定日期",
     scheduleActionLoading: false,
     scheduleDeleteConfirmOpen: false,
     scheduleDeletingTargetId: "",
@@ -1278,6 +1504,9 @@ Page({
     bookingFilter: "all",
     bookingKeyword: "",
     bookingsLoading: true,
+    bookingsRefreshing: false,
+    bookingsError: "",
+    bookingsReady: false,
     bookings: [],
     bookingFilteredList: [],
     bookingRows: [],
@@ -1292,6 +1521,8 @@ Page({
     bookingDeletableCount: 0,
     bookingPageDeletableCount: 0,
     bookingAllSelected: false,
+    bookingPendingCount: 0,
+    bookingActiveCount: 0,
     bookingBatchDeleteConfirmOpen: false,
     bookingBatchDeleting: false,
     bookingDeleteConfirmOpen: false,
@@ -1316,7 +1547,12 @@ Page({
     bookingTypeTogglingId: 0,
     bookingTypeDeletingId: 0,
     bookingTypesLoading: false,
+    bookingTypesRefreshing: false,
+    bookingTypesError: "",
+    bookingTypesReady: false,
     bookingTypes: [],
+    bookingTypeActiveCount: 0,
+    bookingTypeInactiveCount: 0,
     bookingTypeModalOpen: false,
     bookingTypeDeleteConfirmOpen: false,
     bookingTypeDeletingTargetId: 0,
@@ -1335,7 +1571,13 @@ Page({
     cityTogglingId: 0,
     cityDeletingId: 0,
     citiesLoading: false,
+    citiesRefreshing: false,
+    citiesError: "",
+    citiesReady: false,
     allowedCities: [],
+    cityActiveCount: 0,
+    cityInactiveCount: 0,
+    cityLocatedCount: 0,
     cityModalOpen: false,
     cityMapPickerOpen: false,
     cityDeleteConfirmOpen: false,
@@ -1355,9 +1597,18 @@ Page({
       donation_qr_code: "",
       author_message: "",
     },
+    aboutStatusText: "",
+    aboutStatusDesc: "",
+    aboutFilledFieldCount: 0,
+    aboutContactCount: 0,
+    aboutMessageLength: 0,
+    aboutHasDonationQr: false,
 
     poseCreating: false,
     posesLoading: true,
+    posesRefreshing: false,
+    posesError: "",
+    posesReady: false,
     poseFilePath: "",
     poseFileName: "",
     poseFileSize: 0,
@@ -1377,9 +1628,14 @@ Page({
     poseDeletingTargetId: 0,
     poseBatchDeleting: false,
     poseTagsLoading: false,
+    poseTagsRefreshing: false,
+    poseTagsError: "",
+    poseTagsReady: false,
     poseTags: [],
     poseSelectedTags: [],
     poseTagStats: [],
+    poseTagUsedCount: 0,
+    poseTagUnusedCount: 0,
     poseFormTagOptions: [],
     poseTagSelectionMode: false,
     poseTagSelectedIds: [],
@@ -1440,11 +1696,18 @@ Page({
     albumsLoading: false,
     albums: [],
     albumRows: [],
+    albumFilterOptions: ALBUM_FILTER_OPTIONS,
+    albumFilter: "all",
+    albumKeyword: "",
     albumSelectionMode: false,
     albumSelectedIds: [],
     albumSelectedCount: 0,
     albumTotalCount: 0,
     albumAllSelected: false,
+    albumSummaryTotalCount: 0,
+    albumExpiringCount: 0,
+    albumExpiredCount: 0,
+    albumNoCoverCount: 0,
     albumBatchDeleteConfirmOpen: false,
     albumBatchDeleting: false,
     albumActionLoading: false,
@@ -1571,6 +1834,13 @@ Page({
     const restoredDraft = loadTransientPageState(ADMIN_GALLERY_UPLOAD_DRAFT_KEY);
     const hasRestoredDraft = Boolean(restoredDraft && typeof restoredDraft === "object");
     this._restoredGalleryUploadDraft = hasRestoredDraft;
+    this._statsLoadedOnce = false;
+    this._blockedDatesLoadedOnce = false;
+    this._bookingsLoadedOnce = false;
+    this._bookingTypesLoadedOnce = false;
+    this._citiesLoadedOnce = false;
+    this._posesLoadedOnce = false;
+    this._poseTagsLoadedOnce = false;
     this.setData(Object.assign(
       { safeTop, headerOffsetPx, contentTopPx, serviceMissing },
       hasRestoredDraft ? {
@@ -1597,7 +1867,7 @@ Page({
       if (isForegroundReturn && this.shouldPreserveRuntimeStateOnForegroundReturn()) {
         if (this._restoredGalleryUploadDraft) {
           this._restoredGalleryUploadDraft = false;
-          this.showNotice("info", "已恢复未完成的图片上传草稿，请继续操作");
+          this.showNotice("info", "摆姿数据已部分刷新，其余内容请稍后重试");
         }
         return;
       }
@@ -1614,6 +1884,22 @@ Page({
   onPullDownRefresh() {
     if (this.data.serviceMissing) {
       wx.stopPullDownRefresh();
+      return;
+    }
+    if (!this.data.loading && this.data.activeSection === "stats") {
+      void this.refreshStatsSection({ silent: true, stopPullDown: true });
+      return;
+    }
+    if (!this.data.loading && this.data.activeSection === "poses") {
+      void this.refreshPoseSection({ silent: true, stopPullDown: true });
+      return;
+    }
+    if (!this.data.loading && this.data.activeSection === "schedule") {
+      void this.refreshScheduleSection({ silent: true, stopPullDown: true });
+      return;
+    }
+    if (!this.data.loading && this.data.activeSection === "bookings") {
+      void this.refreshBookingSection({ silent: true, stopPullDown: true });
       return;
     }
     void this.bootstrap();
@@ -2036,17 +2322,17 @@ Page({
       this.setData({ adminName });
 
       await Promise.all([
-        this.loadStats(),
-        this.loadBlockedDates(),
-        this.loadBookingTypes(),
-        this.loadAllowedCities(),
-        this.loadPoses(),
-        this.loadPoseTags(),
+        this.loadStats({ throwOnError: false }),
+        this.loadBlockedDates({ throwOnError: false }),
+        this.loadBookingTypes({ throwOnError: false }),
+        this.loadAllowedCities({ throwOnError: false }),
+        this.loadPoses({ throwOnError: false }),
+        this.loadPoseTags({ throwOnError: false }),
         this.loadGalleryPhotos(),
         this.loadAlbums(),
         this.loadReleases(),
         this.loadAboutSettings(),
-        this.loadRecentBookings(),
+        this.loadRecentBookings({ throwOnError: false }),
         this.loadBetaRoutes().catch(() => {}),
         this.loadBetaVersions().catch(() => {}),
       ]);
@@ -2069,15 +2355,89 @@ Page({
     }
   },
 
-  async loadStats() {
-    const stats = await getAdminDashboardStats();
+  async loadStats(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyStats = Boolean(this.data.statsReady);
+    const isFirstLoad = !this._statsLoadedOnce && !hasReadyStats;
+
     this.setData({
-      statsView: buildStatsView(stats),
+      statsLoading: isFirstLoad,
+      statsRefreshing: !isFirstLoad && hasReadyStats,
+      statsError: "",
     });
+
+    try {
+      const stats = await getAdminDashboardStats();
+      this._statsLoadedOnce = true;
+      this.setData({
+        statsLoading: false,
+        statsRefreshing: false,
+        statsError: "",
+        statsReady: true,
+        statsView: buildStatsView(stats),
+      });
+      return stats;
+    } catch (error) {
+      const message = readErrorMessage(error, "获取数据统计失败");
+      const patch = {
+        statsLoading: false,
+        statsRefreshing: false,
+        statsError: message,
+        statsReady: hasReadyStats,
+      };
+      if (!hasReadyStats) {
+        patch.statsView = createEmptyStatsView();
+      }
+      this.setData(patch);
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
+    }
   },
 
-  async loadBlockedDates() {
-    this.setData({ blockedDatesLoading: true });
+  async refreshStatsSection(options) {
+    const config = options && typeof options === "object" ? options : {};
+    try {
+      const stats = await this.loadStats({ throwOnError: false, showNotice: !config.silent });
+      if (stats && !config.silent) {
+        this.showNotice("success", "摆姿管理已刷新");
+      }
+    } finally {
+      if (config.stopPullDown) {
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+
+  onRefreshStats() {
+    if (
+      this.data.loading ||
+      this.data.statsLoading ||
+      this.data.statsRefreshing ||
+      this.data.maintenanceRunning
+    ) return;
+    void this.refreshStatsSection({ silent: false, stopPullDown: false });
+  },
+
+  async loadBlockedDates(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyDates = Boolean(this.data.blockedDatesReady);
+    const isFirstLoad = !this._blockedDatesLoadedOnce && !hasReadyDates;
+
+    this.setData({
+      blockedDatesLoading: isFirstLoad,
+      blockedDatesRefreshing: !isFirstLoad && hasReadyDates,
+      blockedDatesError: "",
+    });
+
     try {
       const rows = await listAdminBlockedDates();
       const list = (Array.isArray(rows) ? rows : [])
@@ -2095,23 +2455,96 @@ Page({
         .filter((item) => item.id && item.date)
         .sort((a, b) => String(a.date).localeCompare(String(b.date), "zh-CN"));
 
+      this._blockedDatesLoadedOnce = true;
       this.setData(
         {
           blockedDatesLoading: false,
+          blockedDatesRefreshing: false,
+          blockedDatesError: "",
+          blockedDatesReady: true,
           blockedDates: list,
         },
         () => {
           this.refreshScheduleModuleView();
         }
       );
+      return { ok: true, message: "", list };
     } catch (error) {
-      this.setData({ blockedDatesLoading: false });
-      throw error;
+      const message = readErrorMessage(error, "加载档期失败");
+      const patch = {
+        blockedDatesLoading: false,
+        blockedDatesRefreshing: false,
+        blockedDatesError: message,
+        blockedDatesReady: hasReadyDates,
+      };
+      if (!hasReadyDates) {
+        patch.blockedDates = [];
+      }
+      this.setData(patch, () => {
+        this.refreshScheduleModuleView();
+      });
+      if (shouldShowNotice) {
+        this.showNotice(hasReadyDates ? "warning" : "error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return { ok: false, message };
     }
   },
 
+  async refreshScheduleMutationDependencies() {
+    const scheduleResult = await this.loadBlockedDates({ throwOnError: false, showNotice: false });
+    const stats = await this.loadStats({ throwOnError: false, showNotice: false });
+    const warnings = [];
+    if (!scheduleResult || scheduleResult.ok !== true) {
+      warnings.push(`列表刷新失败：${scheduleResult && scheduleResult.message ? scheduleResult.message : "请稍后手动刷新"}`);
+    }
+    if (!stats) {
+      warnings.push("数据统计刷新失败，请稍后手动刷新");
+    }
+    return { scheduleResult, warnings };
+  },
+
+  async refreshScheduleSection(options) {
+    const config = options && typeof options === "object" ? options : {};
+    try {
+      const result = await this.loadBlockedDates({ throwOnError: false, showNotice: false });
+      if (result && result.ok) {
+        if (!config.silent) {
+          this.showNotice("success", "档期列表已刷新");
+        }
+        return result;
+      }
+      if (!config.silent) {
+        this.showNotice(this.data.blockedDatesReady ? "warning" : "error", result && result.message ? result.message : "加载档期失败");
+      }
+      return result;
+    } finally {
+      if (config.stopPullDown) {
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+
+  onRefreshScheduleSection() {
+    if (
+      this.data.loading ||
+      this.data.blockedDatesLoading ||
+      this.data.blockedDatesRefreshing ||
+      this.data.scheduleSubmitting ||
+      this.data.scheduleBatchDeleting ||
+      this.data.scheduleActionLoading ||
+      this.data.maintenanceRunning
+    ) return;
+    void this.refreshScheduleSection({ silent: false, stopPullDown: false });
+  },
+
   refreshScheduleModuleView() {
+
     const rows = Array.isArray(this.data.blockedDates) ? this.data.blockedDates : [];
+    const today = getTodayIsoDateOnly();
+    const upcomingDeadline = getIsoDateAfterDays(6);
     const validIds = rows.map((item) => String((item && item.id) || "")).filter(Boolean);
     const validSet = new Set(validIds);
 
@@ -2136,6 +2569,12 @@ Page({
     const totalCount = rows.length;
     const selectedCount = selectedIds.length;
     const allSelected = totalCount > 0 && selectedCount === totalCount;
+    const upcomingCount = rows.filter((item) => {
+      const date = String((item && item.date) || "").trim();
+      return Boolean(date) && (!today || date >= today) && (!upcomingDeadline || date <= upcomingDeadline);
+    }).length;
+    const reasonCount = rows.filter((item) => String((item && item.reason) || "").trim().length > 0).length;
+    const nearestItem = rows[0] || null;
 
     const patch = {
       scheduleRows,
@@ -2143,6 +2582,12 @@ Page({
       scheduleSelectedCount: selectedCount,
       scheduleTotalCount: totalCount,
       scheduleAllSelected: allSelected,
+      scheduleUpcomingCount: upcomingCount,
+      scheduleReasonCount: reasonCount,
+      scheduleNearestDateLabel: nearestItem ? formatScheduleShortLabel(nearestItem.date) : "暂无",
+      scheduleNearestDateDesc: nearestItem
+        ? `${nearestItem.dateLabel} · ${nearestItem.weekdayLabel}`
+        : "当前没有未来锁定日期",
     };
 
     if (this.data.scheduleSelectionMode && totalCount <= 0) {
@@ -2156,8 +2601,18 @@ Page({
     this.setData(patch);
   },
 
-  async loadBookingTypes() {
-    this.setData({ bookingTypesLoading: true });
+  async loadBookingTypes(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyTypes = Boolean(this.data.bookingTypesReady);
+    const isFirstLoad = !this._bookingTypesLoadedOnce && !hasReadyTypes;
+
+    this.setData({
+      bookingTypesLoading: isFirstLoad,
+      bookingTypesRefreshing: !isFirstLoad && hasReadyTypes,
+      bookingTypesError: "",
+    });
     try {
       const rows = await listAdminBookingTypes();
       const list = (Array.isArray(rows) ? rows : [])
@@ -2177,15 +2632,54 @@ Page({
         })
         .filter((item) => item.id > 0);
 
-      this.setData({ bookingTypesLoading: false, bookingTypes: list });
+      const bookingTypeActiveCount = list.filter((item) => Boolean(item.is_active)).length;
+      this._bookingTypesLoadedOnce = true;
+      this.setData({
+        bookingTypesLoading: false,
+        bookingTypesRefreshing: false,
+        bookingTypesError: "",
+        bookingTypesReady: true,
+        bookingTypes: list,
+        bookingTypeActiveCount,
+        bookingTypeInactiveCount: Math.max(0, list.length - bookingTypeActiveCount),
+      });
+      return list;
     } catch (error) {
-      this.setData({ bookingTypesLoading: false });
-      throw error;
+      const message = readErrorMessage(error, "加载预约类型失败");
+      const patch = {
+        bookingTypesLoading: false,
+        bookingTypesRefreshing: false,
+        bookingTypesError: message,
+        bookingTypesReady: hasReadyTypes,
+      };
+      if (!hasReadyTypes) {
+        patch.bookingTypes = [];
+        patch.bookingTypeActiveCount = 0;
+        patch.bookingTypeInactiveCount = 0;
+      }
+      this.setData(patch);
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
     }
   },
 
-  async loadAllowedCities() {
-    this.setData({ citiesLoading: true });
+  async loadAllowedCities(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyCities = Boolean(this.data.citiesReady);
+    const isFirstLoad = !this._citiesLoadedOnce && !hasReadyCities;
+
+    this.setData({
+      citiesLoading: isFirstLoad,
+      citiesRefreshing: !isFirstLoad && hasReadyCities,
+      citiesError: "",
+    });
     try {
       const rows = await listAdminAllowedCities(200);
       const list = (Array.isArray(rows) ? rows : [])
@@ -2224,10 +2718,46 @@ Page({
         })
         .filter((item) => item.id > 0);
 
-      this.setData({ citiesLoading: false, allowedCities: list });
+      const cityActiveCount = list.filter((item) => Boolean(item.is_active)).length;
+      const cityLocatedCount = list.filter((item) => {
+        const latitude = Number(item && item.latitude);
+        const longitude = Number(item && item.longitude);
+        return Number.isFinite(latitude) && Number.isFinite(longitude);
+      }).length;
+      this._citiesLoadedOnce = true;
+      this.setData({
+        citiesLoading: false,
+        citiesRefreshing: false,
+        citiesError: "",
+        citiesReady: true,
+        allowedCities: list,
+        cityActiveCount,
+        cityInactiveCount: Math.max(0, list.length - cityActiveCount),
+        cityLocatedCount,
+      });
+      return list;
     } catch (error) {
-      this.setData({ citiesLoading: false });
-      throw error;
+      const message = readErrorMessage(error, "加载城市配置失败");
+      const patch = {
+        citiesLoading: false,
+        citiesRefreshing: false,
+        citiesError: message,
+        citiesReady: hasReadyCities,
+      };
+      if (!hasReadyCities) {
+        patch.allowedCities = [];
+        patch.cityActiveCount = 0;
+        patch.cityInactiveCount = 0;
+        patch.cityLocatedCount = 0;
+      }
+      this.setData(patch);
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
     }
   },
 
@@ -2236,17 +2766,18 @@ Page({
     try {
       const row = await getAdminAboutSettings();
       const donationQrRaw = String((row && row.donation_qr_code) || "").trim();
+      const patch = buildAboutSummaryPatch({
+        id: Number((row && row.id) || 0),
+        author_name: String((row && row.author_name) || "").trim(),
+        phone: String((row && row.phone) || "").trim(),
+        wechat: String((row && row.wechat) || "").trim(),
+        email: String((row && row.email) || "").trim(),
+        donation_qr_code: donationQrRaw ? resolvePublicUrl(donationQrRaw) : "",
+        author_message: String((row && row.author_message) || "").trim(),
+      });
       this.setData({
         aboutLoading: false,
-        aboutSettings: {
-          id: Number((row && row.id) || 0),
-          author_name: String((row && row.author_name) || "").trim(),
-          phone: String((row && row.phone) || "").trim(),
-          wechat: String((row && row.wechat) || "").trim(),
-          email: String((row && row.email) || "").trim(),
-          donation_qr_code: donationQrRaw ? resolvePublicUrl(donationQrRaw) : "",
-          author_message: String((row && row.author_message) || "").trim(),
-        },
+        ...patch,
       });
     } catch (error) {
       this.setData({ aboutLoading: false });
@@ -2261,7 +2792,8 @@ Page({
         : "";
     if (!field) return;
     const value = e && e.detail ? e.detail.value : "";
-    this.setData({ [`aboutSettings.${field}`]: value });
+    const nextSettings = Object.assign({}, this.data.aboutSettings || {}, { [field]: value });
+    this.setData(buildAboutSummaryPatch(nextSettings));
   },
 
   onOpenAboutDonationModal() {
@@ -2286,7 +2818,7 @@ Page({
         const file = res && Array.isArray(res.tempFiles) ? res.tempFiles[0] : null;
         const filePath = String((file && file.tempFilePath) || "").trim();
         if (!filePath) {
-          this.showNotice("error", "选择赞赏码失败，请重试");
+          this.showNotice("error", "读取赞赏码图片失败，请稍后重试");
           return;
         }
         const fileName = pickFileNameFromPath(filePath, `about_donation_${Date.now()}.jpg`);
@@ -2295,9 +2827,12 @@ Page({
           const result = await uploadAdminAboutDonationQr(filePath, fileName);
           const uploadedUrlRaw = String((result && result.about && result.about.donation_qr_code) || "").trim();
           const uploadedUrl = uploadedUrlRaw ? resolvePublicUrl(uploadedUrlRaw) : "";
+          const nextSettings = Object.assign({}, this.data.aboutSettings || {}, {
+            donation_qr_code: uploadedUrl,
+          });
           this.setData({
-            "aboutSettings.donation_qr_code": uploadedUrl,
             aboutDonationModalOpen: false,
+            ...buildAboutSummaryPatch(nextSettings),
           });
           if (result && result.storageCleanupFailed) {
             this.showNotice("info", `赞赏码已上传，但旧文件清理失败：${result.warning || "请稍后处理"}`);
@@ -2328,9 +2863,12 @@ Page({
       const result = await clearAdminAboutDonationQr();
       const savedQrRaw = String((result && result.about && result.about.donation_qr_code) || "").trim();
       const savedQr = savedQrRaw ? resolvePublicUrl(savedQrRaw) : "";
+      const nextSettings = Object.assign({}, this.data.aboutSettings || {}, {
+        donation_qr_code: savedQr,
+      });
       this.setData({
-        "aboutSettings.donation_qr_code": savedQr,
         aboutDonationModalOpen: false,
+        ...buildAboutSummaryPatch(nextSettings),
       });
       if (result && result.storageCleanupFailed) {
         this.showNotice("info", `赞赏码已清空，但旧文件清理失败：${result.warning || "请稍后处理"}`);
@@ -2348,9 +2886,22 @@ Page({
   async onSaveAboutSettings() {
     if (this.data.aboutSaving || this.data.aboutLoading || this.data.aboutDonationUploading) return;
 
-    this.setData({ aboutSaving: true });
+    const nextSettings = sanitizeAboutSettings(this.data.aboutSettings || {});
+    if (nextSettings.phone && !isValidChinaMobile(nextSettings.phone)) {
+      this.showNotice("error", "请输入正确的手机号");
+      return;
+    }
+    if (nextSettings.email && !isValidEmailText(nextSettings.email)) {
+      this.showNotice("error", "请输入正确的邮箱地址");
+      return;
+    }
+
+    this.setData({
+      aboutSaving: true,
+      ...buildAboutSummaryPatch(nextSettings),
+    });
     try {
-      await saveAdminAboutSettings(this.data.aboutSettings || {});
+      await saveAdminAboutSettings(nextSettings);
       this.showNotice("success", "关于信息已保存");
       await this.safeRefresh([this.loadAboutSettings()], "关于信息已保存");
     } catch (error) {
@@ -2970,8 +3521,19 @@ Page({
     });
   },
 
-  async loadPoses() {
-    this.setData({ posesLoading: true });
+  async loadPoses(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyPoses = Boolean(this.data.posesReady);
+    const isFirstLoad = !this._posesLoadedOnce && !hasReadyPoses;
+
+    this.setData({
+      posesLoading: isFirstLoad,
+      posesRefreshing: !isFirstLoad && hasReadyPoses,
+      posesError: "",
+    });
+
     try {
       const rows = await listAdminPoses(500);
       const list = (Array.isArray(rows) ? rows : []).map((row) => {
@@ -2992,23 +3554,65 @@ Page({
         };
       });
 
+      this._posesLoadedOnce = true;
       this.setData(
         {
           poses: list,
           posesLoading: false,
+          posesRefreshing: false,
+          posesError: "",
+          posesReady: true,
         },
         () => {
           this.refreshPoseModuleView();
         }
       );
+      return list;
     } catch (error) {
-      this.setData({ posesLoading: false });
-      throw error;
+      const message = readErrorMessage(error, "获取摆姿列表失败");
+      const patch = {
+        posesLoading: false,
+        posesRefreshing: false,
+        posesError: message,
+        posesReady: hasReadyPoses,
+      };
+      if (!hasReadyPoses) {
+        patch.poses = [];
+      }
+      this.setData(patch, () => {
+        if (!hasReadyPoses) {
+          this.refreshPoseModuleView();
+        }
+      });
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
     }
   },
 
-  async loadPoseTags(showErrorNotice = false) {
-    this.setData({ poseTagsLoading: true });
+  async loadPoseTags(showErrorNoticeOrOptions, maybeOptions) {
+    const legacyShowErrorNotice = typeof showErrorNoticeOrOptions === "boolean" ? showErrorNoticeOrOptions : false;
+    const config =
+      showErrorNoticeOrOptions && typeof showErrorNoticeOrOptions === "object"
+        ? showErrorNoticeOrOptions
+        : maybeOptions && typeof maybeOptions === "object"
+          ? maybeOptions
+          : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = legacyShowErrorNotice || Boolean(config.showNotice);
+    const hasReadyTags = Boolean(this.data.poseTagsReady);
+    const isFirstLoad = !this._poseTagsLoadedOnce && !hasReadyTags;
+
+    this.setData({
+      poseTagsLoading: isFirstLoad,
+      poseTagsRefreshing: !isFirstLoad && hasReadyTags,
+      poseTagsError: "",
+    });
+
     try {
       const rows = await listAdminPoseTags(200);
       const list = (Array.isArray(rows) ? rows : [])
@@ -3029,22 +3633,86 @@ Page({
         })
         .filter((item) => item.id > 0 && item.name);
 
+      this._poseTagsLoadedOnce = true;
       this.setData(
         {
           poseTagsLoading: false,
+          poseTagsRefreshing: false,
+          poseTagsError: "",
+          poseTagsReady: true,
           poseTags: list,
         },
         () => {
           this.refreshPoseModuleView();
         }
       );
+      return list;
     } catch (error) {
-      this.setData({ poseTagsLoading: false });
-      if (showErrorNotice) {
-        this.showNotice("error", readErrorMessage(error, "获取标签失败"));
+      const message = readErrorMessage(error, "获取标签失败");
+      const patch = {
+        poseTagsLoading: false,
+        poseTagsRefreshing: false,
+        poseTagsError: message,
+        poseTagsReady: hasReadyTags,
+      };
+      if (!hasReadyTags) {
+        patch.poseTags = [];
       }
-      throw error;
+      this.setData(patch, () => {
+        if (!hasReadyTags) {
+          this.refreshPoseModuleView();
+        }
+      });
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
     }
+  },
+
+  async refreshPoseSection(options) {
+    const config = options && typeof options === "object" ? options : {};
+    try {
+      const results = await Promise.all([
+        this.loadPoses({ throwOnError: false }),
+        this.loadPoseTags({ throwOnError: false }),
+      ]);
+      if (!config.silent) {
+        const successCount = results.filter(Boolean).length;
+        if (successCount === results.length) {
+          this.showNotice("success", "摆姿管理已刷新");
+        } else if (successCount > 0) {
+          this.showNotice("info", "摆姿数据已部分刷新，其余内容请稍后重试");
+        } else {
+          this.showNotice("error", "摆姿数据刷新失败，请稍后重试");
+        }
+      }
+    } finally {
+      if (config.stopPullDown) {
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+
+  onRefreshPoseSection() {
+    if (
+      this.data.loading ||
+      this.data.posesLoading ||
+      this.data.posesRefreshing ||
+      this.data.poseTagsLoading ||
+      this.data.poseTagsRefreshing ||
+      this.data.poseCreating ||
+      this.data.poseBatchDeleting ||
+      this.data.poseTagCreating ||
+      this.data.poseTagUpdating ||
+      this.data.poseTagBatchDeleting ||
+      this.data.poseTagSortingId ||
+      this.data.maintenanceRunning
+    ) return;
+    void this.refreshPoseSection({ silent: false, stopPullDown: false });
   },
 
   refreshPoseModuleView() {
@@ -3115,6 +3783,8 @@ Page({
         canMoveDown: !virtual && index < rawTagStats.length - 1,
       });
     });
+    const poseTagUsedCount = poseTagStats.filter((item) => Number(item && item.usage_count) > 0).length;
+    const poseTagUnusedCount = Math.max(0, poseTagStats.length - poseTagUsedCount);
 
     const poseTagAllSelected =
       poseTagStats.length > 0 &&
@@ -3137,6 +3807,8 @@ Page({
 
     this.setData({
       poseTagStats,
+      poseTagUsedCount,
+      poseTagUnusedCount,
       poseFilteredList: filteredRows,
       posePagedList: pagedRows,
       poseCurrentPage: currentPage,
@@ -4104,9 +4776,14 @@ Page({
   },
 
   refreshAlbumModuleView() {
-    const rows = Array.isArray(this.data.albums) ? this.data.albums : [];
+    const sourceRows = Array.isArray(this.data.albums) ? this.data.albums : [];
+    const rows = sourceRows.filter(
+      (item) => matchAlbumFilter(item, this.data.albumFilter) && matchAlbumKeyword(item, this.data.albumKeyword)
+    );
     const validIds = rows.map((item) => String((item && item.id) || "")).filter(Boolean);
     const validSet = new Set(validIds);
+    const allValidIds = sourceRows.map((item) => String((item && item.id) || "")).filter(Boolean);
+    const allValidSet = new Set(allValidIds);
     const selectedRaw = Array.isArray(this.data.albumSelectedIds) ? this.data.albumSelectedIds : [];
     const selectedMap = new Map();
     selectedRaw.forEach((item) => {
@@ -4120,6 +4797,10 @@ Page({
     const totalCount = rows.length;
     const selectedCount = selectedIds.length;
     const allSelected = totalCount > 0 && selectedCount === totalCount;
+    const summaryTotalCount = sourceRows.length;
+    const expiringCount = sourceRows.filter((item) => Boolean(item && item.expirySoon && !item.expired)).length;
+    const expiredCount = sourceRows.filter((item) => Boolean(item && item.expired)).length;
+    const noCoverCount = sourceRows.filter((item) => !Boolean(item && item.hasCover)).length;
 
     const patch = {
       albumRows: rows.map((item) =>
@@ -4131,27 +4812,31 @@ Page({
       albumSelectedCount: selectedCount,
       albumTotalCount: totalCount,
       albumAllSelected: allSelected,
+      albumSummaryTotalCount: summaryTotalCount,
+      albumExpiringCount: expiringCount,
+      albumExpiredCount: expiredCount,
+      albumNoCoverCount: noCoverCount,
     };
     if (this.data.albumBatchDeleteConfirmOpen && selectedCount <= 0) {
       patch.albumBatchDeleteConfirmOpen = false;
     }
 
     const deletingId = String(this.data.albumDeletingTargetId || "").trim();
-    if (this.data.albumDeleteConfirmOpen && deletingId && !validSet.has(deletingId) && !this.data.albumActionLoading) {
+    if (this.data.albumDeleteConfirmOpen && deletingId && !allValidSet.has(deletingId) && !this.data.albumActionLoading) {
       patch.albumDeleteConfirmOpen = false;
       patch.albumDeletingTargetId = "";
       patch.albumDeletingTargetTitle = "";
     }
 
     const editingTitleId = String(this.data.albumEditingTitleId || "").trim();
-    if (this.data.albumTitleModalOpen && editingTitleId && !validSet.has(editingTitleId) && !this.data.albumTitleSaving) {
+    if (this.data.albumTitleModalOpen && editingTitleId && !allValidSet.has(editingTitleId) && !this.data.albumTitleSaving) {
       patch.albumTitleModalOpen = false;
       patch.albumEditingTitleId = "";
       patch.albumEditingTitleValue = "";
     }
 
     const editingKeyId = String(this.data.albumEditingKeyId || "").trim();
-    if (this.data.albumKeyModalOpen && editingKeyId && !validSet.has(editingKeyId) && !this.data.albumKeySaving) {
+    if (this.data.albumKeyModalOpen && editingKeyId && !allValidSet.has(editingKeyId) && !this.data.albumKeySaving) {
       patch.albumKeyModalOpen = false;
       patch.albumEditingKeyId = "";
       patch.albumEditingKeyTitle = "";
@@ -4162,7 +4847,7 @@ Page({
     if (
       this.data.albumRecipientModalOpen &&
       editingRecipientId &&
-      !validSet.has(editingRecipientId) &&
+      !allValidSet.has(editingRecipientId) &&
       !this.data.albumRecipientSaving
     ) {
       patch.albumRecipientModalOpen = false;
@@ -4176,7 +4861,7 @@ Page({
     if (
       this.data.albumExpiryModalOpen &&
       editingExpiryId &&
-      !validSet.has(editingExpiryId) &&
+      !allValidSet.has(editingExpiryId) &&
       !this.data.albumExpirySaving
     ) {
       patch.albumExpiryModalOpen = false;
@@ -4188,18 +4873,18 @@ Page({
     }
 
     const coverUpdatingId = String(this.data.albumCoverUpdatingId || "").trim();
-    if (coverUpdatingId && !validSet.has(coverUpdatingId)) {
+    if (coverUpdatingId && !allValidSet.has(coverUpdatingId)) {
       patch.albumCoverUpdatingId = "";
     }
 
     const donationUpdatingId = String(this.data.albumDonationUpdatingId || "").trim();
-    if (donationUpdatingId && !validSet.has(donationUpdatingId)) {
+    if (donationUpdatingId && !allValidSet.has(donationUpdatingId)) {
       patch.albumDonationUpdatingId = "";
     }
 
     const coverTargetId = String(this.data.albumCoverTargetId || "").trim();
     if (this.data.albumCoverModalOpen && coverTargetId) {
-      const coverTarget = rows.find((item) => String((item && item.id) || "") === coverTargetId) || null;
+      const coverTarget = sourceRows.find((item) => String((item && item.id) || "") === coverTargetId) || null;
       if (!coverTarget) {
         patch.albumCoverModalOpen = false;
         patch.albumCoverTargetId = "";
@@ -4213,7 +4898,7 @@ Page({
 
     const donationTargetId = String(this.data.albumDonationTargetId || "").trim();
     if (this.data.albumDonationModalOpen && donationTargetId) {
-      const donationTarget = rows.find((item) => String((item && item.id) || "") === donationTargetId) || null;
+      const donationTarget = sourceRows.find((item) => String((item && item.id) || "") === donationTargetId) || null;
       if (!donationTarget) {
         patch.albumDonationModalOpen = false;
         patch.albumDonationTargetId = "";
@@ -4232,7 +4917,7 @@ Page({
         patch.albumQrAccessKey = "";
         patch.albumQrImageUrl = "";
       } else {
-        const stillExists = rows.some((item) => normalizeAlbumAccessKey(item && item.access_key) === qrAccessKey);
+        const stillExists = sourceRows.some((item) => normalizeAlbumAccessKey(item && item.access_key) === qrAccessKey);
         if (!stillExists) {
           patch.albumQrModalOpen = false;
           patch.albumQrAccessKey = "";
@@ -4252,6 +4937,30 @@ Page({
     }
 
     this.setData(patch);
+  },
+
+  onAlbumFilterChange(e) {
+    const nextFilter =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.key || "all")
+        : "all";
+    this.setData({ albumFilter: nextFilter || "all" }, () => {
+      this.refreshAlbumModuleView();
+    });
+  },
+
+  onAlbumKeywordInput(e) {
+    const value = e && e.detail ? String(e.detail.value || "") : "";
+    this.setData({ albumKeyword: value }, () => {
+      this.refreshAlbumModuleView();
+    });
+  },
+
+  onClearAlbumKeyword() {
+    if (!this.data.albumKeyword) return;
+    this.setData({ albumKeyword: "" }, () => {
+      this.refreshAlbumModuleView();
+    });
   },
 
   async loadReleases() {
@@ -4286,8 +4995,18 @@ Page({
     }
   },
 
-  async loadRecentBookings() {
-    this.setData({ bookingsLoading: true });
+  async loadRecentBookings(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyBookings = Boolean(this.data.bookingsReady);
+    const isFirstLoad = !this._bookingsLoadedOnce && !hasReadyBookings;
+
+    this.setData({
+      bookingsLoading: isFirstLoad,
+      bookingsRefreshing: !isFirstLoad && hasReadyBookings,
+      bookingsError: "",
+    });
     try {
       const rows = await listAdminRecentBookings(200);
       const list = (Array.isArray(rows) ? rows : []).map((row) => {
@@ -4311,8 +5030,8 @@ Page({
           bookingDateDisplay: String((row && row.booking_date) || ""),
           locationDisplay: location || "未填写地点",
           cityDisplay: cityName,
-          phoneDisplay: phone || "未填写",
-          wechatDisplay: wechat || "未填写",
+          phoneDisplay: phone || "未填写手机号",
+          wechatDisplay: wechat || "未填写微信号",
           notesDisplay: notes,
           status,
           statusText: toStatusBadgeLabel(status),
@@ -4336,19 +5055,132 @@ Page({
         item.searchText = buildBookingSearchText(item);
       });
 
+      this._bookingsLoadedOnce = true;
       this.setData(
         {
           bookingsLoading: false,
+          bookingsRefreshing: false,
+          bookingsError: "",
+          bookingsReady: true,
           bookings: list,
         },
         () => {
           this.refreshBookingModuleView();
         }
       );
+      return list;
     } catch (error) {
-      this.setData({ bookingsLoading: false });
-      throw error;
+      const message = readErrorMessage(error, "加载预约列表失败");
+      const patch = {
+        bookingsLoading: false,
+        bookingsRefreshing: false,
+        bookingsError: message,
+        bookingsReady: hasReadyBookings,
+      };
+      if (!hasReadyBookings) {
+        patch.bookings = [];
+      }
+      this.setData(patch, () => {
+        if (!hasReadyBookings) {
+          this.refreshBookingModuleView();
+        }
+      });
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return null;
     }
+  },
+
+  async refreshBookingSection(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const silent = Boolean(config.silent);
+    const stopPullDown = config.stopPullDown !== false;
+    const panelTab = String(this.data.bookingPanelTab || "bookings");
+    const hasReadyData =
+      panelTab === "types"
+        ? Boolean(this.data.bookingTypesReady)
+        : panelTab === "cities"
+          ? Boolean(this.data.citiesReady)
+          : Boolean(this.data.bookingsReady);
+
+    try {
+      let result = null;
+      let successText = "预约模块已刷新";
+      let emptyFailText = "预约模块加载失败，请稍后重试";
+      let staleFailText = "预约模块刷新失败，已保留当前内容，请稍后重试";
+      if (panelTab === "types") {
+        result = await this.loadBookingTypes({ throwOnError: false });
+        successText = "预约类型已刷新";
+        emptyFailText = "预约类型加载失败，请稍后重试";
+        staleFailText = "预约类型刷新失败，已保留当前内容，请稍后重试";
+      } else if (panelTab === "cities") {
+        result = await this.loadAllowedCities({ throwOnError: false });
+        successText = "可预约城市已刷新";
+        emptyFailText = "城市配置加载失败，请稍后重试";
+        staleFailText = "城市配置刷新失败，已保留当前内容，请稍后重试";
+      } else {
+        result = await this.loadRecentBookings({ throwOnError: false });
+        successText = "预约列表已刷新";
+        emptyFailText = "预约列表加载失败，请稍后重试";
+        staleFailText = "预约列表刷新失败，已保留当前内容，请稍后重试";
+      }
+
+      const success = result !== null;
+      if (!silent) {
+        if (success) {
+          this.showNotice("success", successText);
+        } else if (hasReadyData) {
+          this.showNotice("warning", staleFailText);
+        } else {
+          this.showNotice("error", emptyFailText);
+        }
+      }
+      return success;
+    } finally {
+      if (stopPullDown) {
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+
+  onRefreshBookingSection() {
+    const panelTab = String(this.data.bookingPanelTab || "bookings");
+    if (panelTab === "types") {
+      if (
+        this.data.bookingTypesLoading ||
+        this.data.bookingTypesRefreshing ||
+        this.data.bookingTypeSaving ||
+        this.data.bookingTypeTogglingId !== 0 ||
+        this.data.bookingTypeDeletingId !== 0
+      ) {
+        return;
+      }
+    } else if (panelTab === "cities") {
+      if (
+        this.data.citiesLoading ||
+        this.data.citiesRefreshing ||
+        this.data.citySaving ||
+        this.data.cityTogglingId !== 0 ||
+        this.data.cityDeletingId !== 0
+      ) {
+        return;
+      }
+    } else if (
+      this.data.bookingsLoading ||
+      this.data.bookingsRefreshing ||
+      this.data.bookingActionLoading ||
+      this.data.bookingBatchDeleting ||
+      this.data.bookingSelectionMode ||
+      this.data.bookingUpdatingId
+    ) {
+      return;
+    }
+
+    void this.refreshBookingSection({ silent: false, stopPullDown: false });
   },
 
   refreshBookingModuleView() {
@@ -4362,6 +5194,11 @@ Page({
       const searchText = String((item && item.searchText) || "").trim() || buildBookingSearchText(item);
       return searchText.includes(keyword);
     });
+    const pendingCount = filtered.filter((item) => String((item && item.status) || "") === "pending").length;
+    const activeCount = filtered.filter((item) => {
+      const status = String((item && item.status) || "");
+      return status === "pending" || status === "confirmed" || status === "in_progress";
+    }).length;
 
     const deletableIds = filtered
       .filter((item) => isBookingDeletable(item && item.status))
@@ -4416,6 +5253,8 @@ Page({
       bookingTotalPages: totalPages,
       bookingSelectedIds: selectedIds,
       bookingSelectedCount: selectedCount,
+      bookingPendingCount: pendingCount,
+      bookingActiveCount: activeCount,
       bookingDeletableCount: deletableCount,
       bookingPageDeletableCount: pageDeletableCount,
       bookingAllSelected: allSelected,
@@ -4630,8 +5469,13 @@ Page({
 
     const startDate = String(this.data.scheduleStartDate || "").trim();
     const endDate = String(this.data.scheduleEndDate || "").trim();
+    const today = getTodayIsoDateOnly();
     if (!startDate) {
       this.showNotice("error", "请选择开始日期");
+      return;
+    }
+    if (today && startDate < today) {
+      this.showNotice("error", "不能锁定今天之前的日期");
       return;
     }
 
@@ -4646,10 +5490,10 @@ Page({
     }
 
     this.setData({ scheduleSubmitting: true });
+    let createdCount = 0;
+    let duplicatedCount = 0;
     try {
       const reason = String(this.data.scheduleReason || "").trim();
-      let createdCount = 0;
-      let duplicatedCount = 0;
 
       for (let i = 0; i < dates.length; i += 1) {
         const date = dates[i];
@@ -4665,7 +5509,6 @@ Page({
         }
       }
 
-      let refreshWarning = "";
       if (createdCount > 0) {
         this.setData({
           scheduleAddModalOpen: false,
@@ -4673,39 +5516,58 @@ Page({
           scheduleEndDate: "",
           scheduleReason: "",
         });
-        try {
-          await Promise.all([this.loadBlockedDates(), this.loadStats()]);
-        } catch (refreshError) {
-          refreshWarning = readErrorMessage(refreshError, "请稍后手动刷新");
-        }
-      } else {
-        try {
-          await this.loadBlockedDates();
-        } catch (refreshError) {
-          refreshWarning = readErrorMessage(refreshError, "请稍后手动刷新");
-        }
       }
 
-      if (createdCount > 0 && duplicatedCount > 0) {
-        const suffix = refreshWarning ? `；列表刷新失败：${refreshWarning}` : "";
-        this.showNotice("success", `已锁定 ${createdCount} 天，跳过 ${duplicatedCount} 个已存在日期${suffix}`);
-      } else if (createdCount > 0) {
-        const suffix = refreshWarning ? `；列表刷新失败：${refreshWarning}` : "";
-        this.showNotice("success", `档期已锁定${suffix}`);
-      } else if (duplicatedCount > 0) {
-        const suffix = refreshWarning ? `；列表刷新失败：${refreshWarning}` : "";
-        this.showNotice("info", `所选日期均已锁定，无需重复添加${suffix}`);
+      if (createdCount > 0 || duplicatedCount > 0) {
+        const refreshOutcome = await this.refreshScheduleMutationDependencies();
+        const warnings = Array.isArray(refreshOutcome.warnings) ? refreshOutcome.warnings : [];
+        const suffix = warnings.length > 0 ? `；${warnings.join("；")}` : "";
+
+        if (createdCount > 0 && duplicatedCount > 0) {
+          this.showNotice(warnings.length > 0 ? "warning" : "success", `已锁定 ${createdCount} 天，跳过 ${duplicatedCount} 个已存在日期${suffix}`);
+        } else if (createdCount > 0) {
+          this.showNotice(warnings.length > 0 ? "warning" : "success", `档期已锁定${suffix}`);
+        } else {
+          this.showNotice(warnings.length > 0 ? "warning" : "info", `所选日期均已锁定，无需重复添加${suffix}`);
+        }
       } else {
         this.showNotice("error", "添加档期失败，请稍后重试");
       }
     } catch (error) {
-      this.showNotice("error", readErrorMessage(error, "新增锁定档期失败"));
+      const errorMessage = readErrorMessage(error, "新增锁定档期失败");
+      if (createdCount > 0) {
+        this.setData({
+          scheduleAddModalOpen: false,
+          scheduleStartDate: "",
+          scheduleEndDate: "",
+          scheduleReason: "",
+        });
+      }
+      if (createdCount > 0 || duplicatedCount > 0) {
+        const refreshOutcome = await this.refreshScheduleMutationDependencies();
+        const warnings = Array.isArray(refreshOutcome.warnings) ? refreshOutcome.warnings : [];
+        const parts = [];
+        if (createdCount > 0) {
+          parts.push(`已锁定 ${createdCount} 天`);
+        }
+        if (duplicatedCount > 0) {
+          parts.push(`跳过 ${duplicatedCount} 个已存在日期`);
+        }
+        parts.push(`其余添加失败：${errorMessage}`);
+        if (warnings.length > 0) {
+          parts.push(...warnings);
+        }
+        this.showNotice("warning", parts.join("；"));
+      } else {
+        this.showNotice("error", errorMessage);
+      }
     } finally {
       this.setData({ scheduleSubmitting: false });
     }
   },
 
   onEnterScheduleSelectionMode() {
+
     if (this.data.scheduleBatchDeleting || this.data.scheduleActionLoading) return;
     if (!this.data.scheduleTotalCount) return;
     this.setData(
@@ -4815,8 +5677,10 @@ Page({
         scheduleDeletingTargetId: "",
         scheduleDeletingTargetDate: "",
       });
-      this.showNotice("success", "档期锁定已删除");
-      await this.safeRefresh([this.loadBlockedDates(), this.loadStats()], "档期锁定已删除");
+      const refreshOutcome = await this.refreshScheduleMutationDependencies();
+      const warnings = Array.isArray(refreshOutcome.warnings) ? refreshOutcome.warnings : [];
+      const suffix = warnings.length > 0 ? `；${warnings.join("；")}` : "";
+      this.showNotice(warnings.length > 0 ? "warning" : "success", `档期锁定已删除${suffix}`);
     } catch (error) {
       this.setData({
         scheduleDeleteConfirmOpen: false,
@@ -4830,6 +5694,7 @@ Page({
   },
 
   onOpenScheduleBatchDeleteConfirm() {
+
     if (!this.data.scheduleSelectionMode || this.data.scheduleBatchDeleting) return;
     if (!this.data.scheduleSelectedCount) {
       this.showNotice("error", "请先选择要删除的档期");
@@ -4883,18 +5748,14 @@ Page({
     );
 
     if (deletedCount > 0) {
-      let refreshWarning = "";
-      try {
-        await Promise.all([this.loadBlockedDates(), this.loadStats()]);
-      } catch (refreshError) {
-        refreshWarning = readErrorMessage(refreshError, "请稍后手动刷新");
-      }
+      const refreshOutcome = await this.refreshScheduleMutationDependencies();
+      const warnings = Array.isArray(refreshOutcome.warnings) ? refreshOutcome.warnings : [];
+      const suffix = warnings.length > 0 ? `；${warnings.join("；")}` : "";
+      const noticeType = warnings.length > 0 || failedCount > 0 ? "warning" : "success";
       if (failedCount > 0) {
-        const suffix = refreshWarning ? `；列表刷新失败：${refreshWarning}` : "";
-        this.showNotice("info", `成功删除 ${deletedCount} 个档期锁定，失败 ${failedCount} 个${suffix}`);
+        this.showNotice(noticeType, `成功删除 ${deletedCount} 个档期锁定，失败 ${failedCount} 个${suffix}`);
       } else {
-        const suffix = refreshWarning ? `；列表刷新失败：${refreshWarning}` : "";
-        this.showNotice("success", `成功删除 ${deletedCount} 个档期锁定${suffix}`);
+        this.showNotice(noticeType, `成功删除 ${deletedCount} 个档期锁定${suffix}`);
       }
     } else {
       this.showNotice("error", "批量删除档期锁定失败，请稍后重试");
@@ -4902,6 +5763,7 @@ Page({
   },
 
   onOpenGalleryUploadModal() {
+
     if (this.data.galleryUploadSubmitting || this.data.galleryBatchDeleting || this.data.galleryActionLoading) {
       return;
     }
@@ -8352,3 +9214,4 @@ Page({
 
 
 });
+
