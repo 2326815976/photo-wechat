@@ -21,6 +21,7 @@ const PAGE_SIZE = 20;
 const GALLERY_LOAD_AHEAD_PX = 260;
 const GALLERY_VIEWPORT_FILL_BUFFER_PX = 48;
 const GALLERY_INITIAL_AUTOFILL_MAX_BATCHES = 2;
+const GALLERY_SWITCH_OVERLAY_TRACK_COUNT = 6;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
 const GALLERY_CACHE_TTL = 30 * 60 * 1000;
 const ROOT_FOLDER_ID = "__ROOT__";
@@ -99,6 +100,19 @@ function normalizeMaybeText(value) {
     return "";
   }
   return raw;
+}
+
+function normalizeGalleryFolderId(folderId) {
+  const rawFolderId = String(folderId == null ? "" : folderId).trim();
+  const normalizedLower = rawFolderId.toLowerCase();
+  if (!rawFolderId || rawFolderId === ROOT_FOLDER_ID || normalizedLower === "root") {
+    return ROOT_FOLDER_ID;
+  }
+  return rawFolderId;
+}
+
+function doesPhotoBelongToGalleryFolder(photo, folderId) {
+  return normalizeGalleryFolderId(photo && photo.folder_id) === normalizeGalleryFolderId(folderId);
 }
 
 function resolvePhotoLocationText(photo) {
@@ -489,6 +503,7 @@ Page({
 
     loading: true,
     switchingFolderLoading: false,
+    pendingSwitchPhotoIds: [],
     loadingMore: false,
     hasMore: true,
 
@@ -540,6 +555,7 @@ Page({
   loadingNextPage: false,
   galleryLoadZoneArmed: true,
   galleryAutoFillRemaining: GALLERY_INITIAL_AUTOFILL_MAX_BATCHES,
+  galleryLoadTicket: 0,
   tagGuideTimer: null,
   tagWaveTimer: null,
   tagWaveRunToken: 0,
@@ -577,6 +593,7 @@ Page({
     this.loadingNextPage = false;
     this.galleryLoadZoneArmed = true;
     this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.galleryLoadTicket = 0;
     this._galleryBootstrapped = false;
     const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     // 首次进入页面时也需要展示一次引导：将“已见序号”回退一位，确保首帧可触发。
@@ -710,12 +727,18 @@ Page({
     if (shouldForceRefresh) {
       this.resetGalleryStateForRefresh();
       void this.refreshLoginState();
-      void this.loadPage(1, { silent: false });
+      void this.loadPage(1, {
+        silent: false,
+        folderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+      });
       return;
     }
 
     void this.refreshLoginState();
-    void this.loadPage(1, { silent: true });
+    void this.loadPage(1, {
+      silent: true,
+      folderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+    });
   },
 
   onUnload() {
@@ -724,6 +747,7 @@ Page({
     this.clearTagGuideTimer();
     this.clearTagWaveTimer();
     this.loadingNextPage = false;
+    this.galleryLoadTicket += 1;
     this._galleryBootstrapped = false;
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
@@ -921,6 +945,7 @@ Page({
     this.loadingNextPage = false;
     this.galleryLoadZoneArmed = true;
     this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.galleryLoadTicket += 1;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
 
@@ -928,6 +953,7 @@ Page({
       selectedFolder: nextId,
       loading: false,
       switchingFolderLoading: true,
+      pendingSwitchPhotoIds: [],
       loadingMore: false,
       hasMore: true,
       pageNo: 1,
@@ -944,7 +970,7 @@ Page({
       // ignore
     }
 
-    void this.loadPage(1, { keepCurrentContent: true });
+    void this.loadPage(1, { keepCurrentContent: true, folderId: nextId });
   },
 
   toggleStory(e) {
@@ -984,6 +1010,7 @@ Page({
     this.loadingNextPage = false;
     this.galleryLoadZoneArmed = true;
     this.galleryAutoFillRemaining = GALLERY_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.galleryLoadTicket += 1;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
 
@@ -991,6 +1018,7 @@ Page({
       pageNo: 1,
       total: 0,
       hasMore: true,
+      pendingSwitchPhotoIds: [],
       sourcePhotos: [],
       photos: [],
       left: [],
@@ -1002,7 +1030,10 @@ Page({
   async bootstrap() {
     await this.refreshLoginState();
     const hasCachedPhotos = Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0;
-    await this.loadPage(1, { silent: hasCachedPhotos });
+    await this.loadPage(1, {
+      silent: hasCachedPhotos,
+      folderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+    });
   },
 
   async refreshLoginState() {
@@ -1061,8 +1092,9 @@ Page({
     const filterMode = String(this.data.filterMode || "all");
     const filterDateStart = normalizeDateOnlyText(this.data.filterDateStart);
     const filterDateEnd = normalizeDateOnlyText(this.data.filterDateEnd);
+    const selectedFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
 
-    let viewRows = source;
+    let viewRows = source.filter((photo) => doesPhotoBelongToGalleryFolder(photo, selectedFolderId));
     if (filterDateStart || filterDateEnd) {
       viewRows = viewRows.filter((photo) => {
         const photoDate = this.getPhotoDateText(photo);
@@ -1373,7 +1405,9 @@ Page({
     this.loadingNextPage = true;
     this.galleryLoadZoneArmed = false;
     const nextPage = Number(this.data.pageNo || 1) + 1;
-    Promise.resolve(this.loadPage(nextPage))
+    Promise.resolve(this.loadPage(nextPage, {
+      folderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+    }))
       .finally(() => {
         this.loadingNextPage = false;
         this.scheduleScrollMetricsRefresh(120);
@@ -1476,11 +1510,22 @@ Page({
 
     const current = this.findPhotoById(id);
     if (current && (!current._imageLoaded || current._imageLoadFailed)) {
-      this.updatePhoto(id, (photo) => Object.assign({}, photo, {
+      this.patchPhotoVisualState(id, (photo) => Object.assign({}, photo, {
         _imageLoaded: true,
         _imageLoadFailed: false,
-      }), { skipPersist: true });
+      }));
     }
+    this.markPendingSwitchPhotoSettled(id);
+
+    const stablePhoto = current || this.findPhotoById(id);
+    const hasStableStoredRatio = Boolean(
+      stablePhoto
+      && (
+        Number(stablePhoto.__ratio || 0) > 0
+        || (Number(stablePhoto.width || 0) > 0 && Number(stablePhoto.height || 0) > 0)
+      )
+    );
+    if (hasStableStoredRatio) return;
 
     const detail = (e && e.detail) || {};
     const width = Number(detail.width || 0);
@@ -1521,10 +1566,29 @@ Page({
     const current = this.findPhotoById(id);
     if (!current || current._imageLoadFailed) return;
 
-    this.updatePhoto(id, (photo) => Object.assign({}, photo, {
+    this.patchPhotoVisualState(id, (photo) => Object.assign({}, photo, {
       _imageLoaded: false,
       _imageLoadFailed: true,
-    }), { skipPersist: true });
+    }));
+    this.markPendingSwitchPhotoSettled(id);
+  },
+
+  markPendingSwitchPhotoSettled(photoId) {
+    const normalizedPhotoId = String(photoId || "").trim();
+    if (!normalizedPhotoId) return;
+
+    const pendingSwitchPhotoIds = Array.isArray(this.data.pendingSwitchPhotoIds)
+      ? this.data.pendingSwitchPhotoIds
+      : [];
+    if (!pendingSwitchPhotoIds.includes(normalizedPhotoId)) {
+      return;
+    }
+
+    const nextPendingSwitchPhotoIds = pendingSwitchPhotoIds.filter((currentPhotoId) => currentPhotoId !== normalizedPhotoId);
+    this.setData({
+      pendingSwitchPhotoIds: nextPendingSwitchPhotoIds,
+      switchingFolderLoading: nextPendingSwitchPhotoIds.length > 0,
+    });
   },
 
   persistGalleryCache(opts, sourceRows, totalOverride) {
@@ -1551,6 +1615,13 @@ Page({
 
     const silent = Boolean(opts && opts.silent);
     const keepCurrentContent = Boolean(opts && opts.keepCurrentContent);
+    const targetFolderId = String(
+      (opts && opts.folderId) || this.data.selectedFolder || ROOT_FOLDER_ID
+    ).trim() || ROOT_FOLDER_ID;
+    const ticket = Number(this.galleryLoadTicket || 0) + 1;
+    this.galleryLoadTicket = ticket;
+    const shouldTrackSwitchOverlay = pageNo === 1 && keepCurrentContent;
+    let nextPendingSwitchPhotoIds = null;
     if (pageNo === 1) {
       if (!silent && !keepCurrentContent) {
         this.setData({ loading: true });
@@ -1563,14 +1634,21 @@ Page({
       const r = await dbRpc("get_public_gallery", {
         page_no: pageNo,
         page_size: PAGE_SIZE,
-        folder_id: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+        folder_id: targetFolderId,
       });
+
+      if (ticket !== this.galleryLoadTicket) {
+        return false;
+      }
+      if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+        return false;
+      }
 
       if (r && r.error) {
         if (!(pageNo === 1 && silent)) {
           wx.showToast({ title: r.error.message || "加载失败", icon: "none" });
         }
-        return;
+        return false;
       }
 
       const payload = (r && r.data) || {};
@@ -1578,7 +1656,7 @@ Page({
         if (!(pageNo === 1 && silent)) {
           wx.showToast({ title: readRpcFailureMessage(payload, "加载失败"), icon: "none" });
         }
-        return;
+        return false;
       }
       const rows = extractGalleryRows(payload);
       const rootFolderName = readRootFolderName(payload);
@@ -1607,15 +1685,34 @@ Page({
         ? photos.length >= PAGE_SIZE && loadedCount < total
         : photos.length >= PAGE_SIZE;
 
+      if (pageNo === 1) {
+        nextPendingSwitchPhotoIds = shouldTrackSwitchOverlay
+          ? Array.from(
+            new Set(
+              mergedSource
+                .slice(0, GALLERY_SWITCH_OVERLAY_TRACK_COUNT)
+                .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
+                .map((photo) => String((photo && photo.id) || "").trim())
+                .filter(Boolean)
+            )
+          )
+          : [];
+      }
+
+      const nextData = {
+        pageNo,
+        total,
+        hasMore,
+        rootFolderName,
+        folders,
+        sourcePhotos: mergedSource,
+      };
+      if (pageNo === 1) {
+        nextData.pendingSwitchPhotoIds = nextPendingSwitchPhotoIds;
+      }
+
       this.setData(
-        {
-          pageNo,
-          total,
-          hasMore,
-          rootFolderName,
-          folders,
-          sourcePhotos: mergedSource,
-        },
+        nextData,
         () => {
           if (this._pendingTagGuideOnAppEntry) {
             this.triggerTagGuideForEntry();
@@ -1624,12 +1721,33 @@ Page({
       );
 
       this.persistGalleryCache({ writeStorage: pageNo === 1 }, mergedSource, total);
+      return true;
     } catch (e) {
+      if (ticket !== this.galleryLoadTicket) {
+        return false;
+      }
+      if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+        return false;
+      }
+      if (pageNo === 1) {
+        nextPendingSwitchPhotoIds = [];
+        this.setData({ pendingSwitchPhotoIds: [] });
+      }
       if (!(pageNo === 1 && silent)) {
         wx.showToast({ title: "加载失败", icon: "none" });
       }
+      return false;
     } finally {
-      this.setData({ loading: false, switchingFolderLoading: false, loadingMore: false }, () => {
+      if (ticket !== this.galleryLoadTicket) {
+        return false;
+      }
+      if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+        return false;
+      }
+      const shouldKeepSwitchOverlay = shouldTrackSwitchOverlay
+        ? Boolean(Array.isArray(nextPendingSwitchPhotoIds) && nextPendingSwitchPhotoIds.length > 0)
+        : false;
+      this.setData({ loading: false, switchingFolderLoading: shouldKeepSwitchOverlay, loadingMore: false }, () => {
         if (this._pendingTagGuideOnAppEntry) {
           this.triggerTagGuideForEntry();
         }
@@ -1644,6 +1762,50 @@ Page({
   findPhotoById(id) {
     const photos = this.data.photos || [];
     return photos.find((p) => String(p.id) === String(id)) || null;
+  },
+
+  patchPhotoVisualState(id, updater) {
+    const targetId = String(id || "");
+    if (!targetId || typeof updater !== "function") return;
+
+    const patchList = (list) => {
+      if (!Array.isArray(list) || list.length === 0) {
+        return { nextList: list, changed: false };
+      }
+
+      let changed = false;
+      const nextList = list.map((photo) => {
+        if (String((photo && photo.id) || "") !== targetId) {
+          return photo;
+        }
+        const nextPhoto = updater(photo);
+        if (nextPhoto !== photo) {
+          changed = true;
+        }
+        return nextPhoto;
+      });
+
+      return { nextList, changed };
+    };
+
+    const sourceResult = patchList(this.data.sourcePhotos || []);
+    const photosResult = patchList(this.data.photos || []);
+    const leftResult = patchList(this.data.left || []);
+    const rightResult = patchList(this.data.right || []);
+    const preview = this.data.previewPhoto;
+    const nextPreview = preview && String(preview.id) === targetId ? updater(preview) : preview;
+
+    if (!sourceResult.changed && !photosResult.changed && !leftResult.changed && !rightResult.changed && nextPreview === preview) {
+      return;
+    }
+
+    const nextData = {};
+    if (sourceResult.changed) nextData.sourcePhotos = sourceResult.nextList;
+    if (photosResult.changed) nextData.photos = photosResult.nextList;
+    if (leftResult.changed) nextData.left = leftResult.nextList;
+    if (rightResult.changed) nextData.right = rightResult.nextList;
+    if (nextPreview !== preview) nextData.previewPhoto = nextPreview;
+    this.setData(nextData);
   },
 
   openPhotoFullscreenById(id) {

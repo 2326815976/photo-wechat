@@ -1,3 +1,4 @@
+<page-meta page-style="{{(switchingFolderLoading || pendingFolderPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
 <view class="page">
   <app-header
     id="albumHeader"
@@ -50,7 +51,7 @@
             <view class="folder-guide-tip__arrow"></view>
           </view>
 
-          <scroll-view class="toolbar-folders" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
+          <scroll-view class="toolbar-folders" scroll-x="{{!(switchingFolderLoading || pendingFolderPhotoIds.length > 0)}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
             <view class="folders-row">
               <button
                 class="folder-btn {{selectedFolder === item.id ? 'folder-btn--active' : ''}} {{folderWaveActiveIndex === index ? (folderWaveTick === 1 ? 'folder-btn--wave-a' : 'folder-btn--wave-b') : ''}}"
@@ -60,6 +61,7 @@
                 wx:key="id"
                 data-id="{{item.id}}"
                 bindtap="selectFolder"
+                disabled="{{switchingFolderLoading || pendingFolderPhotoIds.length > 0}}"
               >
                 {{item.name}}
               </button>
@@ -102,7 +104,7 @@
       </view>
 
       <view class="gallery-content-shell">
-        <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading}}">
+        <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingFolderPhotoIds.length > 0}}" catchtouchmove="noop">
           <view class="loading-ring album-overlay-loading__ring">
             <view class="ring ring--outer"></view>
             <view class="ring ring--inner"></view>

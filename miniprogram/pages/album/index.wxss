@@ -193,7 +193,7 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 16rpx;
 }
@@ -203,11 +203,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10rpx;
+  justify-content: space-between;
+  min-height: 112rpx;
 }
 
 .album-title {
-  font-size: 31rpx;
+  font-size: 34rpx;
   font-weight: 900;
   color: #5D4037;
   line-height: 1.24;
@@ -231,7 +232,8 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 12rpx;
+  justify-content: space-between;
+  min-height: 112rpx;
 }
 
 .album-expiry-badge {
@@ -677,17 +679,21 @@
 }
 
 .album-action-btn--danger {
-  border: 2rpx solid rgba(239, 68, 68, 0.20);
-  background: #FFFFFF;
+  width: 60rpx;
+  min-width: 60rpx;
+  padding: 0;
+  border: none;
+  background: rgba(239, 68, 68, 0.05);
+  color: #DC2626;
 }
 
 .album-action-btn--danger-active {
   transform: scale(0.96);
-  background: #FEF2F2;
+  background: rgba(239, 68, 68, 0.10);
 }
 
 .album-action-btn--disabled {
-  opacity: 0.6;
+  opacity: 0.42;
 }
 
 .album-action-btn__text {
@@ -709,6 +715,19 @@
 .album-action-btn__icon--danger {
   width: 24rpx;
   height: 24rpx;
+}
+
+.album-action-btn__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 28rpx;
+  line-height: 1;
+}
+
+.album-action-btn__glyph--danger {
+  color: #DC2626;
 }
 
 .album-action-btn__icon--enter {

@@ -72,9 +72,8 @@
                     data-album-id="{{item.id}}"
                     disabled="{{unbindingAlbumId === item.id}}"
                   >
-                    <image class="album-action-btn__icon album-action-btn__icon--danger" src="/images/icons/unlink-red.svg" mode="aspectFit" />
-                    <text class="album-action-btn__text album-action-btn__text--danger">
-                      {{unbindingAlbumId === item.id ? '解绑中' : '解绑'}}
+                    <text class="album-action-btn__glyph album-action-btn__glyph--danger">
+                      {{unbindingAlbumId === item.id ? '…' : '🗑️'}}
                     </text>
                   </button>
 

@@ -10,6 +10,7 @@ const {
 } = require("../../utils/stable-waterfall");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
+const ALBUM_SWITCH_OVERLAY_TRACK_COUNT = 6;
 const SHARE_TITLE = "「拾光谣」相册分享";
 
 function parseDateTimeUTC8(value) {
@@ -441,6 +442,7 @@ Page({
     loading: true,
     loadingMore: false,
     switchingFolderLoading: false,
+    pendingFolderPhotoIds: [],
     hasMore: false,
     pageNo: 0,
     total: 0,
@@ -919,11 +921,22 @@ Page({
 
     const current = this.findPhotoById(id);
     if (current && (!current._imageLoaded || current._imageLoadFailed)) {
-      this.updatePhotoById(id, (photo) => Object.assign({}, photo, {
+      this.patchPhotoVisualState(id, (photo) => Object.assign({}, photo, {
         _imageLoaded: true,
         _imageLoadFailed: false,
       }));
     }
+    this.markPendingFolderPhotoSettled(id);
+
+    const stablePhoto = current || this.findPhotoById(id);
+    const hasStableStoredRatio = Boolean(
+      stablePhoto
+      && (
+        Number(stablePhoto.__ratio || 0) > 0
+        || (Number(stablePhoto.width || 0) > 0 && Number(stablePhoto.height || 0) > 0)
+      )
+    );
+    if (hasStableStoredRatio) return;
 
     const detail = (e && e.detail) || {};
     const width = Number(detail.width || 0);
@@ -964,10 +977,29 @@ Page({
     const current = this.findPhotoById(id);
     if (!current || current._imageLoadFailed) return;
 
-    this.updatePhotoById(id, (photo) => Object.assign({}, photo, {
+    this.patchPhotoVisualState(id, (photo) => Object.assign({}, photo, {
       _imageLoaded: false,
       _imageLoadFailed: true,
     }));
+    this.markPendingFolderPhotoSettled(id);
+  },
+
+  markPendingFolderPhotoSettled(photoId) {
+    const normalizedPhotoId = String(photoId || "").trim();
+    if (!normalizedPhotoId) return;
+
+    const pendingFolderPhotoIds = Array.isArray(this.data.pendingFolderPhotoIds)
+      ? this.data.pendingFolderPhotoIds
+      : [];
+    if (!pendingFolderPhotoIds.includes(normalizedPhotoId)) {
+      return;
+    }
+
+    const nextPendingFolderPhotoIds = pendingFolderPhotoIds.filter((currentPhotoId) => currentPhotoId !== normalizedPhotoId);
+    this.setData({
+      pendingFolderPhotoIds: nextPendingFolderPhotoIds,
+      switchingFolderLoading: nextPendingFolderPhotoIds.length > 0,
+    });
   },
 
   startFolderWaveAnimation() {
@@ -1195,6 +1227,47 @@ Page({
     return (this.data.allPhotos || []).find((x) => String(x.id) === String(id)) || null;
   },
 
+  patchPhotoVisualState(id, updater) {
+    const targetId = String(id || "");
+    if (!targetId || typeof updater !== "function") return;
+
+    const patchList = (list) => {
+      if (!Array.isArray(list) || list.length === 0) {
+        return { nextList: list, changed: false };
+      }
+
+      let changed = false;
+      const nextList = list.map((photo) => {
+        if (String((photo && photo.id) || "") !== targetId) {
+          return photo;
+        }
+        const nextPhoto = updater(photo);
+        if (nextPhoto !== photo) {
+          changed = true;
+        }
+        return nextPhoto;
+      });
+
+      return { nextList, changed };
+    };
+
+    const allResult = patchList(this.data.allPhotos || []);
+    const photosResult = patchList(this.data.photos || []);
+    const leftResult = patchList(this.data.leftPhotos || []);
+    const rightResult = patchList(this.data.rightPhotos || []);
+
+    if (!allResult.changed && !photosResult.changed && !leftResult.changed && !rightResult.changed) {
+      return;
+    }
+
+    const nextData = {};
+    if (allResult.changed) nextData.allPhotos = allResult.nextList;
+    if (photosResult.changed) nextData.photos = photosResult.nextList;
+    if (leftResult.changed) nextData.leftPhotos = leftResult.nextList;
+    if (rightResult.changed) nextData.rightPhotos = rightResult.nextList;
+    this.setData(nextData, () => this.refreshSelectionMeta());
+  },
+
   updatePhotoById(id, updater) {
     const nextAll = (this.data.allPhotos || []).map((photo) => {
       if (String(photo.id) !== String(id)) return photo;
@@ -1378,6 +1451,7 @@ Page({
             loading: true,
             loadingMore: false,
             hasMore: true,
+            pendingFolderPhotoIds: [],
             pageNo: 0,
             total: 0,
             showWelcomeLetter,
@@ -1419,7 +1493,7 @@ Page({
       await this.loadPhotoPage(ROOT_FOLDER_ID, 1, { reset: true, silent: false });
     } catch (e) {
       wx.showToast({ title: "加载失败", icon: "none" });
-      this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false });
+      this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false, pendingFolderPhotoIds: [] });
     }
   },
 
@@ -1443,6 +1517,7 @@ Page({
     await new Promise((resolve) => this.setData({
       selectedFolder: id,
       switchingFolderLoading: true,
+      pendingFolderPhotoIds: [],
       loadingMore: false,
       hasMore: true,
       pageNo: 0,
@@ -1472,6 +1547,7 @@ Page({
       await new Promise((resolve) => this.setData({
         selectedFolder: previousId,
         switchingFolderLoading: false,
+        pendingFolderPhotoIds: [],
       }, () => {
         this.applyFilter();
         resolve();
@@ -1493,6 +1569,7 @@ Page({
     const skipWave = Boolean(opts && opts.skipWave);
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const nextPageNo = toPageNumber(pageNo, 1);
+    let nextPendingFolderPhotoIds = null;
 
     if (reset) {
       this.clearCachedFullPhotosForFolder(targetFolderId);
@@ -1573,18 +1650,40 @@ Page({
       if (!hasMore) {
         this.cacheFullPhotosForFolder(targetFolderId, mergedRows);
       }
+      if (reset) {
+        nextPendingFolderPhotoIds = silent
+          ? Array.from(
+            new Set(
+              mergedRows
+                .slice(0, ALBUM_SWITCH_OVERLAY_TRACK_COUNT)
+                .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
+                .map((photo) => String((photo && photo.id) || "").trim())
+                .filter(Boolean)
+            )
+          )
+          : [];
+      }
+
+      const nextData = {
+        allPhotos: mergedRows,
+        pageNo: nextPageNo,
+        total,
+        hasMore,
+      };
+      if (reset) {
+        nextData.pendingFolderPhotoIds = nextPendingFolderPhotoIds;
+      }
 
       this.setData(
-        {
-          allPhotos: mergedRows,
-          pageNo: nextPageNo,
-          total,
-          hasMore,
-        },
+        nextData,
         () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
       );
       return true;
     } catch (e) {
+      if (reset && nextPendingFolderPhotoIds !== null) {
+        nextPendingFolderPhotoIds = [];
+        this.setData({ pendingFolderPhotoIds: [] });
+      }
       if (!(reset && silent)) {
         wx.showToast({ title: "加载失败", icon: "none" });
       }
@@ -1592,7 +1691,10 @@ Page({
       if (ticket === this.photoLoadTicket) {
         const shouldPlayWaveOnVisible =
           !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
-        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false }, () => {
+        const shouldKeepSwitchOverlay = reset && silent
+          ? Boolean(Array.isArray(nextPendingFolderPhotoIds) && nextPendingFolderPhotoIds.length > 0)
+          : false;
+        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: shouldKeepSwitchOverlay }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {
@@ -1613,6 +1715,7 @@ Page({
     const skipWave = Boolean(opts && opts.skipWave);
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const nextPageNo = toPageNumber(pageNo, 1);
+    let nextPendingFolderPhotoIds = null;
 
     if (reset) {
       this.clearCachedFullPhotosForFolder(targetFolderId);
@@ -1672,13 +1775,32 @@ Page({
       const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
       this.cacheFullPhotosForFolder(targetFolderId, fullRows);
 
+      if (reset) {
+        nextPendingFolderPhotoIds = silent
+          ? Array.from(
+            new Set(
+              mergedRows
+                .slice(0, ALBUM_SWITCH_OVERLAY_TRACK_COUNT)
+                .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
+                .map((photo) => String((photo && photo.id) || "").trim())
+                .filter(Boolean)
+            )
+          )
+          : [];
+      }
+
+      const nextData = {
+        allPhotos: mergedRows,
+        pageNo: nextPageNo,
+        total,
+        hasMore,
+      };
+      if (reset) {
+        nextData.pendingFolderPhotoIds = nextPendingFolderPhotoIds;
+      }
+
       this.setData(
-        {
-          allPhotos: mergedRows,
-          pageNo: nextPageNo,
-          total,
-          hasMore,
-        },
+        nextData,
         () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
       );
       return true;
@@ -1690,7 +1812,10 @@ Page({
       if (ticket === this.photoLoadTicket) {
         const shouldPlayWaveOnVisible =
           !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
-        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false }, () => {
+        const shouldKeepSwitchOverlay = reset && silent
+          ? Boolean(Array.isArray(nextPendingFolderPhotoIds) && nextPendingFolderPhotoIds.length > 0)
+          : false;
+        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: shouldKeepSwitchOverlay }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {

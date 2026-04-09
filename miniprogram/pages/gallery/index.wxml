@@ -1,4 +1,5 @@
-﻿<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
+﻿<page-meta page-style="{{(switchingFolderLoading || pendingSwitchPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
+<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <app-header
   managedPageKey="gallery"
     title="{{hideAudit ? '拾光谣' : '照片墙'}}"
@@ -37,7 +38,7 @@
             <text class="tag-guide-tip__text">左右滑动 / 点击标签可切换</text>
             <view class="tag-guide-tip__arrow"></view>
           </view>
-          <scroll-view class="tagbar-scroll" scroll-x="{{true}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
+          <scroll-view class="tagbar-scroll" scroll-x="{{!(switchingFolderLoading || pendingSwitchPhotoIds.length > 0)}}" show-scrollbar="{{false}}" enable-flex="{{true}}">
             <view class="tagbar-row">
               <button
                 class="tag-btn {{selectedFolder === item.id ? 'tag-btn--active' : ''}} {{tagWaveActiveIndex === index ? (tagWaveTick === 1 ? 'tag-btn--wave-a' : 'tag-btn--wave-b') : ''}}"
@@ -47,17 +48,18 @@
                 wx:key="id"
                 data-id="{{item.id}}"
                 bindtap="onSelectFolder"
+                disabled="{{switchingFolderLoading || pendingSwitchPhotoIds.length > 0}}"
               >
                 {{item.name}}
               </button>
             </view>
           </scroll-view>
         </view>
-        <button class="tag-all-btn" hover-class="tag-all-btn--active" hover-stay-time="80" bindtap="onTapFilter">全部</button>
+        <button class="tag-all-btn" hover-class="tag-all-btn--active" hover-stay-time="80" bindtap="onTapFilter" disabled="{{switchingFolderLoading || pendingSwitchPhotoIds.length > 0}}">全部</button>
       </view>
 
       <view class="gallery-content-shell">
-        <view class="gallery-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading}}">
+        <view class="gallery-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingSwitchPhotoIds.length > 0}}" catchtouchmove="noop">
           <view class="loading-ring gallery-overlay-loading__ring">
             <view class="ring ring--outer"></view>
             <view class="ring ring--inner"></view>
@@ -395,3 +397,5 @@
 
   <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/gallery/index" />
 </view>
+
+
