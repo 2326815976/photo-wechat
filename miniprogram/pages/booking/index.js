@@ -15,6 +15,7 @@ const {
   subscribePagePresentation,
 } = require("../../utils/page-presentation");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
+const { buildManagedPageLoadingCopy } = require("../../utils/page-loading");
 
 function getDateAfterDaysUTC8(days) {
   const shifted = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -279,6 +280,8 @@ Page({
     serviceMissing: false,
     isLoggedIn: false,
     loading: true,
+    pageLoadingTitle: "约拍",
+    pageLoadingDescription: "正在载入约拍邀请内容",
     showLoginPrompt: false,
 
     tearDots: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
@@ -324,6 +327,34 @@ Page({
     hasBottomTabbar: true,
   },
 
+  buildPageLoadingData(runtimeConfig, nextState) {
+    const currentState = nextState && typeof nextState === "object" ? nextState : {};
+    const loadingCopy = buildManagedPageLoadingCopy(runtimeConfig, {
+      pagePath: "pages/booking/index",
+      pageKey: "booking",
+      isLoggedIn:
+        Object.prototype.hasOwnProperty.call(currentState, "isLoggedIn")
+          ? Boolean(currentState.isLoggedIn)
+          : Boolean(this.data.isLoggedIn),
+      fallbackTitle: "约拍邀请",
+    });
+
+    return {
+      normalizedRuntimeConfig: loadingCopy.normalizedRuntimeConfig,
+      pageLoadingTitle: loadingCopy.title,
+      pageLoadingDescription: loadingCopy.description,
+    };
+  },
+
+  applyRuntimeConfig(runtimeConfig, nextState) {
+    const loadingData = this.buildPageLoadingData(runtimeConfig, nextState);
+    this.setData({
+      pageLoadingTitle: loadingData.pageLoadingTitle,
+      pageLoadingDescription: loadingData.pageLoadingDescription,
+    });
+    return loadingData.normalizedRuntimeConfig;
+  },
+
   applyPagePresentation() {
     const app = typeof getApp === "function" ? getApp() : null;
     return applyPagePresentationToPage(this, app, "pages/booking/index");
@@ -343,7 +374,13 @@ Page({
       minDate: getDateAfterDaysUTC8(1),
       maxDate: getDateAfterDaysUTC8(30),
     });
+    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
     this.applyPagePresentation();
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+        this.applyRuntimeConfig(runtimeConfig);
+      });
+    }
     this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/booking/index");
   },
 
@@ -362,6 +399,11 @@ Page({
         // ignore
       }
     }
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
 
     if (!this.data.serviceMissing) {
       const accessResult = await guardMiniProgramPageAccess({
@@ -394,6 +436,10 @@ Page({
       this.setData({ showCancelConfirm: false });
     }
     this.setTabBarVisible(true);
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
     if (typeof this._unsubscribePagePresentation === "function") {
       this._unsubscribePagePresentation();
     }
@@ -424,6 +470,8 @@ Page({
       loading: true,
       error: "",
       showSuccess: false,
+      pageLoadingTitle: this.buildPageLoadingData(undefined).pageLoadingTitle,
+      pageLoadingDescription: this.buildPageLoadingData(undefined).pageLoadingDescription,
     });
 
     let user = null;
@@ -438,6 +486,8 @@ Page({
     this.setData({
       isLoggedIn,
       showLoginPrompt: !isLoggedIn,
+      pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn }).pageLoadingTitle,
+      pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn }).pageLoadingDescription,
     });
 
     if (!isLoggedIn) {

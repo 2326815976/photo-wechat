@@ -8,15 +8,12 @@
   />
 
   <scroll-view class="content" scroll-y="true" enable-flex="true">
-    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
-      <view class="loading-ring">
-        <view class="ring ring--outer"></view>
-        <view class="ring ring--inner"></view>
-        <view class="ring-center">
-          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-        </view>
+    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
       </view>
-      <text class="loading-text">正在加载内测功能...</text>
+      <text class="admin-loading-card__title">拾光中...</text>
+      <text class="admin-loading-card__desc">正在加载内测功能</text>
     </view>
 
     <view wx:elif="{{!isLoggedIn}}" class="empty-card motion-fade-up motion-delay-2">

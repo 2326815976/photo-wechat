@@ -33,18 +33,20 @@ const STATS_RETRY_DELAY_MS = 1200;
 const BETA_FEATURE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const BETA_FEATURE_CODE_LENGTH = 8;
 const ADMIN_ALBUM_FULL_COLUMNS =
-  "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,recipient_name,welcome_letter,donation_qr_code_url";
+  "id,title,access_key,cover_url,created_at,expires_at,enable_tipping,enable_welcome_letter,welcome_letter_mode,enable_freeze,recipient_name,welcome_letter,donation_qr_code_url";
 const ADMIN_ALBUM_LEGACY_COLUMNS = "id,title,access_key,cover_url,created_at,enable_tipping";
 const ADMIN_ALBUM_LEGACY_OPTIONAL_COLUMNS = [
   "recipient_name",
   "welcome_letter",
   "enable_welcome_letter",
+  "welcome_letter_mode",
+  "enable_freeze",
   "donation_qr_code_url",
   "expires_at",
 ];
 const ADMIN_ALBUM_LEGACY_ONLY_MESSAGE = "当前数据库结构较旧，请先执行最新数据库迁移后再试";
 const ADMIN_RELEASE_LEGACY_OPTIONAL_COLUMNS = ["storage_provider", "storage_file_id"];
-const ADMIN_RELEASE_LEGACY_ONLY_MESSAGE = "?????????????????????????????";
+const ADMIN_RELEASE_LEGACY_ONLY_MESSAGE = "当前数据库结构较旧，请先执行最新数据库迁移后再试";
 
 let cachedAdminSessionUser = null;
 let cachedAdminSessionAt = 0;
@@ -130,6 +132,14 @@ function getTodayDateUTC8() {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeWelcomeLetterMode(value, enabledFallback) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "envelope" || normalized === "stamp" || normalized === "none") {
+    return normalized;
+  }
+  return enabledFallback === false ? "none" : "envelope";
+}
+
 function assertDbSuccess(result, fallback) {
   if (result && result.error) {
     throw new Error(toErrorMessage(result.error, fallback));
@@ -185,12 +195,12 @@ async function insertAdminReleaseWithCompat(values) {
     });
 
     if (!result || !result.error) {
-      return assertDbSuccess(result, "????????");
+      return assertDbSuccess(result, "保存版本信息失败");
     }
 
     const missingColumns = getAdminReleaseLegacyMissingColumns(result.error, Object.keys(payload));
     if (!missingColumns.length) {
-      throw new Error(toErrorMessage(result.error, "????????"));
+      throw new Error(toErrorMessage(result.error, "保存版本信息失败"));
     }
 
     missingColumns.forEach((column) => {
@@ -207,6 +217,10 @@ function normalizeAdminAlbumRecord(row) {
   const source = row && typeof row === "object" ? row : {};
   const donationQrUrl = String((source && source.donation_qr_code_url) || "").trim();
   const expiresAt = String((source && source.expires_at) || "").trim();
+  const welcomeLetterMode = normalizeWelcomeLetterMode(
+    source && source.welcome_letter_mode,
+    source ? source.enable_welcome_letter !== false : true
+  );
 
   return Object.assign({}, source, {
     id: String((source && source.id) || "").trim(),
@@ -216,7 +230,9 @@ function normalizeAdminAlbumRecord(row) {
     created_at: String((source && source.created_at) || "").trim(),
     expires_at: expiresAt || null,
     enable_tipping: Boolean(source && source.enable_tipping),
-    enable_welcome_letter: source ? source.enable_welcome_letter !== false : true,
+    enable_welcome_letter: welcomeLetterMode !== "none",
+    welcome_letter_mode: welcomeLetterMode,
+    enable_freeze: source ? source.enable_freeze !== false : true,
     recipient_name: String((source && source.recipient_name) || "").trim() || "拾光者",
     welcome_letter: String((source && source.welcome_letter) || "").trim(),
     donation_qr_code_url: donationQrUrl || null,
@@ -276,6 +292,10 @@ async function mutateAdminAlbumWithCompat(action, values, options) {
     const missingColumns = getAdminAlbumLegacyMissingColumns(result.error, Object.keys(payload));
     if (!missingColumns.length) {
       throw new Error(toErrorMessage(result.error, fallback));
+    }
+
+    if (missingColumns.indexOf("welcome_letter_mode") >= 0) {
+      throw new Error(ADMIN_ALBUM_LEGACY_ONLY_MESSAGE);
     }
 
     missingColumns.forEach((column) => {
@@ -1159,6 +1179,7 @@ async function createAdminPose(input) {
   }
 
   const tags = normalizePoseTags(payload.tags);
+  await ensureAdminPoseTags(tags);
   const uploadResult = await uploadAdminAsset(filePath, fileName, "poses", "pose");
   try {
     const insertResult = await dbQuery({
@@ -1187,6 +1208,474 @@ async function createAdminPose(input) {
     }
     throw new Error(message);
   }
+}
+
+async function loadAdminPoseRows(limit) {
+  const pageLimit = Math.max(1, Math.min(5000, Number(limit || 500)));
+  const result = await dbQuery({
+    table: "poses",
+    action: "select",
+    columns: "id,image_url,storage_path,tags,view_count,created_at",
+    orders: [{ column: "created_at", ascending: false }, { column: "id", ascending: false }],
+    limit: pageLimit,
+  });
+  const rows = assertDbSuccess(result, "获取摆姿列表失败");
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function listAdminPoses(limit) {
+  await requireAdminSession();
+  return loadAdminPoseRows(limit);
+}
+
+async function loadAdminPoseTagRows(limit) {
+  const pageLimit = Math.max(1, Math.min(2000, Number(limit || 200)));
+  const result = await dbQuery({
+    table: "pose_tags",
+    action: "select",
+    columns: "id,name,usage_count,sort_order,created_at",
+    orders: [
+      { column: "sort_order", ascending: true },
+      { column: "created_at", ascending: true },
+      { column: "id", ascending: true },
+    ],
+    limit: pageLimit,
+  });
+  const rows = assertDbSuccess(result, "获取摆姿标签失败");
+  return Array.isArray(rows) ? rows : [];
+}
+
+function getNextPoseTagSortOrder(rows) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  let maxSortOrder = 0;
+  sourceRows.forEach((row, index) => {
+    const sortOrderRaw = Number(row && row.sort_order);
+    const sortOrder =
+      Number.isFinite(sortOrderRaw) && sortOrderRaw > 0 ? Math.round(sortOrderRaw) : (index + 1) * 10;
+    if (sortOrder > maxSortOrder) {
+      maxSortOrder = sortOrder;
+    }
+  });
+  return maxSortOrder + 10;
+}
+
+async function ensureAdminPoseTags(namesInput) {
+  const names = parseUniqueTagNames(namesInput);
+  if (!names.length) {
+    return {
+      insertedCount: 0,
+      skippedCount: 0,
+    };
+  }
+
+  const existingRows = await loadAdminPoseTagRows(2000);
+  const existingNameSet = new Set(
+    existingRows
+      .map((row) => normalizeTagName(row && row.name).toLowerCase())
+      .filter(Boolean)
+  );
+  let nextSortOrder = getNextPoseTagSortOrder(existingRows);
+  let insertedCount = 0;
+  let skippedCount = 0;
+
+  for (let index = 0; index < names.length; index += 1) {
+    const name = normalizeTagName(names[index]);
+    const key = name.toLowerCase();
+    if (!name) continue;
+
+    if (existingNameSet.has(key)) {
+      skippedCount += 1;
+      continue;
+    }
+
+    try {
+      const insertResult = await dbQuery({
+        table: "pose_tags",
+        action: "insert",
+        values: {
+          name,
+          sort_order: nextSortOrder,
+        },
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,name,usage_count,sort_order,created_at",
+      });
+      const inserted = assertDbSuccess(insertResult, "新增摆姿标签失败");
+      if (!inserted) {
+        throw new Error("新增摆姿标签失败");
+      }
+      existingNameSet.add(key);
+      insertedCount += 1;
+      nextSortOrder += 10;
+    } catch (error) {
+      if (isDuplicateEntryError(error)) {
+        existingNameSet.add(key);
+        skippedCount += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return {
+    insertedCount,
+    skippedCount,
+  };
+}
+
+async function syncPoseTagReferences(replacementMap) {
+  if (!(replacementMap instanceof Map) || replacementMap.size <= 0) {
+    return { updatedCount: 0 };
+  }
+
+  const poses = await loadAdminPoseRows(5000);
+  let updatedCount = 0;
+
+  for (let index = 0; index < poses.length; index += 1) {
+    const row = poses[index];
+    const poseId = Number((row && row.id) || 0);
+    if (!Number.isInteger(poseId) || poseId <= 0) continue;
+
+    const currentTags = Array.isArray(row && row.tags)
+      ? row.tags.map((item) => normalizeTagName(item)).filter(Boolean)
+      : parseUniqueTagNames(row && row.tags);
+    if (!currentTags.length) continue;
+
+    let changed = false;
+    const dedupKeys = new Set();
+    const nextTags = [];
+
+    currentTags.forEach((tag) => {
+      const key = normalizeTagName(tag).toLowerCase();
+      if (!key) return;
+
+      if (!replacementMap.has(key)) {
+        if (!dedupKeys.has(key)) {
+          dedupKeys.add(key);
+          nextTags.push(tag);
+        }
+        return;
+      }
+
+      changed = true;
+      const replacement = normalizeTagName(replacementMap.get(key));
+      if (!replacement) {
+        return;
+      }
+
+      const replacementKey = replacement.toLowerCase();
+      if (!dedupKeys.has(replacementKey)) {
+        dedupKeys.add(replacementKey);
+        nextTags.push(replacement);
+      }
+    });
+
+    if (!changed) continue;
+
+    const updateResult = await dbQuery({
+      table: "poses",
+      action: "update",
+      values: { tags: nextTags },
+      filters: [{ column: "id", operator: "eq", value: poseId }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id,tags",
+    });
+    const updated = assertDbSuccess(updateResult, "同步摆姿标签引用失败");
+    if (!updated) {
+      throw new Error("同步摆姿标签引用失败");
+    }
+    updatedCount += 1;
+  }
+
+  return { updatedCount };
+}
+
+async function listAdminPoseTags(limit) {
+  await requireAdminSession();
+  return loadAdminPoseTagRows(limit);
+}
+
+async function moveAdminPoseTag(tagId, direction) {
+  await requireAdminSession();
+
+  const id = Number(tagId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("摆姿标签 ID 不合法");
+  }
+
+  const normalizedDirection = String(direction || "").trim().toLowerCase();
+  if (!["top", "up", "down"].includes(normalizedDirection)) {
+    throw new Error("摆姿标签排序方向不合法");
+  }
+
+  const rows = await loadAdminPoseTagRows(2000);
+  const currentIndex = rows.findIndex((row) => Number((row && row.id) || 0) === id);
+  if (currentIndex < 0) {
+    throw new Error("目标摆姿标签不存在");
+  }
+
+  if (normalizedDirection === "top" && currentIndex <= 0) {
+    return { boundary: true };
+  }
+  if (normalizedDirection === "up" && currentIndex <= 0) {
+    return { boundary: true };
+  }
+  if (normalizedDirection === "down" && currentIndex >= rows.length - 1) {
+    return { boundary: true };
+  }
+
+  const nextRows = rows.slice();
+  if (normalizedDirection === "top") {
+    const [target] = nextRows.splice(currentIndex, 1);
+    nextRows.unshift(target);
+  } else {
+    const targetIndex = normalizedDirection === "up" ? currentIndex - 1 : currentIndex + 1;
+    const currentRow = nextRows[currentIndex];
+    nextRows[currentIndex] = nextRows[targetIndex];
+    nextRows[targetIndex] = currentRow;
+  }
+
+  for (let index = 0; index < nextRows.length; index += 1) {
+    const row = nextRows[index];
+    const rowId = Number((row && row.id) || 0);
+    if (!Number.isInteger(rowId) || rowId <= 0) continue;
+
+    const nextSortOrder = (index + 1) * 10;
+    const currentSortOrder = Number(row && row.sort_order);
+    if (Number.isFinite(currentSortOrder) && Math.round(currentSortOrder) === nextSortOrder) {
+      continue;
+    }
+
+    const updateResult = await dbQuery({
+      table: "pose_tags",
+      action: "update",
+      values: { sort_order: nextSortOrder },
+      filters: [{ column: "id", operator: "eq", value: rowId }],
+      selectAfterWrite: true,
+      maybeSingle: true,
+      columns: "id,sort_order",
+    });
+    const updated = assertDbSuccess(updateResult, "更新摆姿标签顺序失败");
+    if (!updated) {
+      throw new Error("更新摆姿标签顺序失败");
+    }
+  }
+
+  return { boundary: false };
+}
+
+async function createAdminPoseTags(namesInput) {
+  await requireAdminSession();
+  return ensureAdminPoseTags(namesInput);
+}
+
+async function updateAdminPoseTag(tagId, nameInput) {
+  await requireAdminSession();
+
+  const id = Number(tagId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("摆姿标签 ID 不合法");
+  }
+
+  const name = normalizeTagName(nameInput);
+  if (!name) {
+    throw new Error("摆姿标签名称不能为空");
+  }
+
+  const snapshotResult = await dbQuery({
+    table: "pose_tags",
+    action: "select",
+    columns: "id,name,usage_count,sort_order,created_at",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+  const current = assertDbSuccess(snapshotResult, "获取摆姿标签失败");
+  if (!current) {
+    throw new Error("目标摆姿标签不存在");
+  }
+
+  const currentName = normalizeTagName(current && current.name);
+  if (currentName === name) {
+    return current;
+  }
+
+  const existingRows = await loadAdminPoseTagRows(2000);
+  const duplicated = existingRows.some((row) => {
+    const rowId = Number((row && row.id) || 0);
+    const rowName = normalizeTagName(row && row.name).toLowerCase();
+    return rowId !== id && rowName && rowName === name.toLowerCase();
+  });
+  if (duplicated) {
+    throw new Error("摆姿标签名称已存在");
+  }
+
+  if (currentName) {
+    await syncPoseTagReferences(new Map([[currentName.toLowerCase(), name]]));
+  }
+
+  const updateResult = await dbQuery({
+    table: "pose_tags",
+    action: "update",
+    values: { name },
+    filters: [{ column: "id", operator: "eq", value: id }],
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns: "id,name,usage_count,sort_order,created_at",
+  });
+  const updated = assertDbSuccess(updateResult, "更新摆姿标签失败");
+  if (!updated) {
+    throw new Error("目标摆姿标签不存在或更新失败");
+  }
+  return updated;
+}
+
+async function deleteAdminPoseTag(tagId) {
+  await requireAdminSession();
+
+  const id = Number(tagId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("摆姿标签 ID 不合法");
+  }
+
+  const snapshotResult = await dbQuery({
+    table: "pose_tags",
+    action: "select",
+    columns: "id,name",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+  const current = assertDbSuccess(snapshotResult, "获取摆姿标签失败");
+  if (!current) {
+    throw new Error("目标摆姿标签不存在");
+  }
+
+  const currentName = normalizeTagName(current && current.name);
+  if (currentName) {
+    await syncPoseTagReferences(new Map([[currentName.toLowerCase(), ""]]));
+  }
+
+  const deleteResult = await dbQuery({
+    table: "pose_tags",
+    action: "delete",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns: "id",
+  });
+  const deleted = assertDbSuccess(deleteResult, "删除摆姿标签失败");
+  if (!deleted) {
+    throw new Error("目标摆姿标签不存在或删除失败");
+  }
+  return deleted;
+}
+
+async function deleteAdminPoseTags(tagIds) {
+  await requireAdminSession();
+
+  const normalizedIds = Array.from(
+    new Set(
+      (Array.isArray(tagIds) ? tagIds : [tagIds])
+        .map((item) => Number(item))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )
+  );
+
+  if (!normalizedIds.length) {
+    return {
+      deletedCount: 0,
+      failedCount: 0,
+      missingCount: 0,
+    };
+  }
+
+  const snapshotResult = await dbQuery({
+    table: "pose_tags",
+    action: "select",
+    columns: "id,name",
+    filters: [{ column: "id", operator: "in", value: normalizedIds }],
+    limit: normalizedIds.length,
+  });
+  const rows = assertDbSuccess(snapshotResult, "获取摆姿标签失败");
+  const existingRows = Array.isArray(rows) ? rows : [];
+  const existingIds = existingRows
+    .map((row) => Number((row && row.id) || 0))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  const missingCount = Math.max(0, normalizedIds.length - existingIds.length);
+
+  if (!existingIds.length) {
+    return {
+      deletedCount: 0,
+      failedCount: 0,
+      missingCount,
+    };
+  }
+
+  const replacementMap = new Map();
+  existingRows.forEach((row) => {
+    const name = normalizeTagName(row && row.name);
+    if (!name) return;
+    replacementMap.set(name.toLowerCase(), "");
+  });
+  await syncPoseTagReferences(replacementMap);
+
+  const deleteResult = await dbQuery({
+    table: "pose_tags",
+    action: "delete",
+    filters: [{ column: "id", operator: "in", value: existingIds }],
+    selectAfterWrite: true,
+    columns: "id",
+  });
+  assertDbSuccess(deleteResult, "批量删除摆姿标签失败");
+
+  const verifyResult = await dbQuery({
+    table: "pose_tags",
+    action: "select",
+    columns: "id",
+    filters: [{ column: "id", operator: "in", value: existingIds }],
+    limit: existingIds.length,
+  });
+  const remainingRows = assertDbSuccess(verifyResult, "校验摆姿标签删除结果失败");
+  const remaining = Array.isArray(remainingRows) ? remainingRows : [];
+  const failedCount = remaining.length;
+  const deletedCount = Math.max(0, existingIds.length - failedCount);
+
+  if (deletedCount <= 0) {
+    throw new Error("批量删除摆姿标签失败，请稍后重试");
+  }
+
+  return {
+    deletedCount,
+    failedCount,
+    missingCount,
+  };
+}
+
+async function updateAdminPoseTags(poseId, tagsInput) {
+  await requireAdminSession();
+
+  const id = Number(poseId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("摆姿 ID 不合法");
+  }
+
+  const tags = normalizePoseTags(tagsInput);
+  await ensureAdminPoseTags(tags);
+
+  const updateResult = await dbQuery({
+    table: "poses",
+    action: "update",
+    values: { tags },
+    filters: [{ column: "id", operator: "eq", value: id }],
+    selectAfterWrite: true,
+    maybeSingle: true,
+    columns: "id,tags",
+  });
+  const updated = assertDbSuccess(updateResult, "更新摆姿标签失败");
+  if (!updated) {
+    throw new Error("目标摆姿不存在或更新失败");
+  }
+  return updated;
 }
 
 async function createAdminRelease(input) {
@@ -1304,8 +1793,12 @@ async function createAdminAlbum(payload) {
   const recipientName = String(input.recipient_name || "").trim() || "拾光者";
   const welcomeLetter = String(input.welcome_letter || "").trim();
   const enableTipping = Boolean(input.enable_tipping);
-  const enableWelcomeLetter =
-    input.enable_welcome_letter === undefined ? true : Boolean(input.enable_welcome_letter);
+  const welcomeLetterMode = normalizeWelcomeLetterMode(
+    input.welcome_letter_mode,
+    input.enable_welcome_letter === undefined ? true : Boolean(input.enable_welcome_letter)
+  );
+  const enableWelcomeLetter = welcomeLetterMode !== "none";
+  const enableFreeze = input.enable_freeze === undefined ? true : Boolean(input.enable_freeze);
   const expiresAt = String(input.expires_at || "").trim();
   const coverUrl = String(input.cover_url || "").trim();
   const donationQrUrl = String(input.donation_qr_code_url || "").trim();
@@ -1317,6 +1810,8 @@ async function createAdminAlbum(payload) {
     welcome_letter: welcomeLetter,
     enable_tipping: enableTipping,
     enable_welcome_letter: enableWelcomeLetter,
+    welcome_letter_mode: welcomeLetterMode,
+    enable_freeze: enableFreeze,
     cover_url: coverUrl || null,
     donation_qr_code_url: donationQrUrl || null,
   };
@@ -1361,8 +1856,23 @@ async function updateAdminAlbumFields(albumId, payload) {
   if (Object.prototype.hasOwnProperty.call(input, "enable_tipping")) {
     values.enable_tipping = Boolean(input.enable_tipping);
   }
+  if (Object.prototype.hasOwnProperty.call(input, "welcome_letter_mode")) {
+    values.welcome_letter_mode = normalizeWelcomeLetterMode(
+      input.welcome_letter_mode,
+      Object.prototype.hasOwnProperty.call(input, "enable_welcome_letter")
+        ? Boolean(input.enable_welcome_letter)
+        : true
+    );
+    values.enable_welcome_letter = values.welcome_letter_mode !== "none";
+  }
   if (Object.prototype.hasOwnProperty.call(input, "enable_welcome_letter")) {
     values.enable_welcome_letter = Boolean(input.enable_welcome_letter);
+    if (values.enable_welcome_letter === false && !Object.prototype.hasOwnProperty.call(values, "welcome_letter_mode")) {
+      values.welcome_letter_mode = "none";
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "enable_freeze")) {
+    values.enable_freeze = Boolean(input.enable_freeze);
   }
   if (Object.prototype.hasOwnProperty.call(input, "expires_at")) {
     const text = String(input.expires_at || "").trim();
@@ -2016,7 +2526,17 @@ async function saveAdminAboutSettings(payload) {
   const wechat = String(input.wechat || "").trim();
   const email = String(input.email || "").trim();
   const donationQrCode = String(input.donation_qr_code || "").trim();
-  const authorMessage = String(input.author_message || "").trim();
+  const authorMessageRaw = String(input.author_message == null ? "" : input.author_message);
+  const authorMessageText = authorMessageRaw.trim();
+  const normalizedAuthorMessageText = authorMessageText.toLowerCase();
+  const authorMessage =
+    authorMessageText &&
+    normalizedAuthorMessageText !== "null" &&
+    normalizedAuthorMessageText !== "undefined" &&
+    normalizedAuthorMessageText !== "nil" &&
+    normalizedAuthorMessageText !== "none"
+      ? authorMessageRaw.replace(/\r\n/g, "\n")
+      : "";
 
   const values = {
     author_name: authorName || null,

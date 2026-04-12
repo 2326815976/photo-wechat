@@ -1,6 +1,8 @@
-const { getSession, loginWithPassword, dbQuery, extractSessionUser } = require("../../../services/photo-api");
+const { getSession, loginWithPassword, dbQuery, clearSessionCache, extractSessionUser } = require("../../../services/photo-api");
 const { requestJson } = require("../../../utils/cloudrun");
 const { clearStoredCookie } = require("../../../utils/auth");
+const { getManagedPageAccess } = require("../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function extractAuthUserFromPayload(payload) {
   let current = payload;
@@ -62,6 +64,7 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
+    managedTitle: "修改密码",
 
     formData: {
       currentPassword: "",
@@ -77,12 +80,32 @@ Page({
     focusField: "",
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
+    const runtimeConfig = globalData.runtimeConfig || { hideAudit: globalData.hideAudit };
+    const access = getManagedPageAccess(runtimeConfig, "profile-change-password");
+    this.setData({
+      safeTop,
+      serviceMissing,
+      managedTitle:
+        String((access && (access.headerTitle || access.navText)) || "").trim() || "修改密码",
+    });
+    await this.guardManagedAccess();
+  },
+
+  async onShow() {
+    await this.guardManagedAccess();
+  },
+
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "profile-change-password",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
   },
 
   goBack() {
@@ -208,7 +231,7 @@ Page({
       // 更新新密码
       const r = await requestJson("/api/auth/update-user", {
         method: "POST",
-        data: { password: newPassword },
+        data: { currentPassword, password: newPassword },
       });
 
       if (hasPayloadFailure(r)) {
@@ -219,6 +242,7 @@ Page({
 
       this.setData({ showSuccess: true });
       setTimeout(() => {
+        clearSessionCache();
         clearStoredCookie();
         wx.reLaunch({ url: "/pages/login/index" });
       }, 2000);

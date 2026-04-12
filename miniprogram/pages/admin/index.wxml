@@ -53,9 +53,12 @@
         <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
       </view>
 
-      <view class="loading motion-fade-up" wx:if="{{!serviceMissing && loading}}">
-        <text class="loading-title">管理数据加载中...</text>
-        <text class="loading-desc">正在同步后台能力</text>
+      <view class="admin-loading-card admin-loading-card--page motion-fade-up" wx:if="{{!serviceMissing && loading}}">
+        <view class="admin-loading-card__orb">
+          <view class="admin-loading-card__spinner"></view>
+        </view>
+        <text class="admin-loading-card__title">拾光中...</text>
+        <text class="admin-loading-card__desc">正在同步后台能力，请稍候。</text>
       </view>
 
       <view class="auth-tip motion-fade-up" wx:if="{{!serviceMissing && !loading && authDenied}}">
@@ -87,17 +90,13 @@
               <view class="stats-header__main">
                 <text class="stats-header__eyebrow">平台概览</text>
                 <text class="stats-header__title">快照与趋势状态</text>
-                <text class="stats-header__desc">集中查看统计快照、趋势覆盖和维护状态</text>
+                <text class="stats-header__desc">集中查看快照日期、趋势覆盖和维护状态</text>
               </view>
               <view class="stats-status-banner stats-status-banner--{{statsView.meta.statusTone || 'muted'}}">
                 <text class="stats-status-banner__label">当前状态</text>
                 <text class="stats-status-banner__text">{{statsView.meta.statusText || '暂无统计快照'}}</text>
               </view>
               <view class="stats-meta-panel">
-                <view class="stats-meta-item">
-                  <text class="stats-meta-item__label">生成时间</text>
-                  <text class="stats-meta-item__value">{{statsView.meta.generatedAtText || '—'}}</text>
-                </view>
                 <view class="stats-meta-item">
                   <text class="stats-meta-item__label">快照日期</text>
                   <text class="stats-meta-item__value">{{statsView.meta.snapshotDateText || '—'}}</text>
@@ -134,10 +133,12 @@
             </view>
 
 
-            <view class="stats-loading-card" wx:if="{{statsLoading && !statsReady}}">
-              <view class="stats-loading-card__spinner"></view>
-              <text class="stats-loading-card__title">统计数据加载中</text>
-              <text class="stats-loading-card__desc">正在同步最新快照与趋势数据，请稍候。</text>
+            <view class="admin-loading-card admin-loading-card--compact" wx:if="{{statsLoading && !statsReady}}">
+              <view class="admin-loading-card__orb">
+                <view class="admin-loading-card__spinner"></view>
+              </view>
+              <text class="admin-loading-card__title">拾光中...</text>
+              <text class="admin-loading-card__desc">正在同步最新快照与趋势数据，请稍候。</text>
             </view>
 
             <view class="stats-empty-card" wx:elif="{{!statsReady}}">
@@ -420,10 +421,12 @@
               <text class="schedule-inline-error__text">{{blockedDatesError}}</text>
             </view>
 
-            <view class="schedule-state-card schedule-state-card--loading" wx:if="{{blockedDatesLoading && !blockedDatesReady}}">
-              <view class="schedule-state-card__spinner"></view>
-              <text class="schedule-state-card__title">正在加载档期列表</text>
-              <text class="schedule-state-card__desc">请稍候，正在同步最新锁定档期</text>
+            <view class="admin-loading-card admin-loading-card--compact" wx:if="{{blockedDatesLoading && !blockedDatesReady}}">
+              <view class="admin-loading-card__orb">
+                <view class="admin-loading-card__spinner"></view>
+              </view>
+              <text class="admin-loading-card__title">拾光中...</text>
+              <text class="admin-loading-card__desc">正在同步最新锁定档期，请稍候。</text>
             </view>
 
             <view class="schedule-state-card" wx:elif="{{!blockedDatesReady}}">
@@ -542,7 +545,7 @@
                     bindtap="onToggleSelectAllBookings"
                     disabled="{{bookingBatchDeleting}}"
                   >
-                    {{bookingAllSelected ? "取消全选" : "全选"}} ({{bookingSelectedCount}}/{{bookingPageDeletableCount}})
+                    {{bookingAllSelected ? "取消全选" : "全选"}} ({{bookingSelectedCount}}/{{bookingDeletableCount}})
                   </button>
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--danger"
@@ -582,9 +585,12 @@
                 </text>
               </view>
 
-              <view class="pose-loading" wx:if="{{bookingsLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
+              <view class="admin-loading-card admin-loading-card--inline" wx:if="{{bookingsLoading}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步最新预约数据，请稍候。</text>
               </view>
 
               <view class="empty booking-empty-card" wx:elif="{{!bookingFilteredList.length}}">
@@ -624,14 +630,14 @@
                       <text class="booking-info-row__text">{{item.bookingDateDisplay || "未设置日期"}}</text>
                     </view>
                     <view class="booking-info-row">
-                      <text class="booking-info-row__icon">📍</text>
-                      <text class="booking-info-row__text">{{item.locationDisplay}}</text>
-                    </view>
-                    <view class="booking-info-row">
                       <text class="booking-info-row__icon">📞</text>
                       <text class="booking-info-row__text">{{item.phoneDisplay}}</text>
                     </view>
-                    <view class="booking-info-row">
+                    <view class="booking-info-row booking-info-row--location">
+                      <text class="booking-info-row__icon">📍</text>
+                      <text class="booking-info-row__text">{{item.locationDisplay}}</text>
+                    </view>
+                    <view class="booking-info-row booking-info-row--full">
                       <text class="booking-info-row__icon">💬</text>
                       <text class="booking-info-row__text">{{item.wechatDisplay}}</text>
                     </view>
@@ -712,26 +718,24 @@
                     >
                       删除订单
                     </button>
+
+                    <button
+                      class="album-toggle-btn {{item.enable_freeze ? 'album-toggle-btn--freeze-on' : 'album-toggle-btn--off'}}"
+                      data-id="{{item.id}}"
+                      bindtap="onToggleAlbumFreeze"
+                      hover-class="album-toggle-btn--active"
+                      disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
+                    >
+                      <image class="album-toggle-btn__icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                      <text class="album-toggle-btn__text">定格 {{item.enable_freeze ? "开启" : "关闭"}}</text>
+                    </button>
                   </view>
                 </view>
               </view>
 
-              <view class="booking-pagination">
-                <button
-                  class="booking-page-btn booking-page-btn--ghost"
-                  bindtap="onBookingPrevPage"
-                  disabled="{{bookingsLoading || bookingCurrentPage <= 1}}"
-                >
-                  上一页
-                </button>
-                <text class="booking-page-indicator">第 {{bookingCurrentPage}} 页 / 共 {{bookingTotalPages}} 页</text>
-                <button
-                  class="booking-page-btn booking-page-btn--ghost"
-                  bindtap="onBookingNextPage"
-                  disabled="{{bookingsLoading || bookingCurrentPage >= bookingTotalPages}}"
-                >
-                  下一页
-                </button>
+              <view class="booking-pagination" wx:if="{{bookingFilteredList.length}}">
+                <text class="booking-page-indicator" wx:if="{{bookingHasMoreVisible}}">已加载 {{bookingRows.length}} / {{bookingFilteredList.length}} 条，下滑继续加载</text>
+                <text class="booking-page-indicator" wx:else>已全部加载，共 {{bookingFilteredList.length}} 条</text>
               </view>
             </view>
           </block>
@@ -749,9 +753,12 @@
                 </button>
               </view>
 
-              <view class="pose-loading" wx:if="{{bookingTypesLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
+              <view class="admin-loading-card admin-loading-card--inline" wx:if="{{bookingTypesLoading}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步预约类型配置，请稍候。</text>
               </view>
 
               <view class="empty booking-empty-card" wx:elif="{{!bookingTypes.length}}">
@@ -819,9 +826,12 @@
                 </button>
               </view>
 
-              <view class="pose-loading" wx:if="{{citiesLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
+              <view class="admin-loading-card admin-loading-card--inline" wx:if="{{citiesLoading}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步可预约城市配置，请稍候。</text>
               </view>
 
               <view class="empty booking-empty-card" wx:elif="{{!allowedCities.length}}">
@@ -881,9 +891,12 @@
 
         <block wx:if="{{activeSection === 'about'}}">
           <view class="booking-panel about-panel motion-fade-up">
-            <view class="pose-loading" wx:if="{{aboutLoading}}">
-              <view class="pose-loading__spinner"></view>
-              <text class="pose-loading__text">加载中...</text>
+            <view class="admin-loading-card admin-loading-card--inline" wx:if="{{aboutLoading}}">
+              <view class="admin-loading-card__orb">
+                <view class="admin-loading-card__spinner"></view>
+              </view>
+              <text class="admin-loading-card__title">拾光中...</text>
+              <text class="admin-loading-card__desc">正在同步关于页内容与赞赏码配置，请稍候。</text>
             </view>
 
             <block wx:else>
@@ -997,40 +1010,6 @@
                   </button>
                 </view>
               </view>
-
-              <view class="about-card about-card--preview">
-                <view class="about-preview-head">
-                  <text class="about-preview-title">{{aboutSettings.author_name || "作者"}}</text>
-                  <text class="about-preview-sub">用户端“关于”预览</text>
-                </view>
-
-                <view class="about-preview-message">
-                  <text>{{aboutSettings.author_message || "暂无留言"}}</text>
-                </view>
-
-                <view class="about-preview-contact" wx:if="{{aboutSettings.phone || aboutSettings.wechat || aboutSettings.email}}">
-                  <view class="about-preview-row" wx:if="{{aboutSettings.phone}}">
-                    <text class="about-preview-label">手机号</text>
-                    <text class="about-preview-value">{{aboutSettings.phone}}</text>
-                  </view>
-                  <view class="about-preview-row" wx:if="{{aboutSettings.wechat}}">
-                    <text class="about-preview-label">微信号</text>
-                    <text class="about-preview-value">{{aboutSettings.wechat}}</text>
-                  </view>
-                  <view class="about-preview-row" wx:if="{{aboutSettings.email}}">
-                    <text class="about-preview-label">邮箱</text>
-                    <text class="about-preview-value about-preview-value--break">{{aboutSettings.email}}</text>
-                  </view>
-                </view>
-
-                <view class="about-preview-empty" wx:if="{{!aboutSettings.phone && !aboutSettings.wechat && !aboutSettings.email}}">
-                  <text>未填写联系方式</text>
-                </view>
-
-                <view class="about-preview-qr-wrap" wx:if="{{aboutSettings.donation_qr_code}}">
-                  <image class="about-preview-qr" src="{{aboutSettings.donation_qr_code}}" mode="widthFix" />
-                </view>
-              </view>
               </view>
             </block>
           </view>
@@ -1106,7 +1085,7 @@
                     class="pose-toolbar-btn pose-toolbar-btn--ghost"
                     bindtap="onSelectAllFilteredPoses"
                   >
-                    {{poseAllSelected ? "取消全选" : "全选"}} ({{poseSelectedCount}}/{{posePagedList.length}})
+                    {{poseAllSelected ? "取消全选" : "全选"}} ({{poseSelectedCount}}/{{poseTotalCount}})
                   </button>
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--danger"
@@ -1130,10 +1109,12 @@
                 <text class="pose-inline-error__text">{{posesError}}</text>
               </view>
 
-              <view class="pose-loading-card" wx:if="{{posesLoading && !posesReady}}">
-                <view class="pose-loading-card__spinner"></view>
-                <text class="pose-loading-card__title">摆姿列表加载中</text>
-                <text class="pose-loading-card__desc">正在同步最新的摆姿图片与标签数据，请稍候。</text>
+              <view class="admin-loading-card admin-loading-card--compact" wx:if="{{posesLoading && !posesReady}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步最新的摆姿图片与标签数据，请稍候。</text>
               </view>
 
               <view class="pose-empty-card pose-empty-card--rich" wx:elif="{{!posesReady}}">
@@ -1270,10 +1251,12 @@
                 <text class="pose-inline-error__text">{{poseTagsError}}</text>
               </view>
 
-              <view class="pose-loading-card" wx:if="{{poseTagsLoading && !poseTagsReady}}">
-                <view class="pose-loading-card__spinner"></view>
-                <text class="pose-loading-card__title">标签列表加载中</text>
-                <text class="pose-loading-card__desc">正在同步标签排序与使用情况，请稍候。</text>
+              <view class="admin-loading-card admin-loading-card--compact" wx:if="{{poseTagsLoading && !poseTagsReady}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步标签排序与使用情况，请稍候。</text>
               </view>
 
               <view class="pose-empty-card pose-empty-card--rich" wx:elif="{{!poseTagsReady}}">
@@ -1398,10 +1381,13 @@
               </view>
             </view>
 
-            <view class="pose-loading" wx:if="{{betaVersionsLoading}}">
-                <view class="pose-loading__spinner"></view>
-                <text class="pose-loading__text">加载中...</text>
-              </view>
+            <view class="admin-loading-card admin-loading-card--inline" wx:if="{{betaVersionsLoading}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步最新内测版本配置，请稍候。</text>
+            </view>
 
             <view class="empty pose-empty-card" wx:elif="{{!betaVersionRows.length}}">
                 <text class="pose-empty-card__icon">🔑</text>
@@ -1413,7 +1399,7 @@
                   <view class="beta-card__head">
                     <view class="beta-card__main">
                       <text class="beta-card__title">{{item.feature_name}}</text>
-                      <text class="beta-card__path">{{item.route_title || '?????'}} ? {{item.route_path || '?????'}}</text>
+                      <text class="beta-card__path">{{item.route_title || '未命名页面'}} · {{item.route_path || '未配置路径'}}</text>
                     </view>
                     <view class="beta-state-badge {{item.stateClass}}">
                       <text>{{item.stateText}}</text>
@@ -1475,8 +1461,7 @@
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onSelectSection"
-                  data-key="gallery"
+                  bindtap="onOpenGalleryWallAlbumDetail"
                   hover-class="booking-pill-btn--ghost-active"
                   disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
                 >
@@ -1488,7 +1473,7 @@
                   hover-class="booking-pill-btn--primary-active"
                   disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
                 >
-                  + 创建空间
+                  + 空间
                 </button>
               </view>
 
@@ -1554,9 +1539,12 @@
                 匹配 {{albumRows.length}} 个空间</text>
             </view>
 
-            <view class="pose-loading" wx:if="{{albumsLoading}}">
-              <view class="pose-loading__spinner"></view>
-              <text class="pose-loading__text">加载中...</text>
+            <view class="admin-loading-card admin-loading-card--inline" wx:if="{{albumsLoading}}">
+              <view class="admin-loading-card__orb">
+                <view class="admin-loading-card__spinner"></view>
+              </view>
+              <text class="admin-loading-card__title">拾光中...</text>
+              <text class="admin-loading-card__desc">正在同步空间列表与基础配置，请稍候。</text>
             </view>
 
             <view class="empty booking-empty-card album-empty-card" wx:elif="{{!albumRows.length}}">
@@ -1600,7 +1588,7 @@
                     <view class="album-card__title-wrap">
                       <text class="album-card__title">{{item.title}}</text>
                       <view class="album-card__meta-row">
-                        <text class="album-card__meta">创建于{{item.createdDateText}}</text>
+                        <text class="album-card__meta">{{item.createdDateText}}</text>
                         <view
                           wx:if="{{item.expiresAtText}}"
                           class="album-card__expiry-badge {{item.expired ? 'album-card__expiry-badge--expired' : (item.expirySoon ? 'album-card__expiry-badge--soon' : 'album-card__expiry-badge--normal')}}"
@@ -1619,7 +1607,7 @@
                         hover-class="album-mini-btn--active"
                         disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
                       >
-                        <text>✕</text>
+                        <text>✎</text>
                       </button>
                       <button
                         class="album-mini-btn album-mini-btn--danger"
@@ -1636,27 +1624,29 @@
                   <view class="album-access-card">
                     <view class="album-access-card__main">
                       <text class="album-access-card__label">访问密钥</text>
-                      <text class="album-access-card__key">{{item.access_key}}</text>
-                    </view>
-                    <view class="album-access-card__actions" wx:if="{{!albumSelectionMode}}">
-                      <button
-                        class="album-icon-btn"
-                        data-key="{{item.access_key}}"
-                        bindtap="onCopyAlbumAccessKey"
-                        hover-class="album-icon-btn--active"
-                        disabled="{{albumActionLoading || albumKeySaving}}"
-                      >
-                        <image class="album-icon-btn__icon" src="/images/icons/clipboard-brown.svg" mode="aspectFit" />
-                      </button>
-                      <button
-                        class="album-icon-btn"
-                        data-id="{{item.id}}"
-                        bindtap="onOpenAlbumKeyModal"
-                        hover-class="album-icon-btn--active"
-                        disabled="{{albumActionLoading || albumKeySaving || albumTitleSaving}}"
-                      >
-                        <image class="album-icon-btn__icon" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
-                      </button>
+                      <view class="album-access-card__content">
+                        <text class="album-access-card__key">{{item.access_key}}</text>
+                        <view class="album-access-card__actions" wx:if="{{!albumSelectionMode}}">
+                          <button
+                            class="album-icon-btn"
+                            data-key="{{item.access_key}}"
+                            bindtap="onCopyAlbumAccessKey"
+                            hover-class="album-icon-btn--active"
+                            disabled="{{albumActionLoading || albumKeySaving}}"
+                          >
+                            <image class="album-icon-btn__icon" src="/images/icons/clipboard-brown.svg" mode="aspectFit" />
+                          </button>
+                          <button
+                            class="album-icon-btn"
+                            data-id="{{item.id}}"
+                            bindtap="onOpenAlbumKeyModal"
+                            hover-class="album-icon-btn--active"
+                            disabled="{{albumActionLoading || albumKeySaving || albumTitleSaving}}"
+                          >
+                            <image class="album-icon-btn__icon" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+                          </button>
+                        </view>
+                      </view>
                     </view>
                   </view>
 
@@ -1674,22 +1664,24 @@
                         hover-class="album-recipient-card__edit-btn--active"
                         disabled="{{albumActionLoading || albumRecipientSaving || albumTitleSaving || albumKeySaving}}"
                       >
-                        编辑文案
+                        <image class="album-recipient-card__edit-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
+                        <text class="album-recipient-card__edit-text">编辑文案</text>
                       </button>
                     </view>
                     <text class="album-recipient-card__welcome">{{item.welcome_letter || "未设置欢迎信内容"}}</text>
+                    <text class="album-create-plain-tip">欢迎方式：{{item.welcome_letter_mode_label || "拆信封欢迎信"}}</text>
                   </view>
 
                   <view class="album-toggle-grid" wx:if="{{!albumSelectionMode}}">
                     <button
-                      class="album-toggle-btn {{item.enable_welcome_letter ? 'album-toggle-btn--welcome-on' : 'album-toggle-btn--off'}}"
+                      class="album-toggle-btn {{item.enable_freeze ? 'album-toggle-btn--freeze-on' : 'album-toggle-btn--off'}}"
                       data-id="{{item.id}}"
-                      bindtap="onToggleAlbumWelcomeLetter"
+                      bindtap="onToggleAlbumFreeze"
                       hover-class="album-toggle-btn--active"
                       disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
                     >
-                      <image class="album-toggle-btn__icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
-                      <text class="album-toggle-btn__text">欢迎信{{item.enable_welcome_letter ? "开启" : "关闭"}}</text>
+                      <image class="album-toggle-btn__icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
+                      <text class="album-toggle-btn__text">定格 {{item.enable_freeze ? "开启" : "关闭"}}</text>
                     </button>
 
                     <button
@@ -1737,6 +1729,17 @@
 
                     <button
                       class="album-action-btn album-action-btn--ghost"
+                      data-id="{{item.id}}"
+                      bindtap="onOpenAlbumExpiryModal"
+                      hover-class="album-action-btn--active"
+                      disabled="{{albumActionLoading || albumExpirySaving}}"
+                    >
+                      <image class="album-action-btn__icon" src="/images/icons/calendar-brown.svg" mode="aspectFit" />
+                      <text class="album-action-btn__text">改有效期</text>
+                    </button>
+
+                    <button
+                      class="album-action-btn album-action-btn--ghost"
                       data-key="{{item.access_key}}"
                       bindtap="onCopyAlbumLink"
                       hover-class="album-action-btn--active"
@@ -1755,17 +1758,6 @@
                     >
                       <image class="album-action-btn__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
                       <text class="album-action-btn__text">二维码</text>
-                    </button>
-
-                    <button
-                      class="album-action-btn album-action-btn--ghost"
-                      data-id="{{item.id}}"
-                      bindtap="onOpenAlbumExpiryModal"
-                      hover-class="album-action-btn--active"
-                      disabled="{{albumActionLoading || albumExpirySaving}}"
-                    >
-                      <image class="album-action-btn__icon" src="/images/icons/calendar-brown.svg" mode="aspectFit" />
-                      <text class="album-action-btn__text">改有效期</text>
                     </button>
                   </view>
                 </view>
@@ -1792,9 +1784,12 @@
                 </button>
               </view>
 
-              <view class="release-loading" wx:if="{{releasesLoading}}">
-                <view class="release-spinner"></view>
-                <text class="release-loading__text">加载中...</text>
+              <view class="admin-loading-card admin-loading-card--inline" wx:if="{{releasesLoading}}">
+                <view class="admin-loading-card__orb">
+                  <view class="admin-loading-card__spinner"></view>
+                </view>
+                <text class="admin-loading-card__title">拾光中...</text>
+                <text class="admin-loading-card__desc">正在同步已发布版本与更新说明，请稍候。</text>
               </view>
 
               <view class="release-empty" wx:elif="{{!releases.length}}">
@@ -2357,7 +2352,7 @@
                 data-index="{{index}}"
                 catchtap="onSelectBetaVersionRoute"
               >
-                <text class="beta-route-dropdown__option-title">{{item.route_title || '?????'}}</text>
+                <text class="beta-route-dropdown__option-title">{{item.route_title || '未命名页面'}}</text>
                 <text class="beta-route-dropdown__option-path">{{item.route_path}}</text>
               </view>
             </scroll-view>
@@ -2927,17 +2922,43 @@
         <view class="album-create-section">
           <view class="switch-row">
             <view class="switch-row__main">
-              <text class="switch-row__title">欢迎信显示</text>
-              <text class="switch-row__desc">收件人打开空间时显示欢迎文案</text>
+              <text class="switch-row__title">欢迎信方式（必选）</text>
+              <text class="switch-row__desc">创建专属空间时请明确选择欢迎信方式，支持拆信封、右下角印章、无欢迎信三种模式</text>
             </view>
-            <switch
-              checked="{{albumCreateEnableWelcomeLetter}}"
-              bindchange="onAlbumCreateEnableWelcomeLetterChange"
-              color="#FFC857"
-            />
           </view>
-
-          <view class="booking-modal__field" wx:if="{{albumCreateEnableWelcomeLetter}}">
+          <view class="album-expiry-mode-row">
+            <button
+              class="album-expiry-mode-btn {{albumCreateWelcomeLetterMode === 'envelope' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="envelope"
+              bindtap="onAlbumCreateWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumCreating}}"
+            >
+              拆信封
+            </button>
+            <button
+              class="album-expiry-mode-btn {{albumCreateWelcomeLetterMode === 'stamp' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="stamp"
+              bindtap="onAlbumCreateWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumCreating}}"
+            >
+              右下角印章
+            </button>
+            <button
+              class="album-expiry-mode-btn {{albumCreateWelcomeLetterMode === 'none' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="none"
+              bindtap="onAlbumCreateWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumCreating}}"
+            >
+              无欢迎信
+            </button>
+          </view>
+          <view class="album-create-plain-tip">
+            {{albumCreateWelcomeLetterMode === 'envelope' ? '进入空间后自动展示拆信封欢迎信。' : (albumCreateWelcomeLetterMode === 'stamp' ? '在页面右下角显示印章入口，点击后查看欢迎信。' : '进入空间后不展示欢迎信入口。')}}
+          </view>
+          <view class="booking-modal__field">
             <text class="booking-modal__label">欢迎信内容</text>
             <textarea
               class="booking-modal__textarea"
@@ -2949,7 +2970,21 @@
               maxlength="300"
             />
           </view>
-          <view class="album-create-plain-tip" wx:else>已关闭欢迎信显示，可在空间管理页随时开启。</view>
+        </view>
+
+        <view class="album-create-section">
+          <view class="switch-row">
+            <view class="switch-row__main">
+              <text class="switch-row__title">定格功能</text>
+              <text class="switch-row__desc">开启后，用户可在该空间内选择定格照片</text>
+            </view>
+            <switch
+              checked="{{albumCreateEnableFreeze}}"
+              bindchange="onAlbumCreateEnableFreezeChange"
+              color="#FFC857"
+            />
+          </view>
+          <view class="album-create-plain-tip">{{albumCreateEnableFreeze ? "已开启定格，用户可将照片定格到照片墙。" : "已关闭定格，用户端不会显示定格入口。"}}</view>
         </view>
 
         <view class="album-create-section">
@@ -3062,8 +3097,12 @@
             <text>{{albumCreateAutoKey ? "自动生成" : "手动输入"}}</text>
           </view>
           <view class="album-create-summary__row">
-            <text>欢迎信显示</text>
-            <text>{{albumCreateEnableWelcomeLetter ? "开启" : "关闭"}}</text>
+            <text>欢迎信方式</text>
+            <text>{{albumCreateWelcomeLetterMode === 'envelope' ? "拆信封欢迎信" : (albumCreateWelcomeLetterMode === 'stamp' ? "右下角印章欢迎信" : "无欢迎信")}}</text>
+          </view>
+          <view class="album-create-summary__row">
+            <text>定格功能</text>
+            <text>{{albumCreateEnableFreeze ? "开启" : "关闭"}}</text>
           </view>
           <view class="album-create-summary__row">
             <text>打赏功能</text>
@@ -3188,6 +3227,39 @@
             maxlength="24"
           />
           <text class="album-modal__tip">将显示在信封上的 To 后面，默认值为“拾光者”。</text>
+        </view>
+        <view class="booking-modal__field">
+          <text class="booking-modal__label">欢迎信方式</text>
+          <view class="album-expiry-mode-row">
+            <button
+              class="album-expiry-mode-btn {{albumEditingWelcomeLetterMode === 'envelope' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="envelope"
+              bindtap="onAlbumEditingWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumRecipientSaving}}"
+            >
+              拆信封
+            </button>
+            <button
+              class="album-expiry-mode-btn {{albumEditingWelcomeLetterMode === 'stamp' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="stamp"
+              bindtap="onAlbumEditingWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumRecipientSaving}}"
+            >
+              右下角印章
+            </button>
+            <button
+              class="album-expiry-mode-btn {{albumEditingWelcomeLetterMode === 'none' ? 'album-expiry-mode-btn--active' : ''}}"
+              data-mode="none"
+              bindtap="onAlbumEditingWelcomeLetterModeChange"
+              hover-class="album-expiry-mode-btn--press"
+              disabled="{{albumRecipientSaving}}"
+            >
+              无欢迎信
+            </button>
+          </view>
+          <text class="album-modal__tip">{{albumEditingWelcomeLetterMode === 'envelope' ? '进入空间后自动展示拆信封欢迎信。' : (albumEditingWelcomeLetterMode === 'stamp' ? '在页面右下角显示印章入口，点击后查看欢迎信。' : '进入空间后不展示欢迎信入口。')}}</text>
         </view>
         <view class="booking-modal__field">
           <text class="booking-modal__label">欢迎信内容</text>
@@ -3336,9 +3408,9 @@
       </view>
       <view class="booking-modal__body">
         <text class="album-modal__subtitle">空间：{{albumDonationTargetTitle}}</text>
-        <view class="album-upload-preview" wx:if="{{albumDonationCurrentUrl}}">
+        <view class="album-upload-preview album-upload-preview--compact" wx:if="{{albumDonationCurrentUrl}}">
           <text class="album-upload-preview__label">当前赞赏码</text>
-          <image class="album-upload-preview__qr" src="{{albumDonationCurrentUrl}}" mode="aspectFit" />
+          <image class="album-upload-preview__qr album-upload-preview__qr--compact" src="{{albumDonationCurrentUrl}}" mode="aspectFit" />
         </view>
         <view class="album-upload-preview album-upload-preview--empty" wx:else>
           <text>当前未上传赞赏码，上传后将展示在用户空间页面。</text>

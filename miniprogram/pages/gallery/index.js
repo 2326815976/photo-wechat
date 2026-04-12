@@ -16,6 +16,16 @@ const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
 } = require("../../utils/stable-waterfall");
+const {
+  STORY_OPENING_DURATION_MS,
+  STORY_CLOSING_DURATION_MS,
+  STORY_IMAGE_ENTER_DURATION_MS,
+  createStoryOpeningState,
+  createStoryOpenedState,
+  createStoryClosingState,
+  createStoryClosedState,
+  clearStoryImagePhase,
+} = require("../../utils/story-motion");
 
 const PAGE_SIZE = 20;
 const GALLERY_LOAD_AHEAD_PX = 260;
@@ -100,6 +110,40 @@ function normalizeMaybeText(value) {
     return "";
   }
   return raw;
+}
+
+function normalizeMiniProgramPagePathText(value) {
+  return String(value || "").trim().replace(/^\/+/, "");
+}
+
+function resolveGalleryLoadingCopy(runtimeConfig, isLoggedIn) {
+  const normalized = normalizeRuntimeConfig(runtimeConfig);
+  const tabBarItems = Array.isArray(normalized.tabBarItems) ? normalized.tabBarItems : [];
+  const galleryTabItem = tabBarItems.find(
+    (item) => normalizeMiniProgramPagePathText(item && item.pagePath) === "pages/gallery/index"
+  );
+  const managedMetaMap =
+    normalized.managedPageMetaMap && typeof normalized.managedPageMetaMap === "object"
+      ? normalized.managedPageMetaMap
+      : {};
+  const managedMeta =
+    managedMetaMap.gallery && typeof managedMetaMap.gallery === "object"
+      ? managedMetaMap.gallery
+      : {};
+  const pageLabel =
+    normalizeMaybeText(
+      isLoggedIn
+        ? (galleryTabItem && (galleryTabItem.text || galleryTabItem.guestText))
+        : (galleryTabItem && (galleryTabItem.guestText || galleryTabItem.text))
+    ) ||
+    normalizeMaybeText(managedMeta.title) ||
+    (normalized.hideAudit ? "拾光谣" : "照片墙");
+
+  return {
+    title: pageLabel,
+    pageDescription: `正在加载${pageLabel}`,
+    switchDescription: `正在切换${pageLabel}标签`,
+  };
 }
 
 function normalizeGalleryFolderId(folderId) {
@@ -218,6 +262,9 @@ function normalizePhoto(photo, options) {
     has_story: hasStory,
     is_highlight: isHighlight,
     story_open: false,
+    story_visible: false,
+    story_phase: "",
+    story_image_phase: "",
     story_highlight: hasStory || isHighlight,
     _imageLoaded: Boolean(photo && photo._imageLoaded),
     _imageLoadFailed: Boolean(photo && photo._imageLoadFailed),
@@ -506,6 +553,9 @@ Page({
     pendingSwitchPhotoIds: [],
     loadingMore: false,
     hasMore: true,
+    pageLoadingTitle: "照片墙",
+    pageLoadingDescription: "正在加载照片墙",
+    tagSwitchLoadingDescription: "正在切换照片墙标签",
 
     isLoggedIn: false,
 
@@ -559,14 +609,19 @@ Page({
   tagGuideTimer: null,
   tagWaveTimer: null,
   tagWaveRunToken: 0,
+  storyMotionTimers: null,
 
   applyRuntimeConfig(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
     const enabled = Boolean(normalized.hideAudit);
+    const loadingCopy = resolveGalleryLoadingCopy(normalized, this.data.isLoggedIn);
     this.setData({
       hideAudit: enabled,
       previewPhoto: enabled ? null : this.data.previewPhoto,
       showLoginPrompt: enabled ? false : this.data.showLoginPrompt,
+      pageLoadingTitle: loadingCopy.title,
+      pageLoadingDescription: loadingCopy.pageDescription,
+      tagSwitchLoadingDescription: loadingCopy.switchDescription,
     });
     return normalized;
   },
@@ -746,6 +801,7 @@ Page({
     this.clearScrollMetricsTimer();
     this.clearTagGuideTimer();
     this.clearTagWaveTimer();
+    this.clearAllStoryMotionTimers();
     this.loadingNextPage = false;
     this.galleryLoadTicket += 1;
     this._galleryBootstrapped = false;
@@ -774,6 +830,44 @@ Page({
   },
 
   noop() {},
+
+  clearStoryMotionTimer(id, phase) {
+    if (!this.storyMotionTimers) return;
+    const key = `${String(id || "")}:${String(phase || "")}`;
+    const timer = this.storyMotionTimers[key];
+    if (!timer) return;
+    clearTimeout(timer);
+    delete this.storyMotionTimers[key];
+  },
+
+  clearStoryMotionTimersForPhoto(id) {
+    ["open", "close", "image"].forEach((phase) => {
+      this.clearStoryMotionTimer(id, phase);
+    });
+  },
+
+  clearAllStoryMotionTimers() {
+    if (!this.storyMotionTimers) return;
+    Object.keys(this.storyMotionTimers).forEach((key) => {
+      clearTimeout(this.storyMotionTimers[key]);
+    });
+    this.storyMotionTimers = null;
+  },
+
+  scheduleStoryMotionTimer(id, phase, handler, delay) {
+    if (typeof handler !== "function") return;
+    if (!this.storyMotionTimers) {
+      this.storyMotionTimers = Object.create(null);
+    }
+    this.clearStoryMotionTimer(id, phase);
+    const key = `${String(id || "")}:${String(phase || "")}`;
+    this.storyMotionTimers[key] = setTimeout(() => {
+      if (this.storyMotionTimers) {
+        delete this.storyMotionTimers[key];
+      }
+      handler();
+    }, Math.max(0, Number(delay || 0)));
+  },
 
   clearTagGuideTimer() {
     if (!this.tagGuideTimer) return;
@@ -980,10 +1074,42 @@ Page({
         : "";
     if (!id) return;
 
-    this.updatePhoto(id, (photo) => {
-      if (!photo || !photo.has_story) return photo;
-      return Object.assign({}, photo, { story_open: !Boolean(photo.story_open) });
-    });
+    const source = Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos : [];
+    const current = source.find((photo) => String((photo && photo.id) || "") === id);
+    if (!current || !current.has_story) return;
+
+    this.clearStoryMotionTimersForPhoto(id);
+
+    if (current.story_visible) {
+      this.updatePhoto(id, (photo) => createStoryClosingState(photo), { skipPersist: true });
+      this.scheduleStoryMotionTimer(
+        id,
+        "close",
+        () => {
+          this.updatePhoto(id, (photo) => createStoryClosedState(photo), { skipPersist: true });
+          this.scheduleStoryMotionTimer(
+            id,
+            "image",
+            () => {
+              this.updatePhoto(id, (photo) => clearStoryImagePhase(photo), { skipPersist: true });
+            },
+            STORY_IMAGE_ENTER_DURATION_MS
+          );
+        },
+        STORY_CLOSING_DURATION_MS
+      );
+      return;
+    }
+
+    this.updatePhoto(id, (photo) => createStoryOpeningState(photo), { skipPersist: true });
+    this.scheduleStoryMotionTimer(
+      id,
+      "open",
+      () => {
+        this.updatePhoto(id, (photo) => createStoryOpenedState(photo), { skipPersist: true });
+      },
+      STORY_OPENING_DURATION_MS
+    );
   },
 
   markTransientForegroundReturn() {
@@ -1037,12 +1163,20 @@ Page({
   },
 
   async refreshLoginState() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    const globalData = app && app.globalData ? app.globalData : {};
+    const runtimeConfig = globalData.runtimeConfig || { hideAudit: globalData.hideAudit };
+
     try {
       const session = await getSession();
       const user = extractSessionUser(session);
-      this.setData({ isLoggedIn: Boolean(user && user.id) });
+      this.setData({ isLoggedIn: Boolean(user && user.id) }, () => {
+        this.applyRuntimeConfig(runtimeConfig);
+      });
     } catch (e) {
-      this.setData({ isLoggedIn: false });
+      this.setData({ isLoggedIn: false }, () => {
+        this.applyRuntimeConfig(runtimeConfig);
+      });
     }
   },
 
@@ -1897,17 +2031,21 @@ Page({
         typeof rawPayload === "boolean"
           ? rawPayload
           : Boolean(readFieldFromPayloadChain(rawPayload, "counted"));
-      if (!counted) {
+      const viewCountValue = readFieldFromPayloadChain(rawPayload, "view_count");
+      const serverViewCount = pickFirstNonNegativeInteger([viewCountValue]);
+      const fallbackViewCount = toNonNegativeInteger(fallbackPhoto && fallbackPhoto.view_count);
+      const nextViewCount =
+        serverViewCount !== null
+          ? serverViewCount
+          : counted
+            ? Math.max(0, fallbackViewCount || 0) + 1
+            : fallbackViewCount;
+
+      if (nextViewCount === null) {
         return;
       }
 
-      const viewCountValue = readFieldFromPayloadChain(rawPayload, "view_count");
-      const viewCount = Number(
-        (viewCountValue ||
-          (fallbackPhoto && fallbackPhoto.view_count) ||
-          0)
-      );
-      this.updatePhoto(id, (p) => Object.assign({}, p, { view_count: viewCount }));
+      this.updatePhoto(id, (p) => Object.assign({}, p, { view_count: nextViewCount }));
     } catch (e2) {
       // ignore
     }

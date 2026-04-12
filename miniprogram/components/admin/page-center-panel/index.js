@@ -31,6 +31,13 @@ const STATE_FILTER_OPTIONS = [
   { value: "offline", label: "已下线" },
 ];
 
+const PROFILE_SECONDARY_PAGE_KEYS = new Set([
+  "profile-edit",
+  "profile-bookings",
+  "profile-change-password",
+  "about",
+  "profile-delete-account",
+]);
 const ICON_OPTIONS = ["", "home", "album", "gallery", "booking", "profile", "about"];
 const TAB_OPTIONS = [{ value: "", label: "不绑定底部菜单" }].concat(
   TAB_PAGE_OPTIONS.map((item) => ({
@@ -50,6 +57,10 @@ const BETA_CODE_LENGTH = 8;
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function isProfileSecondaryPageKey(pageKey) {
+  return PROFILE_SECONDARY_PAGE_KEYS.has(normalizeText(pageKey));
 }
 
 function normalizeNumber(value, fallback) {
@@ -384,6 +395,10 @@ function applyBetaPresentation(row, channel) {
 }
 
 function canShowInNav(row, channel) {
+  if (isProfileSecondaryPageKey(row && row.pageKey)) {
+    return false;
+  }
+
   if (channel === "web") {
     return normalizeBoolean(row.isNavCandidateWeb, Boolean(normalizeText(row.iconKey)));
   }
@@ -412,7 +427,17 @@ function buildForcedStateHint(forcedState, hideAudit) {
     : "当前受兼容规则控制：pose 页面必须进入首页 / 底栏体系，并固定为首页，菜单顺序不可调整。";
 }
 
-function buildQuickActionSuccessNotice(pageName, channel, state) {
+function buildQuickActionSuccessNotice(pageName, channel, state, isSecondaryPage) {
+  if (isSecondaryPage) {
+    if (state === "online") {
+      return `${pageName} 入口已显示，页面顶部标题会同步更新`;
+    }
+    if (state === "beta") {
+      return `${pageName} 已切换为内测`;
+    }
+    return `${pageName} 入口已隐藏，“我的”列表不再展示`;
+  }
+
   if (state === "online") {
     return `${pageName} 已上线并进入${channel === "web" ? "Web" : "小程序"}底部菜单`;
   }
@@ -424,17 +449,36 @@ function buildQuickActionSuccessNotice(pageName, channel, state) {
 
 function resolveQuickActionMeta(row, channel, hideAudit) {
   const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  const isSecondaryPage = isProfileSecondaryPageKey(row && row.pageKey);
   const forcedState = resolveForcedPublishState(row && row.pageKey, channel, hideAudit);
   const betaSummary = row && row.betaCodeSummary ? row.betaCodeSummary : summarizeDecoratedBetaCodes(decorateBetaCodesByChannel(row && row.betaCodes, channel));
-  const canOnline = canShowInNav(row, channel) && (!forcedState || forcedState === "online");
+  const canOnline = (isSecondaryPage || canShowInNav(row, channel)) && (!forcedState || forcedState === "online");
   const canBeta = normalizeBoolean(row && row.supportsBeta, false) && normalizeNumber(betaSummary && betaSummary.usable, 0) > 0 && (!forcedState || forcedState === "beta");
   const canOffline = !forcedState || forcedState === "offline";
 
   const createMeta = (state, disabled) => ({
     type: state,
     disabled: normalizeBoolean(disabled, false),
-    label: state === "online" ? "上线" : state === "beta" ? "内测" : "下线",
-    loadingLabel: state === "online" ? "上线中..." : state === "beta" ? "切换中..." : "下线中...",
+    label:
+      state === "online"
+        ? isSecondaryPage
+          ? "显示"
+          : "上线"
+        : state === "beta"
+          ? "内测"
+          : isSecondaryPage
+            ? "隐藏"
+            : "下线",
+    loadingLabel:
+      state === "online"
+        ? isSecondaryPage
+          ? "显示中..."
+          : "上线中..."
+        : state === "beta"
+          ? "切换中..."
+          : isSecondaryPage
+            ? "隐藏中..."
+            : "下线中...",
     className: state === "online" ? "action-btn--online" : state === "beta" ? "action-btn--beta" : "action-btn--offline",
   });
 
@@ -455,20 +499,62 @@ function resolveQuickActionMeta(row, channel, hideAudit) {
   return createMeta("offline", !canOffline);
 }
 
+function getDisplayStateMeta(row) {
+  const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  if (isProfileSecondaryPageKey(row && row.pageKey)) {
+    if (currentState === "online") {
+      return { type: "online", label: "显示中" };
+    }
+    if (currentState === "beta") {
+      return { type: "beta", label: "内测中" };
+    }
+    return { type: "offline", label: "已隐藏" };
+  }
+
+  return {
+    type: currentState,
+    label: STATE_LABEL_MAP[currentState] || "下线",
+  };
+}
+
+function buildPageSections(rows, channel) {
+  const currentRows = Array.isArray(rows) ? rows : [];
+  const primaryRows = currentRows.filter((item) => !isProfileSecondaryPageKey(item && item.pageKey));
+  const secondaryRows = currentRows.filter((item) => isProfileSecondaryPageKey(item && item.pageKey));
+  const navName = channel === "web" ? "Web 底部菜单" : "小程序底部菜单";
+
+  return [
+    {
+      key: "primary",
+      title: "一级页面管理",
+      description: `维护当前${navName}与正式页面的展示状态、菜单顺序和查看入口。`,
+      rows: primaryRows,
+    },
+    {
+      key: "secondary",
+      title: "二级菜单页面管理",
+      description: "维护“我的”页里的二级入口。修改标题会同步到页面顶部标题，隐藏后“我的”列表不再展示该入口。",
+      rows: secondaryRows,
+    },
+  ].filter((section) => Array.isArray(section.rows) && section.rows.length > 0);
+}
+
 function createRuleForm(rule, row) {
   const current = rule && typeof rule === "object" ? rule : {};
+  const isSecondaryPage = isProfileSecondaryPageKey(row && row.pageKey);
+  const navText = normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
   return {
     publishState: normalizeText(current.publishState) || "offline",
-    showInNav: normalizeBoolean(current.showInNav, false),
+    showInNav: isSecondaryPage ? false : normalizeBoolean(current.showInNav, false),
     navOrder: normalizeNumber(current.navOrder, 99),
-    navText: normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName),
-    guestNavText:
-      normalizeText(current.guestNavText) ||
-      normalizeText(row.defaultGuestTabText) ||
-      normalizeText(current.navText) ||
-      normalizeText(row.defaultTabText) ||
-      normalizeText(row.pageName),
-    headerTitle: normalizeText(current.headerTitle),
+    navText,
+    guestNavText: isSecondaryPage
+      ? navText
+      : normalizeText(current.guestNavText) ||
+        normalizeText(row.defaultGuestTabText) ||
+        navText ||
+        normalizeText(row.pageName),
+    headerTitle: isSecondaryPage ? navText : normalizeText(current.headerTitle),
     headerSubtitle: normalizeText(current.headerSubtitle),
     isHomeEntry: normalizeBoolean(current.isHomeEntry, false),
     notes: normalizeText(current.notes),
@@ -478,22 +564,24 @@ function createRuleForm(rule, row) {
 function normalizeRuleForm(row, channel, form) {
   const current = form && typeof form === "object" ? form : {};
   const publishState = normalizeText(current.publishState) || "offline";
+  const isSecondaryPage = isProfileSecondaryPageKey(row && row.pageKey);
   const navSupported = canShowInNav(row, channel);
-  const showInNav = publishState === "online" && navSupported;
-  const resolvedNavOrder = normalizeNumber(current.navOrder, 0);
+  const showInNav = isSecondaryPage ? false : publishState === "online" && navSupported;
+  const resolvedNavOrder = normalizeNumber(current.navOrder, isSecondaryPage ? 99 : 0);
   const navText = normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
-  const guestNavText =
-    normalizeText(current.guestNavText) ||
-    normalizeText(row.defaultGuestTabText) ||
-    navText ||
-    normalizeText(row.pageName);
+  const guestNavText = isSecondaryPage
+    ? navText
+    : normalizeText(current.guestNavText) ||
+      normalizeText(row.defaultGuestTabText) ||
+      navText ||
+      normalizeText(row.pageName);
   return {
     publishState,
     showInNav,
     navOrder: resolvedNavOrder,
     navText,
     guestNavText,
-    headerTitle: normalizeText(current.headerTitle),
+    headerTitle: isSecondaryPage ? navText : normalizeText(current.headerTitle),
     headerSubtitle: normalizeText(current.headerSubtitle),
     isHomeEntry: false,
     notes: normalizeText(current.notes),
@@ -518,6 +606,7 @@ function buildRow(item, channel, hideAudit) {
   const currentChannelRule = channels[channel] && typeof channels[channel] === "object" ? channels[channel] : {};
   const row = {
     pageKey: normalizeText(current.pageKey),
+    isSecondaryPage: isProfileSecondaryPageKey(current.pageKey),
     pageName: normalizeText(current.pageName),
     pageDescription: normalizeText(current.pageDescription),
     routePathWeb: normalizeText(current.routePathWeb),
@@ -580,7 +669,7 @@ function buildRow(item, channel, hideAudit) {
   row.forcedHomeEntry = isForcedHomeEntry(row.pageKey, channel, hideAudit);
   return row;
 }
-function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
+function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hideAudit) {
   const allRows = Array.isArray(rows) ? rows : [];
   const normalizedKeyword = normalizeText(keyword).toLowerCase();
   const normalizedStateFilter = normalizeText(stateFilter) || "all";
@@ -613,26 +702,30 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
     navRows.map((item, index) => [item.pageKey, { navRank: index + 1, isNavHome: index === 0 }])
   );
 
+  const displayOrderMap = new Map(navRows.map((item, index) => [item.pageKey, index]));
+  const fallbackOrderMap = new Map(allRows.map((item, index) => [item.pageKey, index]));
+
   const orderedRows = visibleRows
     .slice()
     .sort((left, right) => {
-      const leftWeight = left.currentRule.publishState === "online" ? 0 : left.currentRule.publishState === "beta" ? 1 : 2;
-      const rightWeight = right.currentRule.publishState === "online" ? 0 : right.currentRule.publishState === "beta" ? 1 : 2;
-      if (leftWeight !== rightWeight) return leftWeight - rightWeight;
-      if (left.currentRule.showInNav !== right.currentRule.showInNav) {
-        return left.currentRule.showInNav ? -1 : 1;
-      }
-      if (left.currentRule.navOrder !== right.currentRule.navOrder) {
-        return left.currentRule.navOrder - right.currentRule.navOrder;
+      const leftDisplayOrder = displayOrderMap.has(left.pageKey)
+        ? Number(displayOrderMap.get(left.pageKey))
+        : 1000 + Number(fallbackOrderMap.get(left.pageKey) ?? 0);
+      const rightDisplayOrder = displayOrderMap.has(right.pageKey)
+        ? Number(displayOrderMap.get(right.pageKey))
+        : 1000 + Number(fallbackOrderMap.get(right.pageKey) ?? 0);
+      if (leftDisplayOrder !== rightDisplayOrder) {
+        return leftDisplayOrder - rightDisplayOrder;
       }
       return normalizeText(left.pageName).localeCompare(normalizeText(right.pageName), "zh-CN");
     })
     .map((item) => {
       const row = clone(item);
       const navMeta = navMetaMap.get(row.pageKey) || { navRank: 0, isNavHome: false };
+      const stateMeta = getDisplayStateMeta(row);
       row.isExpanded = row.pageKey === nextExpandedKey;
-      row.statusType = normalizeText(row.currentRule.publishState) || "offline";
-      row.statusLabel = STATE_LABEL_MAP[row.statusType] || "下线";
+      row.statusType = stateMeta.type;
+      row.statusLabel = stateMeta.label;
       applyBetaPresentation(row, channel);
       row.navRank = navMeta.navRank;
       row.navTotal = navRows.length;
@@ -644,7 +737,7 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
         normalizeText(row.defaultGuestTabText) ||
         row.loginNavLabel;
       row.headerTitlePreview =
-        normalizeText(row.currentRule.headerTitle) || normalizeText(row.pageName);
+        normalizeText(row.currentRule.headerTitle) || row.loginNavLabel || normalizeText(row.pageName);
       row.headerSubtitlePreview =
         normalizeText(row.currentRule.headerSubtitle) || "留空时不单独显示";
       const quickAction = resolveQuickActionMeta(row, channel, hideAudit);
@@ -671,6 +764,7 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
 
   return {
     rows: orderedRows,
+    pageSections: buildPageSections(orderedRows, channel),
     navRows,
     summary,
     filteredCount: orderedRows.length,
@@ -815,6 +909,7 @@ Component({
     createDraft: createEmptyRegistryDraft(),
     allRows: [],
     pageRows: [],
+    pageSections: [],
     navRows: [],
     summary: { total: 0, online: 0, beta: 0, offline: 0, nav: 0, betaCodes: 0 },
     hideAudit: false,
@@ -894,13 +989,21 @@ Component({
     const dialogPageKey = Object.prototype.hasOwnProperty.call(optionBag, "dialogPageKey")
       ? normalizeText(optionBag.dialogPageKey)
       : normalizeText(this.data.dialogPageKey);
-    const presentation = buildPresentation(rows, this.data.channel, keyword, expandedKey, stateFilter);
+    const presentation = buildPresentation(
+      rows,
+      this.data.channel,
+      keyword,
+      expandedKey,
+      stateFilter,
+      this.data.hideAudit
+    );
     const dialogRow = dialogPageKey
       ? presentation.rows.find((item) => item.pageKey === dialogPageKey) || null
       : null;
     this.setData({
       allRows: rows,
       pageRows: presentation.rows,
+      pageSections: presentation.pageSections,
       navRows: presentation.navRows,
       summary: presentation.summary,
       filteredCount: presentation.filteredCount,
@@ -1224,11 +1327,22 @@ Component({
     const row = this.findRow(pageKey);
     if (!row) return;
     const savedRule = createRuleForm(row.channels[this.data.channel], row);
-    const nextRule = Object.assign({}, savedRule, {
-      headerTitle: normalizeText(row.currentRule.headerTitle),
-      headerSubtitle: normalizeText(row.currentRule.headerSubtitle),
-    });
-    void this.persistRule(pageKey, nextRule, "标题设置已保存", `${pageKey}:rule:title`);
+    const nextRule = row.isSecondaryPage
+      ? Object.assign({}, savedRule, {
+          navText: normalizeText(row.currentRule.navText),
+          guestNavText: normalizeText(row.currentRule.navText),
+          headerTitle: normalizeText(row.currentRule.navText),
+        })
+      : Object.assign({}, savedRule, {
+          headerTitle: normalizeText(row.currentRule.headerTitle),
+          headerSubtitle: normalizeText(row.currentRule.headerSubtitle),
+        });
+    void this.persistRule(
+      pageKey,
+      nextRule,
+      row.isSecondaryPage ? "页面标题已保存" : "标题设置已保存",
+      `${pageKey}:rule:title`
+    );
   },
 
   onSaveMenuRule(e) {
@@ -1236,6 +1350,7 @@ Component({
     const pageKey = normalizeText(dataset.pageKey);
     const row = this.findRow(pageKey);
     if (!row) return;
+    if (row.isSecondaryPage) return;
     const savedRule = createRuleForm(row.channels[this.data.channel], row);
     const nextRule = Object.assign({}, savedRule, {
       navText: normalizeText(row.currentRule.navText),
@@ -1290,7 +1405,7 @@ Component({
     const targetState = normalizeText(state);
     const currentRow = row && typeof row === "object" ? row : null;
     if (!currentRow || !targetState) return false;
-    if (targetState === "online" && !currentRow.navSupported) {
+    if (targetState === "online" && !currentRow.isSecondaryPage && !currentRow.navSupported) {
       this.showNotice("error", `当前页面未标记为${this.data.channel === "web" ? "Web" : "小程序"}底栏候选，无法直接上线到底栏`);
       return false;
     }
@@ -1319,7 +1434,12 @@ Component({
     return this.persistRule(
       currentRow.pageKey,
       nextRule,
-      buildQuickActionSuccessNotice(currentRow.pageName, this.data.channel, targetState),
+      buildQuickActionSuccessNotice(
+        currentRow.pageName,
+        this.data.channel,
+        targetState,
+        currentRow.isSecondaryPage
+      ),
       `${currentRow.pageKey}:state:${targetState}`
     );
   },
@@ -1354,7 +1474,7 @@ Component({
       }
     }
 
-    if (mode === "online" && !row.navSupported) {
+    if (mode === "online" && !row.isSecondaryPage && !row.navSupported) {
       this.showNotice("error", `当前页面未标记为${this.data.channel === "web" ? "Web" : "小程序"}底栏候选，无法直接上线到底栏`);
       return;
     }
@@ -1375,7 +1495,7 @@ Component({
     const success = await this.persistRule(
       pageKey,
       nextRule,
-      buildQuickActionSuccessNotice(row.pageName, this.data.channel, mode)
+      buildQuickActionSuccessNotice(row.pageName, this.data.channel, mode, row.isSecondaryPage)
     );
     if (success) {
       this.closeActionDialog();

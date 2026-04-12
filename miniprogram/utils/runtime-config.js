@@ -366,6 +366,30 @@ function normalizeManagedPageMetaMap(input) {
   }, {});
 }
 
+function normalizeManagedPageAccessMap(input) {
+  const source =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? input
+      : parseJsonObject(input) || {};
+
+  return Object.keys(source).reduce((map, pageKey) => {
+    const normalizedPageKey = toText(pageKey);
+    if (!normalizedPageKey) return map;
+    const current = source[pageKey] && typeof source[pageKey] === 'object' ? source[pageKey] : {};
+    map[normalizedPageKey] = {
+      pageKey: normalizedPageKey,
+      routePath: normalizeMiniProgramPagePath(current.routePath),
+      previewRoutePath: normalizeMiniProgramPagePath(current.previewRoutePath),
+      publishState: toText(current.publishState) || 'offline',
+      navText: toText(current.navText),
+      guestNavText: toText(current.guestNavText),
+      headerTitle: toText(current.headerTitle),
+      headerSubtitle: toText(current.headerSubtitle),
+    };
+    return map;
+  }, {});
+}
+
 function normalizeRuntimeConfig(input) {
   const current = input && typeof input === 'object' ? input : {};
   const directHideAudit =
@@ -400,6 +424,7 @@ function normalizeRuntimeConfig(input) {
   const tabBarItems = normalizeTabBarItems(current.tabBarItems, hideAudit);
   const featureFlags = normalizeFeatureFlags(current.featureFlags, hideAudit);
   const managedPageMetaMap = normalizeManagedPageMetaMap(current.managedPageMetaMap);
+  const managedPageAccessMap = normalizeManagedPageAccessMap(current.managedPageAccessMap);
   const homeEntryPagePath = normalizeHomeEntryPagePath(
     current.homeEntryPagePath,
     tabBarItems,
@@ -420,6 +445,7 @@ function normalizeRuntimeConfig(input) {
     tabBarItems,
     featureFlags,
     managedPageMetaMap,
+    managedPageAccessMap,
     notes: toText(current.notes),
     source: toText(current.source) || 'default_fallback',
     updatedAt: toText(current.updatedAt),
@@ -485,11 +511,25 @@ function getHomeRedirectPath(runtimeConfig) {
   return 'pages/index/index';
 }
 
+function getManagedPageAccess(runtimeConfig, pageKey) {
+  const config = normalizeRuntimeConfig(runtimeConfig);
+  const normalizedPageKey = toText(pageKey);
+  if (!normalizedPageKey) {
+    return null;
+  }
+  const accessMap =
+    config.managedPageAccessMap && typeof config.managedPageAccessMap === 'object'
+      ? config.managedPageAccessMap
+      : {};
+  return accessMap[normalizedPageKey] || null;
+}
+
 module.exports = {
   TAB_PAGE_OPTIONS,
   buildRuntimeConfigPreset,
   getDisplayedTabBarItems,
   getHomeRedirectPath,
+  getManagedPageAccess,
   getTabBarPagePathSet,
   isTabBarPagePath,
   normalizeRuntimeConfig,

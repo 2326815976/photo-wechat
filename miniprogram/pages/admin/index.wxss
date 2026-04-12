@@ -1,3 +1,5 @@
+@import "../../styles/admin-loading.wxss";
+
 .page {
   height: 100vh;
   background: #f8fafc;
@@ -2646,88 +2648,6 @@ button::after {
   min-height: 220rpx;
 }
 
-.about-preview-head {
-  margin-bottom: 12rpx;
-}
-
-.about-preview-title {
-  display: block;
-  font-size: 30rpx;
-  font-weight: 800;
-  color: #5d4037;
-}
-
-.about-preview-sub {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 22rpx;
-  color: rgba(93, 64, 55, 0.56);
-}
-
-.about-preview-message {
-  border-radius: 16rpx;
-  padding: 14rpx 16rpx;
-  background: rgba(255, 200, 87, 0.14);
-  color: rgba(93, 64, 55, 0.82);
-  font-size: 23rpx;
-  line-height: 1.6;
-  word-break: break-all;
-}
-
-.about-preview-contact {
-  margin-top: 14rpx;
-  border-radius: 16rpx;
-  padding: 14rpx 16rpx;
-  background: #fffbf0;
-  border: 2rpx solid rgba(93, 64, 55, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 10rpx;
-}
-
-.about-preview-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12rpx;
-}
-
-.about-preview-label {
-  font-size: 21rpx;
-  color: rgba(93, 64, 55, 0.58);
-  flex: none;
-}
-
-.about-preview-value {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-  font-size: 23rpx;
-  color: #5d4037;
-}
-
-.about-preview-value--break {
-  word-break: break-all;
-}
-
-.about-preview-empty {
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  color: rgba(93, 64, 55, 0.48);
-}
-
-.about-preview-qr-wrap {
-  margin-top: 14rpx;
-  border-radius: 16rpx;
-  overflow: hidden;
-  border: 2rpx solid rgba(93, 64, 55, 0.1);
-}
-
-.about-preview-qr {
-  width: 100%;
-  display: block;
-}
-
 .booking-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3916,6 +3836,11 @@ button::after {
   display: flex;
   align-items: flex-start;
   gap: 8rpx;
+}
+
+.booking-info-row--full,
+.booking-info-row--location {
+  grid-column: 1 / -1;
 }
 
 .booking-info-row__icon {
@@ -5445,14 +5370,21 @@ button::after {
   border-radius: 16rpx;
   padding: 14rpx;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 8rpx;
 }
 
 .album-access-card__main {
   flex: 1;
   min-width: 0;
+}
+
+.album-access-card__content {
+  margin-top: 8rpx;
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
 }
 
 .album-access-card__label {
@@ -5464,6 +5396,8 @@ button::after {
 
 .album-access-card__key {
   display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 24rpx;
   line-height: 1.2;
   letter-spacing: 3rpx;
@@ -5475,7 +5409,8 @@ button::after {
 .album-access-card__actions {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 10rpx;
+  margin-left: auto;
   flex: none;
 }
 
@@ -5523,7 +5458,7 @@ button::after {
 
 .album-recipient-card__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12rpx;
 }
@@ -5548,12 +5483,17 @@ button::after {
 }
 
 .album-recipient-card__edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
   height: 34rpx;
   min-width: 72rpx;
-  max-width: 166rpx;
-  border-radius: 10rpx;
+  max-width: none;
+  border-radius: 999rpx;
   padding: 0 8rpx;
-  background: rgba(93, 64, 55, 0.05);
+  background: rgba(255, 200, 87, 0.18);
+  border: 2rpx solid rgba(255, 200, 87, 0.3);
   color: #5d4037;
   font-size: 16rpx;
   font-weight: 600;
@@ -5566,7 +5506,8 @@ button::after {
 }
 
 .album-recipient-card__edit-btn:hover {
-  background: rgba(93, 64, 55, 0.1);
+  background: rgba(255, 200, 87, 0.26);
+  border-color: rgba(255, 200, 87, 0.42);
 }
 
 .album-recipient-card__edit-btn--active {
@@ -5576,6 +5517,16 @@ button::after {
 
 .album-recipient-card__edit-btn[disabled] {
   opacity: 0.45;
+}
+
+.album-recipient-card__edit-icon {
+  width: 22rpx;
+  height: 22rpx;
+  flex: none;
+}
+
+.album-recipient-card__edit-text {
+  line-height: 1;
 }
 
 .album-recipient-card__welcome {
@@ -5645,6 +5596,12 @@ button::after {
   border-color: #fed7aa;
   background: #fff7ed;
   color: #c2410c;
+}
+
+.album-toggle-btn--freeze-on {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #a16207;
 }
 
 .album-toggle-btn--off {
@@ -5849,14 +5806,17 @@ button::after {
 }
 
 .album-toggle-grid {
-  grid-template-columns: repeat(2, auto);
-  justify-content: space-between;
-  gap: 10rpx;
+  display: flex;
+  align-items: stretch;
+  gap: 12rpx;
 }
 
 .album-toggle-btn {
-  width: auto !important;
-  max-width: 236rpx !important;
+  flex: 1 1 0;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  justify-self: auto;
 }
 
 .album-toggle-btn__icon {
@@ -6287,6 +6247,18 @@ button::after {
   height: 260rpx;
   border-radius: 12rpx;
   background: #ffffff;
+}
+
+.album-upload-preview--compact {
+  padding: 16rpx;
+}
+
+.album-upload-preview__qr--compact {
+  width: 64%;
+  max-width: 280rpx;
+  height: 180rpx;
+  margin: 0 auto;
+  display: block;
 }
 
 .album-upload-preview--empty {

@@ -1,4 +1,4 @@
-<view class="page">
+﻿<view class="page">
   <view wx:if="{{!showSuccess}}" style="height: {{safeTop}}px;"></view>
 
   <!-- Web: top-4 -->
@@ -10,37 +10,23 @@
 
   <view class="content motion-fade-up motion-delay-2" wx:if="{{!showSuccess}}">
     <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">删除账户 🗑️</text>
-      <text class="sub">这是一个需要慎重考虑的决定</text>
-    </view>
-
-    <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">需要配置云托管服务名</text>
-      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
-    </view>
-
-    <view class="warn-card motion-fade-up motion-delay-3">
-      <view class="warn-icon-wrap">
-        <image class="warn-icon" src="/images/icons/alert-triangle-red.svg" mode="aspectFit" />
-      </view>
-      <text class="warn-title">⚠️ 温馨提醒</text>
+      <text class="title">{{managedTitle}}</text>
 
       <view class="warn-body">
         <text class="warn-p">
-          亲爱的小伙伴，删除账户就像是把你的
-          <text class="warn-highlight"> 拾光小秘密 </text>
-          全部装进时光机，然后按下"永久消失"按钮 🚀
+          浜茬埍鐨勫皬浼欎即锛屽垹闄よ处鎴峰氨鍍忔槸鎶婁綘鐨?          <text class="warn-highlight"> 鎷惧厜灏忕瀵?</text>
+          鍏ㄩ儴瑁呰繘鏃跺厜鏈猴紝鐒跺悗鎸変笅"姘镐箙娑堝け"鎸夐挳 馃殌
         </text>
-        <text class="warn-p">这意味着：</text>
+        <text class="warn-p">杩欐剰鍛崇潃锛?/text>
         <view class="warn-list">
-          <text class="warn-li">📸 所有珍藏的照片会消失不见</text>
-          <text class="warn-li" wx:if="{{!hideAudit}}">📅 所有预约记录会烟消云散</text>
-          <text class="warn-li" wx:else>🗂️ 已绑定空间记录会被清空</text>
-          <text class="warn-li">👤 你的账户信息会彻底清空</text>
-          <text class="warn-li">⏰ 这个操作 <text class="warn-danger">无法撤销</text></text>
+          <text class="warn-li">馃摳 鎵€鏈夌弽钘忕殑鐓х墖浼氭秷澶变笉瑙?/text>
+          <text class="warn-li" wx:if="{{!hideAudit}}">馃搮 鎵€鏈夐绾﹁褰曚細鐑熸秷浜戞暎</text>
+          <text class="warn-li" wx:else>馃梻锔?宸茬粦瀹氱┖闂磋褰曚細琚竻绌?/text>
+          <text class="warn-li">馃懁 浣犵殑璐︽埛淇℃伅浼氬交搴曟竻绌?/text>
+          <text class="warn-li">鈴?杩欎釜鎿嶄綔 <text class="warn-danger">鏃犳硶鎾ら攢</text></text>
         </view>
         <text class="warn-p warn-p--tip">
-          💡 如果只是想暂时休息一下，可以选择"退出登录"哦~ 这样你的数据仍然存在，随时欢迎你回来！✨
+          馃挕 濡傛灉鍙槸鎯虫殏鏃朵紤鎭竴涓嬶紝鍙互閫夋嫨"閫€鍑虹櫥褰?鍝 杩欐牱浣犵殑鏁版嵁浠嶇劧瀛樺湪锛岄殢鏃舵杩庝綘鍥炴潵锛佲湪
         </text>
       </view>
     </view>
@@ -50,18 +36,17 @@
     </view>
 
     <button class="btn-next" hover-class="btn-next--active" wx:if="{{!showConfirm}}" bindtap="openConfirm" disabled="{{serviceMissing}}">
-      我已了解风险，继续删除
-    </button>
+      鎴戝凡浜嗚В椋庨櫓锛岀户缁垹闄?    </button>
 
     <view class="confirm-box motion-pop-in" wx:if="{{showConfirm}}">
       <view class="confirm-tip">
-        <text class="confirm-tip-text">🤔 真的要说再见了吗？</text>
+        <text class="confirm-tip-text">馃 鐪熺殑瑕佽鍐嶈浜嗗悧锛?/text>
       </view>
 
       <view class="confirm-actions">
-        <button class="btn-ghost" hover-class="btn-ghost--active" bindtap="cancelConfirm">再想想</button>
+        <button class="btn-ghost" hover-class="btn-ghost--active" bindtap="cancelConfirm">鍐嶆兂鎯?/button>
         <button class="btn-danger" hover-class="btn-danger--active" bindtap="submitDelete" disabled="{{isDeleting}}">
-          {{isDeleting ? '删除中...' : '🗑️ 确认删除'}}
+          {{isDeleting ? '鍒犻櫎涓?..' : '馃棏锔?纭鍒犻櫎'}}
         </button>
       </view>
     </view>
@@ -72,10 +57,11 @@
       <view class="success-icon-wrap">
         <image class="success-icon" src="/images/icons/circle-check-yellow.svg" mode="aspectFit" />
       </view>
-      <text class="success-title">再见啦，小伙伴！👋</text>
-      <text class="success-desc">你的账户已经安全删除，所有数据都已清空。</text>
-      <text class="success-desc">期待未来某天能再次相遇~ ✨</text>
+      <text class="success-title">鍐嶈鍟︼紝灏忎紮浼达紒馃憢</text>
+      <text class="success-desc">浣犵殑璐︽埛宸茬粡瀹夊叏鍒犻櫎锛屾墍鏈夋暟鎹兘宸叉竻绌恒€?/text>
+      <text class="success-desc">鏈熷緟鏈潵鏌愬ぉ鑳藉啀娆＄浉閬噡 鉁?/text>
       <text class="success-warning" wx:if="{{postDeleteWarning}}">{{postDeleteWarning}}</text>
     </view>
   </view>
 </view>
+

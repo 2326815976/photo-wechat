@@ -8,6 +8,16 @@ const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
 } = require("../../utils/stable-waterfall");
+const {
+  STORY_OPENING_DURATION_MS,
+  STORY_CLOSING_DURATION_MS,
+  STORY_IMAGE_ENTER_DURATION_MS,
+  createStoryOpeningState,
+  createStoryOpenedState,
+  createStoryClosingState,
+  createStoryClosedState,
+  clearStoryImagePhase,
+} = require("../../utils/story-motion");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const ALBUM_SWITCH_OVERLAY_TRACK_COUNT = 6;
@@ -170,6 +180,9 @@ function normalizePhoto(photo) {
     has_story: hasStory,
     is_highlight: isHighlight,
     story_open: false,
+    story_visible: false,
+    story_phase: "",
+    story_image_phase: "",
     story_highlight: hasStory || isHighlight,
     _imageLoaded: Boolean(photo && photo._imageLoaded),
     _imageLoadFailed: Boolean(photo && photo._imageLoadFailed),
@@ -393,6 +406,32 @@ function readPageTotal(payload, fallbackCount) {
   return fallback;
 }
 
+function readFieldFromPayloadChain(payload, fields) {
+  const keys = Array.isArray(fields) ? fields : [fields];
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    for (let i = 0; i < keys.length; i += 1) {
+      const key = String(keys[i] || "").trim();
+      if (!key || !Object.prototype.hasOwnProperty.call(current, key)) continue;
+      const value = current[key];
+      if (value !== undefined && value !== null) {
+        return value;
+      }
+    }
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return undefined;
+}
+
+function toNonNegativeInteger(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return null;
+  return Math.round(numeric);
+}
+
 function isRpcFunctionNotImplemented(errorMessage) {
   const text = String(errorMessage || "").toLowerCase();
   if (!text) return false;
@@ -429,6 +468,31 @@ function filterPhotosByFolder(list, folderId) {
   return rows.filter((item) => String(item && item.folder_id ? item.folder_id : "") === targetFolderId);
 }
 
+function normalizeWelcomeLetterMode(mode, enabledFallback) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "envelope" || normalized === "stamp" || normalized === "none") {
+    return normalized;
+  }
+  return enabledFallback === false ? "none" : "envelope";
+}
+
+function normalizeWelcomeStoragePart(value) {
+  return String(value == null ? "" : value).replace(/\r\n/g, "\n").trim();
+}
+
+function buildWelcomeStorageToken(album) {
+  const source = album && typeof album === "object" ? album : {};
+  const mode = normalizeWelcomeLetterMode(
+    source.welcome_letter_mode,
+    source.enable_welcome_letter !== false
+  );
+  return [
+    mode,
+    normalizeWelcomeStoragePart(source.recipient_name),
+    normalizeWelcomeStoragePart(source.welcome_letter),
+  ].join("::");
+}
+
 Page({
   data: {
     safeTop: 0,
@@ -448,6 +512,7 @@ Page({
     total: 0,
 
     album: null,
+    freezeEnabled: true,
     headerTitle: "",
     expiryDays: 7,
     expiryNotice: "",
@@ -476,11 +541,13 @@ Page({
     showDeleteConfirm: false,
     showWelcomeLetter: false,
     showWelcomeEasterEgg: false,
+    welcomeLetterMode: "envelope",
     welcomeOpenedFromEgg: false,
     pendingFolderWaveAfterLetterClose: false,
     showDonationModal: false,
     welcomeStorageKey: "",
     welcomeEggStorageKey: "",
+    welcomeStorageToken: "",
 
     toast: null,
 
@@ -493,6 +560,7 @@ Page({
   folderGuideTimer: null,
   folderWaveTimer: null,
   folderWaveRunToken: 0,
+  storyMotionTimers: null,
   leftHeight: 0,
   rightHeight: 0,
   photoRatioMap: null,
@@ -711,6 +779,7 @@ Page({
     this.clearFolderGuideTimer();
     this.clearFolderWaveTimer();
     this.clearRelayoutTimer();
+    this.clearAllStoryMotionTimers();
     this.photoLoadTicket += 1;
     this._lastAlbumAutoLoadAt = 0;
     if (typeof this._unsubscribeAuditConfig === "function") {
@@ -728,60 +797,9 @@ Page({
     const patch = {
       hideAudit: hideAuditEnabled,
     };
-
-    if (!hideAuditEnabled) {
-      return patch;
-    }
-
-    if (this.data.confirmPhotoId) {
+    if (hideAuditEnabled && this.data.confirmPhotoId) {
       patch.confirmPhotoId = "";
     }
-
-    const shouldRepairAutoEnvelope =
-      Boolean(this.data.showWelcomeLetter) &&
-      !Boolean(this.data.welcomeOpenedFromEgg);
-    if (!shouldRepairAutoEnvelope) {
-      return patch;
-    }
-
-    const welcomeEnabled = Boolean(
-      this.data.album && this.data.album.enable_welcome_letter !== false
-    );
-    const storageKey = String(this.data.welcomeStorageKey || "").trim();
-    let hasSeenWelcome = false;
-    if (storageKey) {
-      try {
-        hasSeenWelcome = Boolean(wx.getStorageSync(storageKey));
-      } catch (error) {
-        hasSeenWelcome = false;
-      }
-    }
-    const eggStorageKey = String(this.data.welcomeEggStorageKey || "").trim();
-    let hasSeenWelcomeEgg = false;
-    if (eggStorageKey) {
-      try {
-        hasSeenWelcomeEgg = Boolean(wx.getStorageSync(eggStorageKey));
-      } catch (error) {
-        hasSeenWelcomeEgg = false;
-      }
-    }
-
-    // 兼容旧逻辑：历史版本可能在未点击彩蛋时就写入了“已看过彩蛋”。
-    // 若出现“欢迎信未看过，但彩蛋已看过”，重置彩蛋标记，允许再次展示一次彩蛋。
-    if (hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
-      try {
-        wx.removeStorageSync(eggStorageKey);
-        hasSeenWelcomeEgg = false;
-      } catch (error) {
-        // ignore
-      }
-    }
-    const shouldShowEgg = welcomeEnabled && !hasSeenWelcomeEgg;
-
-    patch.showWelcomeLetter = false;
-    patch.showWelcomeEasterEgg = shouldShowEgg;
-    patch.welcomeOpenedFromEgg = false;
-    patch.letterStage = "envelope";
     return patch;
   },
 
@@ -813,6 +831,44 @@ Page({
     if (!this.relayoutTimer) return;
     clearTimeout(this.relayoutTimer);
     this.relayoutTimer = null;
+  },
+
+  clearStoryMotionTimer(id, phase) {
+    if (!this.storyMotionTimers) return;
+    const key = `${String(id || "")}:${String(phase || "")}`;
+    const timer = this.storyMotionTimers[key];
+    if (!timer) return;
+    clearTimeout(timer);
+    delete this.storyMotionTimers[key];
+  },
+
+  clearStoryMotionTimersForPhoto(id) {
+    ["open", "close", "image"].forEach((phase) => {
+      this.clearStoryMotionTimer(id, phase);
+    });
+  },
+
+  clearAllStoryMotionTimers() {
+    if (!this.storyMotionTimers) return;
+    Object.keys(this.storyMotionTimers).forEach((key) => {
+      clearTimeout(this.storyMotionTimers[key]);
+    });
+    this.storyMotionTimers = null;
+  },
+
+  scheduleStoryMotionTimer(id, phase, handler, delay) {
+    if (typeof handler !== "function") return;
+    if (!this.storyMotionTimers) {
+      this.storyMotionTimers = Object.create(null);
+    }
+    this.clearStoryMotionTimer(id, phase);
+    const key = `${String(id || "")}:${String(phase || "")}`;
+    this.storyMotionTimers[key] = setTimeout(() => {
+      if (this.storyMotionTimers) {
+        delete this.storyMotionTimers[key];
+      }
+      handler();
+    }, Math.max(0, Number(delay || 0)));
   },
 
   calculateWaterfallHeight(list) {
@@ -1147,9 +1203,10 @@ Page({
 
   closeWelcomeLetter() {
     const storageKey = String(this.data.welcomeStorageKey || "").trim();
+    const storageToken = String(this.data.welcomeStorageToken || "").trim() || "1";
     if (storageKey) {
       try {
-        wx.setStorageSync(storageKey, "1");
+        wx.setStorageSync(storageKey, storageToken);
       } catch (e) {
         // ignore
       }
@@ -1180,9 +1237,10 @@ Page({
   onOpenWelcomeEasterEgg() {
     if (!this.data.showWelcomeEasterEgg) return;
     const eggStorageKey = String(this.data.welcomeEggStorageKey || "").trim();
+    const storageToken = String(this.data.welcomeStorageToken || "").trim() || "1";
     if (eggStorageKey) {
       try {
-        wx.setStorageSync(eggStorageKey, "1");
+        wx.setStorageSync(eggStorageKey, storageToken);
       } catch (e) {
         // ignore
       }
@@ -1191,7 +1249,6 @@ Page({
       showWelcomeEasterEgg: false,
       showWelcomeLetter: true,
       welcomeOpenedFromEgg: true,
-      // 审核模式下点击彩蛋后直接展示信纸内容，不展示信封拆封阶段
       letterStage: "letter",
     });
   },
@@ -1200,9 +1257,15 @@ Page({
     if (!this.data.showWelcomeLetter) return;
     if (this.data.letterStage !== "envelope") return;
 
-    this.setData({ letterStage: "opening" });
+    this.setData({ letterStage: "opening-envelope" });
     setTimeout(() => {
       if (!this.data.showWelcomeLetter) return;
+      if (this.data.letterStage !== "opening-envelope") return;
+      this.setData({ letterStage: "opening" });
+    }, 200);
+    setTimeout(() => {
+      if (!this.data.showWelcomeLetter) return;
+      if (this.data.letterStage !== "opening" && this.data.letterStage !== "opening-envelope") return;
       this.setData({ letterStage: "letter" });
     }, 800);
   },
@@ -1266,6 +1329,78 @@ Page({
     if (leftResult.changed) nextData.leftPhotos = leftResult.nextList;
     if (rightResult.changed) nextData.rightPhotos = rightResult.nextList;
     this.setData(nextData, () => this.refreshSelectionMeta());
+  },
+
+  patchPhotoMetrics(id, patch) {
+    const targetId = String(id || "");
+    if (!targetId || !patch || typeof patch !== "object") return;
+
+    const nextPatch = {};
+    if (Object.prototype.hasOwnProperty.call(patch, "view_count")) {
+      const parsedViewCount = toNonNegativeInteger(patch.view_count);
+      if (parsedViewCount !== null) {
+        nextPatch.view_count = parsedViewCount;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "download_count")) {
+      const parsedDownloadCount = toNonNegativeInteger(patch.download_count);
+      if (parsedDownloadCount !== null) {
+        nextPatch.download_count = parsedDownloadCount;
+      }
+    }
+    if (Object.keys(nextPatch).length === 0) {
+      return;
+    }
+
+    const applyPatch = (photo) => {
+      if (String((photo && photo.id) || "") !== targetId) {
+        return photo;
+      }
+
+      let changed = false;
+      const nextPhoto = Object.assign({}, photo);
+      if (
+        Object.prototype.hasOwnProperty.call(nextPatch, "view_count") &&
+        Number((photo && photo.view_count) || 0) !== nextPatch.view_count
+      ) {
+        nextPhoto.view_count = nextPatch.view_count;
+        changed = true;
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(nextPatch, "download_count") &&
+        Number((photo && photo.download_count) || 0) !== nextPatch.download_count
+      ) {
+        nextPhoto.download_count = nextPatch.download_count;
+        changed = true;
+      }
+      return changed ? nextPhoto : photo;
+    };
+
+    this.patchPhotoVisualState(targetId, applyPatch);
+
+    const patchCacheMap = (cacheMap) => {
+      if (!cacheMap || typeof cacheMap !== "object") return;
+      Object.keys(cacheMap).forEach((folderId) => {
+        const list = cacheMap[folderId];
+        if (!Array.isArray(list) || list.length === 0) return;
+
+        let changed = false;
+        const nextList = list.map((photo) => {
+          const patched = applyPatch(photo);
+          if (patched !== photo) {
+            changed = true;
+          }
+          return patched;
+        });
+
+        if (changed) {
+          cacheMap[folderId] = nextList;
+        }
+      });
+    };
+
+    patchCacheMap(this.fullPhotosByFolder);
+    patchCacheMap(this.legacyPhotosByFolder);
   },
 
   updatePhotoById(id, updater) {
@@ -1382,10 +1517,11 @@ Page({
       );
       const showFolderGuide = folders.length > 1;
       const storageKey = String(this.data.welcomeStorageKey || "").trim();
+      const welcomeStorageToken = buildWelcomeStorageToken(normalizedAlbum);
       let hasSeenWelcome = false;
       if (storageKey) {
         try {
-          hasSeenWelcome = Boolean(wx.getStorageSync(storageKey));
+          hasSeenWelcome = String(wx.getStorageSync(storageKey) || "") === welcomeStorageToken;
         } catch (e) {
           hasSeenWelcome = false;
         }
@@ -1394,13 +1530,13 @@ Page({
       let hasSeenWelcomeEgg = false;
       if (eggStorageKey) {
         try {
-          hasSeenWelcomeEgg = Boolean(wx.getStorageSync(eggStorageKey));
+          hasSeenWelcomeEgg = String(wx.getStorageSync(eggStorageKey) || "") === welcomeStorageToken;
         } catch (e) {
           hasSeenWelcomeEgg = false;
         }
       }
-      // 兼容旧逻辑：历史版本可能在未点击彩蛋时就提前写入彩蛋已看标记。
-      if (effectiveHideAudit && hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
+      // 兼容旧逻辑：历史版本可能在未点击印章时就提前写入入口已看标记。
+      if (hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
         try {
           wx.removeStorageSync(eggStorageKey);
           hasSeenWelcomeEgg = false;
@@ -1409,13 +1545,15 @@ Page({
         }
       }
 
-      const canShowWelcome =
-        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) && !hasSeenWelcome;
+      const welcomeLetterMode = normalizeWelcomeLetterMode(
+        normalizedAlbum && normalizedAlbum.welcome_letter_mode,
+        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false)
+      );
+      const showWelcomeLetter = welcomeLetterMode === "envelope" && !hasSeenWelcome;
       const showWelcomeEasterEgg =
-        effectiveHideAudit &&
-        Boolean(normalizedAlbum && normalizedAlbum.enable_welcome_letter !== false) &&
+        welcomeLetterMode === "stamp" &&
+        !hasSeenWelcome &&
         !hasSeenWelcomeEgg;
-      const showWelcomeLetter = effectiveHideAudit ? false : canShowWelcome;
       await new Promise((resolve) => {
         this.clearRelayoutTimer();
         this.leftHeight = 0;
@@ -1425,6 +1563,7 @@ Page({
         this.setData(
           {
             album: normalizedAlbum,
+            freezeEnabled: normalizedAlbum && normalizedAlbum.enable_freeze !== false,
             headerTitle:
               String((normalizedAlbum && normalizedAlbum.title) || "").trim() ||
               String(rootFolderName || this.data.initialRootFolderName || "").trim(),
@@ -1454,8 +1593,11 @@ Page({
             pendingFolderPhotoIds: [],
             pageNo: 0,
             total: 0,
+            confirmPhotoId: "",
             showWelcomeLetter,
             showWelcomeEasterEgg,
+            welcomeLetterMode,
+            welcomeStorageToken,
             welcomeOpenedFromEgg: false,
             pendingFolderWaveAfterLetterClose: false,
             letterStage: "envelope",
@@ -1921,15 +2063,41 @@ Page({
         : "";
     if (!id) return;
 
-    const nextAll = (this.data.allPhotos || []).map((photo) => {
-      if (String(photo.id) !== id) return photo;
-      if (!photo.has_story) return photo;
-      return Object.assign({}, photo, {
-        story_open: !Boolean(photo.story_open),
-      });
-    });
+    const current = this.findPhotoById(id);
+    if (!current || !current.has_story) return;
 
-    this.setData({ allPhotos: nextAll }, () => this.applyFilter());
+    this.clearStoryMotionTimersForPhoto(id);
+
+    if (current.story_visible) {
+      this.patchPhotoVisualState(id, (photo) => createStoryClosingState(photo));
+      this.scheduleStoryMotionTimer(
+        id,
+        "close",
+        () => {
+          this.patchPhotoVisualState(id, (photo) => createStoryClosedState(photo));
+          this.scheduleStoryMotionTimer(
+            id,
+            "image",
+            () => {
+              this.patchPhotoVisualState(id, (photo) => clearStoryImagePhase(photo));
+            },
+            STORY_IMAGE_ENTER_DURATION_MS
+          );
+        },
+        STORY_CLOSING_DURATION_MS
+      );
+      return;
+    }
+
+    this.patchPhotoVisualState(id, (photo) => createStoryOpeningState(photo));
+    this.scheduleStoryMotionTimer(
+      id,
+      "open",
+      () => {
+        this.patchPhotoVisualState(id, (photo) => createStoryOpenedState(photo));
+      },
+      STORY_OPENING_DURATION_MS
+    );
   },
 
   async toggleSelectAll() {
@@ -2155,6 +2323,7 @@ Page({
     if (!id) return;
 
     try {
+      const fallbackPhoto = this.findPhotoById(id);
       const sessionId = getSessionId();
       const r = await dbRpc("increment_photo_view", {
         p_photo_id: id,
@@ -2167,6 +2336,23 @@ Page({
       if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
         return;
       }
+
+      const counted =
+        typeof payload === "boolean"
+          ? payload
+          : Boolean(readFieldFromPayloadChain(payload, "counted"));
+      const serverViewCount = toNonNegativeInteger(readFieldFromPayloadChain(payload, "view_count"));
+      const fallbackViewCount = toNonNegativeInteger(fallbackPhoto && fallbackPhoto.view_count);
+      const nextViewCount =
+        serverViewCount !== null
+          ? serverViewCount
+          : counted
+            ? Math.max(0, fallbackViewCount || 0) + 1
+            : fallbackViewCount;
+
+      if (nextViewCount !== null) {
+        this.patchPhotoMetrics(id, { view_count: nextViewCount });
+      }
     } catch (error) {
       // ignore count failure
     }
@@ -2177,6 +2363,7 @@ Page({
     if (!id) return;
 
     try {
+      const fallbackPhoto = this.findPhotoById(id);
       const r = await dbRpc(
         "increment_photo_download",
         {
@@ -2192,6 +2379,23 @@ Page({
       const payload = r ? r.data : null;
       if (typeof payload !== "boolean" && isExplicitRpcFailure(payload)) {
         return;
+      }
+
+      const counted =
+        typeof payload === "boolean"
+          ? payload
+          : Boolean(readFieldFromPayloadChain(payload, "counted"));
+      const serverDownloadCount = toNonNegativeInteger(readFieldFromPayloadChain(payload, "download_count"));
+      const fallbackDownloadCount = toNonNegativeInteger(fallbackPhoto && fallbackPhoto.download_count);
+      const nextDownloadCount =
+        serverDownloadCount !== null
+          ? serverDownloadCount
+          : counted
+            ? Math.max(0, fallbackDownloadCount || 0) + 1
+            : fallbackDownloadCount;
+
+      if (nextDownloadCount !== null) {
+        this.patchPhotoMetrics(id, { download_count: nextDownloadCount });
       }
     } catch (error) {
       // ignore count failure
@@ -2449,6 +2653,7 @@ Page({
 
   async confirmPin() {
     if (this.data.hideAudit) return;
+    if (!this.data.freezeEnabled) return;
     const id = String(this.data.confirmPhotoId || "");
     if (!id) return;
 
@@ -2466,6 +2671,10 @@ Page({
 
     const photo = this.findPhotoById(id);
     if (!photo) return;
+    if (!this.data.freezeEnabled) {
+      this.showToast("当前专属空间未开启定格功能", "error", 2600);
+      return;
+    }
 
     if (photo.is_public) {
       await this.performTogglePin(id);
@@ -2477,6 +2686,12 @@ Page({
 
   async performTogglePin(id) {
     if (this.data.hideAudit) return;
+    const photo = this.findPhotoById(id);
+    if (!photo) return;
+    if (!this.data.freezeEnabled) {
+      this.showToast("当前专属空间未开启定格功能", "error", 2600);
+      return;
+    }
     try {
       const r = await dbRpc("pin_photo_to_wall", {
         p_access_key: this.data.key,

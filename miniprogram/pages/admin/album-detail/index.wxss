@@ -1,3 +1,5 @@
+@import "../../../styles/admin-loading.wxss";
+
 .album-detail-page {
   min-height: 100vh;
   background: #fffbf0;
@@ -1271,6 +1273,20 @@ button::after {
 
 .warning-box__text--danger {
   color: #b91c1c;
+}
+
+.warning-box__text--block {
+  display: block;
+  margin-top: 8rpx;
+  line-height: 1.5;
+}
+
+.modal-danger-confirm {
+  margin-top: 16rpx;
+}
+
+.modal-input--danger {
+  border-color: rgba(239, 68, 68, 0.36);
 }
 
 .text-strong {

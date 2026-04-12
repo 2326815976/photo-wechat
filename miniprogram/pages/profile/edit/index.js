@@ -1,10 +1,11 @@
-const { getSession, dbQuery, extractSessionUser } = require("../../../services/photo-api");
+const { getSession, dbQuery, requestJson, clearSessionCache, extractSessionUser } = require("../../../services/photo-api");
 const {
   clampChinaMobileInput,
   isValidChinaMobile,
   normalizeChinaMobile,
 } = require("../../../utils/phone");
 const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function trimOrEmpty(value) {
   return String(value || "").trim();
@@ -35,7 +36,7 @@ Page({
     return normalized;
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -52,11 +53,28 @@ Page({
       });
     }
 
+    const blocked = await this.guardManagedAccess();
+    if (blocked) {
+      return;
+    }
+
     if (!serviceMissing) {
       this.loadProfile();
     } else {
       this.setData({ loading: false });
     }
+  },
+
+  async onShow() {
+    await this.guardManagedAccess();
+  },
+
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "profile-edit",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
   },
 
   onUnload() {
@@ -91,11 +109,13 @@ Page({
       }
 
       const profile = r && r.data ? r.data : null;
+      const fallbackName = trimOrEmpty(user && user.name);
+      const fallbackPhone = trimOrEmpty(user && user.phone);
       this.setData({
         loading: false,
         formData: {
-          name: profile && profile.name ? String(profile.name) : "",
-          phone: profile && profile.phone ? String(profile.phone) : "",
+          name: profile && profile.name ? String(profile.name) : fallbackName,
+          phone: profile && profile.phone ? String(profile.phone) : fallbackPhone,
           wechat: profile && profile.wechat ? String(profile.wechat) : "",
         },
       });
@@ -155,66 +175,16 @@ Page({
         return;
       }
 
-      const profileValues = {
-        name,
-        phone: phone || null,
-        wechat: wechat || null,
-      };
-
-      const updatePayload = {
-        table: "profiles",
-        action: "update",
-        values: profileValues,
-        filters: [{ column: "id", operator: "eq", value: user.id }],
-        selectAfterWrite: true,
-        maybeSingle: true,
-        columns: "id",
-      };
-      let updateRes = await dbQuery(updatePayload);
-      if (updateRes && updateRes.error) {
-        const msg = String(updateRes.error.message || "保存失败，请重试");
-        this.setData({ error: `保存失败：${msg}` });
-        return;
-      }
-
-      if (!updateRes || !updateRes.data) {
-        const insertRes = await dbQuery({
-          table: "profiles",
-          action: "insert",
-          values: Object.assign({ id: user.id }, profileValues),
-          selectAfterWrite: true,
-          maybeSingle: true,
-          columns: "id",
-        });
-        if (insertRes && insertRes.error) {
-          const insertMessage = String(insertRes.error.message || "").toLowerCase();
-          const duplicated =
-            insertMessage.includes("duplicate") ||
-            insertMessage.includes("already exists") ||
-            insertMessage.includes("23505") ||
-            insertMessage.includes("1062");
-          if (!duplicated) {
-            const msg = String(insertRes.error.message || "保存失败，请重试");
-            this.setData({ error: `保存失败：${msg}` });
-            return;
-          }
-
-          // 并发创建场景：插入冲突后再重试一次更新
-          updateRes = await dbQuery(updatePayload);
-          if (updateRes && updateRes.error) {
-            const msg = String(updateRes.error.message || "保存失败，请重试");
-            this.setData({ error: `保存失败：${msg}` });
-            return;
-          }
-          if (!updateRes || !updateRes.data) {
-            this.setData({ error: "保存失败：请稍后重试" });
-            return;
-          }
-        } else if (!insertRes || !insertRes.data) {
-          this.setData({ error: "保存失败：请稍后重试" });
-          return;
-        }
-      }
+      await requestJson("/api/auth/update-user", {
+        method: "POST",
+        data: {
+          name,
+          phone: phone || null,
+          wechat: wechat || null,
+        },
+      });
+      clearSessionCache();
+      await getSession({ force: true }).catch(() => null);
 
       this.setData({ success: true });
       setTimeout(() => {

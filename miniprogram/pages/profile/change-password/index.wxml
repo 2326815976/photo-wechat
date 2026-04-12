@@ -1,4 +1,4 @@
-<view class="page">
+﻿<view class="page">
   <view wx:if="{{!showSuccess}}" style="height: {{safeTop}}px;"></view>
 
   <!-- Web: top-6 -->
@@ -10,13 +10,13 @@
 
   <view class="content motion-fade-up motion-delay-2" wx:if="{{!showSuccess}}">
     <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">修改密码 🔐</text>
-      <text class="sub">请输入当前密码和新密码</text>
+      <text class="title">{{managedTitle}}</text>
+      <text class="sub">璇疯緭鍏ュ綋鍓嶅瘑鐮佸拰鏂板瘑鐮?/text>
     </view>
 
     <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">需要配置云托管服务名</text>
-      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
+      <text class="config-tip__title">闇€瑕侀厤缃簯鎵樼鏈嶅姟鍚?/text>
+      <text class="config-tip__desc">璇峰湪 miniprogram/config.js 涓～鍐?cloudRunService锛堢敤浜?X-WX-SERVICE锛?/text>
     </view>
 
     <view class="form motion-fade-up motion-delay-3">
@@ -25,7 +25,7 @@
         <input
           class="input"
           password="{{!showCurrentPassword}}"
-          placeholder="当前密码"
+          placeholder="褰撳墠瀵嗙爜"
           placeholder-style="color: rgba(93, 64, 55, 0.4);"
           value="{{formData.currentPassword}}"
           data-field="currentPassword"
@@ -43,7 +43,7 @@
         <input
           class="input"
           password="{{!showNewPassword}}"
-          placeholder="新密码（至少6位）"
+          placeholder="鏂板瘑鐮侊紙鑷冲皯6浣嶏級"
           placeholder-style="color: rgba(93, 64, 55, 0.4);"
           value="{{formData.newPassword}}"
           data-field="newPassword"
@@ -61,7 +61,7 @@
         <input
           class="input"
           password="{{!showConfirmPassword}}"
-          placeholder="确认新密码"
+          placeholder="纭鏂板瘑鐮?
           placeholder-style="color: rgba(93, 64, 55, 0.4);"
           value="{{formData.confirmPassword}}"
           data-field="confirmPassword"
@@ -79,7 +79,7 @@
       </view>
 
       <button class="submit" hover-class="submit--active" bindtap="submit" disabled="{{isLoading || serviceMissing}}">
-        {{isLoading ? '修改中...' : '🔐 确认修改'}}
+        {{isLoading ? '淇敼涓?..' : '馃攼 纭淇敼'}}
       </button>
     </view>
   </view>
@@ -89,8 +89,9 @@
       <view class="success-icon-wrap">
         <image class="success-icon" src="/images/icons/circle-check-yellow.svg" mode="aspectFit" />
       </view>
-      <text class="success-title">密码修改成功！✨</text>
-      <text class="success-desc">已强制全部设备下线，正在前往登录...</text>
+      <text class="success-title">瀵嗙爜淇敼鎴愬姛锛佲湪</text>
+      <text class="success-desc">宸插己鍒跺叏閮ㄨ澶囦笅绾匡紝姝ｅ湪鍓嶅線鐧诲綍...</text>
     </view>
   </view>
 </view>
+

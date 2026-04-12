@@ -30,6 +30,17 @@ function toOptionalText(value) {
   return text;
 }
 
+function toOptionalMessageText(value) {
+  const raw = String(value == null ? "" : value);
+  const text = raw.trim();
+  if (!text) return "";
+  const normalized = text.toLowerCase();
+  if (normalized === "null" || normalized === "undefined" || normalized === "nil" || normalized === "none") {
+    return "";
+  }
+  return raw.replace(/\r\n/g, "\n");
+}
+
 function normalizeDonationQrCode(value) {
   const raw = toOptionalText(value);
   if (!raw) return "";
@@ -213,7 +224,7 @@ Page({
           wechat: toOptionalText(row.wechat),
           email: toOptionalText(row.email),
           donation_qr_code: donationQrCode,
-          author_message: toOptionalText(row.author_message),
+          author_message: toOptionalMessageText(row.author_message),
         },
       });
     } catch (error) {

@@ -1,5 +1,6 @@
 const { getSession, dbQuery, extractSessionUser } = require("../../../services/photo-api");
 const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
@@ -76,6 +77,10 @@ Page({
   async onLoad() {
     this._profileBookingsBootstrapped = false;
     this._lastSeenAppEnterSeq = 0;
+    const managedBlocked = await this.syncManagedAccess();
+    if (managedBlocked) {
+      return;
+    }
     const blocked = await this.syncAuditAccess();
     if (blocked) {
       return;
@@ -100,6 +105,10 @@ Page({
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
     const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
     this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+    const managedBlocked = await this.syncManagedAccess();
+    if (managedBlocked) {
+      return;
+    }
     const blocked = await this.syncAuditAccess();
     if (blocked) {
       return;
@@ -132,6 +141,14 @@ Page({
       ),
     });
     return normalized;
+  },
+
+  async syncManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "profile-bookings",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
   },
 
   async syncAuditAccess() {

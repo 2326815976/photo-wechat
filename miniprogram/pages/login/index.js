@@ -6,6 +6,7 @@ const {
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { requestWechatUserProfile } = require("../../utils/wechat-profile");
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -308,14 +309,17 @@ Page({
 
     this.setData({ wechatSubmitting: true, error: "" });
     try {
-      const loginRes = await wxLogin();
+      const [loginRes, profile] = await Promise.all([
+        wxLogin(),
+        requestWechatUserProfile({ desc: "用于完善登录后的头像与昵称" }),
+      ]);
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
         this.setData({ error: "未获取到微信登录凭证，请重试" });
         return;
       }
 
-      const r = await loginWithMiniProgram(code);
+      const r = await loginWithMiniProgram(code, profile || undefined);
       const user = extractAuthUserFromPayload(r);
       if (!user) {
         this.setData({ error: "微信登录失败，请稍后重试" });

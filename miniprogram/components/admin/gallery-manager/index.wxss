@@ -1,3 +1,5 @@
+@import "../../../styles/admin-loading.wxss";
+
 .album-detail-page {
   min-height: 0;
   background: transparent;
@@ -107,6 +109,8 @@
 }
 
 .toolbar-actions--selection .toolbar-btn {
+  flex: 1 1 calc((100% - 10rpx) / 2);
+  max-width: calc((100% - 10rpx) / 2);
   height: 44rpx;
   min-height: 44rpx;
   padding: 0 10rpx;
@@ -1278,6 +1282,20 @@
 
 .warning-box__text--danger {
   color: #b91c1c;
+}
+
+.warning-box__text--block {
+  display: block;
+  margin-top: 8rpx;
+  line-height: 1.5;
+}
+
+.modal-danger-confirm {
+  margin-top: 16rpx;
+}
+
+.modal-input--danger {
+  border-color: rgba(239, 68, 68, 0.36);
 }
 
 .text-strong {

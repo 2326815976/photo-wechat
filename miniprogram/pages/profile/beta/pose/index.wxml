@@ -11,16 +11,12 @@
   />
 
   <view class="boot-loading motion-fade-up motion-delay-2" wx:if="{{!serviceMissing && !backendReady}}">
-    <view class="boot-loading-ring">
-      <view class="boot-ring boot-ring--outer"></view>
-      <view class="boot-ring boot-ring--inner"></view>
-      <view class="boot-ring-center">
-        <image class="boot-center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+    <view class="admin-loading-card admin-loading-card--page">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
       </view>
-    </view>
-    <view class="boot-loading-text">
-      <text class="boot-loading-title">加载中...</text>
-      <text class="boot-loading-desc">正在加载页面</text>
+      <text class="admin-loading-card__title">拾光中...</text>
+      <text class="admin-loading-card__desc">正在加载页面</text>
     </view>
   </view>
 

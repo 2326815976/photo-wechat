@@ -1,7 +1,12 @@
 <view class="album-detail-page">
   <view wx:if="{{loading}}" class="loading-container">
-    <view class="loading-spinner"></view>
-    <text class="loading-text">加载中...</text>
+    <view class="admin-loading-card admin-loading-card--page">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
+      </view>
+      <text class="admin-loading-card__title">拾光中...</text>
+      <text class="admin-loading-card__desc">正在同步照片墙照片与目录结构，请稍候。</text>
+    </view>
   </view>
 
   <view wx:else class="main-content">
@@ -23,8 +28,9 @@
 
       <view wx:else class="toolbar-actions toolbar-actions--selection">
         <button class="toolbar-btn toolbar-btn--ghost toolbar-btn--select-toggle" bindtap="onSelectAll">
-          {{selectedPhotoIds.length === filteredPhotos.length && filteredPhotos.length > 0 ? '取消全选' : ('全选(' + selectedPhotoIds.length + '/' + filteredPhotos.length + ')')}}
+          {{selectedPhotoIds.length === totalCount && totalCount > 0 ? '取消全选' : ('全选(' + selectedPhotoIds.length + '/' + totalCount + ')')}}
         </button>
+        <button class="toolbar-btn toolbar-btn--ghost" bindtap="onExitSelectionMode">取消</button>
         <button class="toolbar-btn toolbar-btn--primary {{selectedPhotoIds.length === 0 ? 'toolbar-btn--disabled' : ''}}" bindtap="onShowMoveModal" disabled="{{selectedPhotoIds.length === 0}}">
           <image class="toolbar-btn__icon" src="/images/icons/chevrons-right-brown.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">迁移({{selectedPhotoIds.length}})</text>
@@ -33,7 +39,6 @@
           <image class="toolbar-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">删除({{selectedPhotoIds.length}})</text>
         </button>
-        <button class="toolbar-btn toolbar-btn--ghost" bindtap="onExitSelectionMode">取消</button>
       </view>
     </view>
 
@@ -224,7 +229,10 @@
     </view>
 
     <view class="pagination" wx:if="{{filteredPhotos.length || totalCount}}">
-      <text class="pagination__info" wx:if="{{loadingMore}}">正在加载更多...</text>
+      <view class="admin-loading-inline" wx:if="{{loadingMore}}">
+        <view class="admin-loading-inline__spinner"></view>
+        <text class="pagination__info">拾光中，正在加载更多...</text>
+      </view>
       <text class="pagination__info" wx:elif="{{hasMore}}">已加载 {{filteredPhotos.length}} / {{totalCount}} 张，下滑继续加载</text>
       <text class="pagination__info" wx:else>已全部加载，共 {{totalCount}} 张</text>
     </view>
@@ -566,13 +574,18 @@
         <text class="modal-subtitle">确定要删除文件夹 <text class="text-strong">{{deletingFolder.name}}</text> 吗？</text>
       </view>
       <view class="modal-body">
-        <view class="warning-box">
-          <text class="warning-box__text">文件夹内的照片将移至根目录</text>
+        <view class="warning-box {{deletingFolder.photoCount >= 10 ? 'warning-box--danger' : ''}}">
+          <text class="warning-box__text {{deletingFolder.photoCount >= 10 ? 'warning-box__text--danger' : ''}}">文件夹内的照片将移至{{rootFolderName}}</text>
+          <text wx:if="{{deletingFolder.photoCount >= 10}}" class="warning-box__text warning-box__text--danger warning-box__text--block">当前文件夹共有 {{deletingFolder.photoCount}} 张照片。为避免误删，请先手动输入“确认删除”。</text>
+        </view>
+        <view wx:if="{{deletingFolder.photoCount >= 10}}" class="modal-danger-confirm">
+          <input class="modal-input modal-input--danger" value="{{deleteFolderConfirmText}}" bindinput="onDeleteFolderConfirmTextChange" placeholder="请输入 确认删除" maxlength="20" confirm-type="done" />
+          <text class="modal-hint text-danger">仅当输入内容完全等于“确认删除”时才可删除。</text>
         </view>
       </view>
       <view class="modal-footer">
         <button class="modal-btn modal-btn--ghost {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onCancelDeleteFolder" disabled="{{actionLoading}}">取消</button>
-        <button class="modal-btn modal-btn--danger {{actionLoading ? 'modal-btn--disabled' : ''}}" bindtap="onConfirmDeleteFolder" disabled="{{actionLoading}}">
+        <button class="modal-btn modal-btn--danger {{actionLoading || (deletingFolder.photoCount >= 10 && !deleteFolderConfirmMatched) ? 'modal-btn--disabled' : ''}}" bindtap="onConfirmDeleteFolder" disabled="{{actionLoading || (deletingFolder.photoCount >= 10 && !deleteFolderConfirmMatched)}}">
           {{actionLoading ? '删除中...' : '确认删除'}}
         </button>
       </view>

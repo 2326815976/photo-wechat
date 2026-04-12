@@ -1,3 +1,5 @@
+@import "../../styles/admin-loading.wxss";
+
 ﻿.page {
   min-height: 100vh;
   background: #FFFBF0;
@@ -362,7 +364,7 @@
 .img-wrap {
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, filter 0.2s ease;
+  transition: transform 220ms ease, filter 220ms ease, background 220ms ease;
 }
 
 .img-wrap--story-open {
@@ -398,6 +400,14 @@
   opacity: 1;
   transform: scale(1);
   filter: none;
+}
+
+.story-media-stage {
+  transform-origin: center top;
+}
+
+.story-media-stage--entering {
+  animation: gallery-story-image-in 220ms ease-out both;
 }
 
 .img-loading-card {
@@ -610,6 +620,16 @@
   min-height: 280rpx;
   padding: 16rpx;
   box-sizing: border-box;
+  background: linear-gradient(160deg, #fffdf7 0%, #fff5dc 52%, #fcebc5 100%);
+  transform-origin: center top;
+}
+
+.story-panel--opening {
+  animation: gallery-story-panel-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.story-panel--closing {
+  animation: gallery-story-panel-out 220ms ease-in both;
 }
 
 .story-panel__paper {
@@ -662,6 +682,39 @@
   word-break: break-word;
 }
 
+@keyframes gallery-story-panel-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12rpx) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gallery-story-panel-out {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10rpx) scale(0.985);
+  }
+}
+
+@keyframes gallery-story-image-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10rpx) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .views {
   position: absolute;
   top: 12rpx;
@@ -699,6 +752,12 @@
   align-items: center;
   justify-content: center;
   border: 2rpx solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
+  transition:
+    transform 200ms ease,
+    background-color 250ms ease,
+    border-color 250ms ease,
+    box-shadow 250ms ease;
 }
 
 .story-toggle--highlight {
@@ -708,12 +767,17 @@
   animation: highlight-breathe 1.8s ease-in-out infinite;
 }
 
+.story-toggle--touch {
+  transform: scale(0.9);
+}
+
 .story-toggle__icon {
   font-size: 28rpx;
   color: #fff;
   font-weight: 700;
   line-height: 1;
-  transition: transform 0.2s ease;
+  transform-origin: center;
+  transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .story-toggle--highlight .story-toggle__icon {
@@ -722,7 +786,7 @@
 }
 
 .story-toggle__icon--open {
-  transform: rotate(180deg);
+  transform: rotate(180deg) scale(1.06);
 }
 
 .highlight-badge {

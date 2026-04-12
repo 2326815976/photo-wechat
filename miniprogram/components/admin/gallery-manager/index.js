@@ -8,6 +8,8 @@ const DEFAULT_SORT_ORDER = 2147483647;
 const TOP_PIN_SORT_ORDER = 1;
 const TOP_PIN_CONFLICT_SORT_ORDER = 11;
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
+const DELETE_FOLDER_CONFIRM_PHRASE = "确认删除";
+const DELETE_FOLDER_MANUAL_CONFIRM_THRESHOLD = 10;
 const ALBUM_FOLDER_SORT_MIGRATION_HINT = "数据库缺少 album_folders.sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/15_album_folder_sort_order.sql";
 const ALBUM_FOLDER_SORT_READONLY_HINT = "当前后端暂不支持 album_folders.sort_order, 已回退为旧版顺序展示; 如需启用上移/下移, 请同步数据库迁移和后端字段白名单: photo/sql/migrations/15_album_folder_sort_order.sql";
 const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_highlight / sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/06_album_photo_story_sort.sql";
@@ -110,6 +112,18 @@ function buildRootMoveTempFolderName() {
 
 function buildFolderSortOrderValue(index) {
   return (Math.max(0, Number(index) || 0) + 1) * 10;
+}
+
+function getFolderPhotoCount(folder) {
+  return Math.max(0, Number(folder && folder.photoCount || 0));
+}
+
+function folderNeedsManualDeleteConfirm(folder) {
+  return getFolderPhotoCount(folder) >= DELETE_FOLDER_MANUAL_CONFIRM_THRESHOLD;
+}
+
+function isDeleteFolderConfirmMatched(value) {
+  return String(value == null ? "" : value).trim() === DELETE_FOLDER_CONFIRM_PHRASE;
 }
 
 function normalizeFolderSortOrder(value) {
@@ -732,6 +746,8 @@ const pageDefinition = {
 
     // 删除确认
     deletingFolder: null,
+    deleteFolderConfirmText: "",
+    deleteFolderConfirmMatched: false,
     deletingPhoto: null,
     showBatchDeleteConfirm: false,
 
@@ -1326,6 +1342,18 @@ const pageDefinition = {
     return this.loadPhotos({ append: true });
   },
 
+  async ensureAllPhotosLoadedForSelection() {
+    let guard = 0;
+    while (this.data.hasMore && guard < 200) {
+      const loaded = await this.loadMorePhotos();
+      if (!loaded) {
+        break;
+      }
+      guard += 1;
+    }
+    return !this.data.hasMore;
+  },
+
   updateFilteredPhotos() {
     const { photos, selectedFolder, isSystemAlbum } = this.data;
     const selectedSet = new Set((Array.isArray(this.data.selectedPhotoIds) ? this.data.selectedPhotoIds : []).map(id => String(id)));
@@ -1861,24 +1889,70 @@ const pageDefinition = {
   },
 
   // 删除文件夹
-  onDeleteFolder(e) {
+  async onDeleteFolder(e) {
     const folderId = String(e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.folderId : "").trim();
-    if (!folderId || folderId === ROOT_FOLDER_SENTINEL) {
+    if (this.data.actionLoading || !folderId || folderId === ROOT_FOLDER_SENTINEL) {
       return;
     }
     const folder = this.data.folders.find(f => String(f.id) === String(folderId));
-    if (folder) {
-      this.setData({ deletingFolder: folder });
+    if (!folder) {
+      return;
+    }
+    try {
+      const result = await dbQuery({
+        table: "album_photos",
+        action: "select",
+        columns: "id",
+        filters: [
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+          { column: "folder_id", operator: "eq", value: folderId },
+        ],
+        range: {
+          from: 0,
+          to: 0,
+        },
+        count: "exact",
+      });
+      if (hasRpcError(result)) {
+        this.showToastMessage(`暂时无法校验文件夹照片数量：${readRpcError(result, "请稍后重试")}`, "warning");
+        return;
+      }
+      this.setData({
+        deletingFolder: Object.assign({}, folder, {
+          photoCount: Math.max(0, Number(result.count || 0)),
+        }),
+        deleteFolderConfirmText: "",
+        deleteFolderConfirmMatched: false,
+      });
+    } catch (error) {
+      console.error("获取文件夹照片数量失败:", error);
+      this.showToastMessage(`暂时无法校验文件夹照片数量：${readErrorMessage(error, "请稍后重试")}`, "warning");
     }
   },
 
   onCancelDeleteFolder() {
-    this.setData({ deletingFolder: null });
+    this.setData({
+      deletingFolder: null,
+      deleteFolderConfirmText: "",
+      deleteFolderConfirmMatched: false,
+    });
+  },
+
+  onDeleteFolderConfirmTextChange(e) {
+    const value = String(e && e.detail ? e.detail.value || "" : "");
+    this.setData({
+      deleteFolderConfirmText: value,
+      deleteFolderConfirmMatched: isDeleteFolderConfirmMatched(value),
+    });
   },
 
   async onConfirmDeleteFolder() {
-    const { deletingFolder } = this.data;
+    const { deletingFolder, deleteFolderConfirmMatched } = this.data;
     if (!deletingFolder) return;
+    if (folderNeedsManualDeleteConfirm(deletingFolder) && !deleteFolderConfirmMatched) {
+      this.showToastMessage(`该文件夹照片较多，请先输入“${DELETE_FOLDER_CONFIRM_PHRASE}”再继续`, "warning");
+      return;
+    }
 
     this.setData({ actionLoading: true });
 
@@ -1897,7 +1971,11 @@ const pageDefinition = {
 
       if (!hasRpcError(result) && readRpcData(result, null)) {
         this.showToastMessage(`文件夹已删除,照片已移至${this.data.rootFolderName}`, "success");
-        this.setData({ deletingFolder: null });
+        this.setData({
+          deletingFolder: null,
+          deleteFolderConfirmText: "",
+          deleteFolderConfirmMatched: false,
+        });
         await this.loadFolders();
         await this.loadPhotos();
         if (shouldInvalidatePublicGalleryCache(this.data)) {
@@ -2536,15 +2614,33 @@ const pageDefinition = {
     this.updateFilteredPhotos();
   },
 
-  onSelectAll() {
-    const { filteredPhotos, selectedPhotoIds } = this.data;
-    const allIds = filteredPhotos.map(p => String(p.id));
-    const selectedSet = new Set(
-      (Array.isArray(selectedPhotoIds) ? selectedPhotoIds : []).map((id) => String(id))
-    );
-    const allSelected = allIds.length > 0 && allIds.every((id) => selectedSet.has(id));
-    this.setData({ selectedPhotoIds: allSelected ? [] : allIds });
-    this.updateFilteredPhotos();
+  async onSelectAll() {
+    if (this.data.loading || this.data.loadingMore || this.data.actionLoading) return;
+
+    const totalCount = Math.max(0, Number(this.data.totalCount || 0));
+    const selectedPhotoIds = Array.isArray(this.data.selectedPhotoIds)
+      ? this.data.selectedPhotoIds.map((id) => String(id))
+      : [];
+    const allSelected = totalCount > 0 && selectedPhotoIds.length === totalCount;
+    if (allSelected) {
+      this.setData({ selectedPhotoIds: [] }, () => {
+        this.updateFilteredPhotos();
+      });
+      return;
+    }
+
+    if (this.data.hasMore) {
+      const loadedAll = await this.ensureAllPhotosLoadedForSelection();
+      if (!loadedAll && this.data.hasMore) {
+        return;
+      }
+    }
+
+    const filteredPhotos = Array.isArray(this.data.filteredPhotos) ? this.data.filteredPhotos : [];
+    const allIds = filteredPhotos.map((photo) => String((photo && photo.id) || "")).filter(Boolean);
+    this.setData({ selectedPhotoIds: allIds }, () => {
+      this.updateFilteredPhotos();
+    });
   },
 
   onPhotoCardTap(e) {

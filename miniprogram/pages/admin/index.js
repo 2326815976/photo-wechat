@@ -169,7 +169,12 @@ const ALBUM_FILTER_OPTIONS = [
   { key: "expiring", label: "即将到期" },
   { key: "expired", label: "已过期" },
   { key: "no_cover", label: "无封面" },
-  { key: "welcome_off", label: "欢迎信关闭" },
+  { key: "welcome_off", label: "无欢迎信" },
+];
+const WELCOME_LETTER_MODE_OPTIONS = [
+  { value: "envelope", label: "拆信封欢迎信", description: "进入空间后自动展示拆信封欢迎信。" },
+  { value: "stamp", label: "右下角印章欢迎信", description: "在页面右下角显示印章入口，点击后查看欢迎信。" },
+  { value: "none", label: "无欢迎信", description: "进入空间后不展示欢迎信入口。" },
 ];
 const BETA_PRESET_ROUTE_OPTIONS = [
   { route_path: "/pages/index/index", route_title: "摆姿推荐" },
@@ -1011,6 +1016,9 @@ function isValidEmailText(value) {
 function sanitizeAboutSettings(input) {
   const source = input && typeof input === "object" ? input : {};
   const phoneRaw = String(source.phone || "").trim();
+  const authorMessageRaw = String(source.author_message == null ? "" : source.author_message);
+  const authorMessageText = authorMessageRaw.trim();
+  const normalizedAuthorMessageText = authorMessageText.toLowerCase();
   return {
     id: Number(source.id || 0),
     author_name: String(source.author_name || "").trim(),
@@ -1018,33 +1026,20 @@ function sanitizeAboutSettings(input) {
     wechat: String(source.wechat || "").trim(),
     email: String(source.email || "").trim(),
     donation_qr_code: String(source.donation_qr_code || "").trim(),
-    author_message: String(source.author_message || "").trim(),
+    author_message:
+      authorMessageText &&
+      normalizedAuthorMessageText !== "null" &&
+      normalizedAuthorMessageText !== "undefined" &&
+      normalizedAuthorMessageText !== "nil" &&
+      normalizedAuthorMessageText !== "none"
+        ? authorMessageRaw.replace(/\r\n/g, "\n")
+        : "",
   };
 }
 
-function buildAboutSummaryPatch(input) {
-  const settings = sanitizeAboutSettings(input);
-  const contactCount = [settings.phone, settings.wechat, settings.email].filter(Boolean).length;
-  const filledFieldCount = [
-    settings.author_name,
-    settings.phone,
-    settings.wechat,
-    settings.email,
-    settings.donation_qr_code,
-    settings.author_message,
-  ].filter(Boolean).length;
-  const messageLength = settings.author_message.length;
-  const ready = Boolean(settings.author_name && (contactCount > 0 || settings.author_message || settings.donation_qr_code));
+function buildAboutSettingsPatch(input) {
   return {
-    aboutSettings: settings,
-    aboutStatusText: ready ? "可直接展示" : "建议补充",
-    aboutStatusDesc: ready
-      ? "作者名和核心展示信息已经具备"
-      : "建议至少补齐作者名，并完善留言、联系方式或赞赏码",
-    aboutFilledFieldCount: filledFieldCount,
-    aboutContactCount: contactCount,
-    aboutMessageLength: messageLength,
-    aboutHasDonationQr: Boolean(settings.donation_qr_code),
+    aboutSettings: sanitizeAboutSettings(input),
   };
 }
 
@@ -1053,8 +1048,21 @@ function matchAlbumFilter(item, filterKey) {
   if (key === "expiring") return Boolean(item && item.expirySoon && !item.expired);
   if (key === "expired") return Boolean(item && item.expired);
   if (key === "no_cover") return !Boolean(item && item.hasCover);
-  if (key === "welcome_off") return !Boolean(item && item.enable_welcome_letter);
+  if (key === "welcome_off") return String((item && item.welcome_letter_mode) || "") === "none";
   return true;
+}
+
+function normalizeWelcomeLetterMode(mode, enabledFallback) {
+  const normalized = String(mode || "").trim().toLowerCase();
+  if (normalized === "envelope" || normalized === "stamp" || normalized === "none") {
+    return normalized;
+  }
+  return enabledFallback === false ? "none" : "envelope";
+}
+
+function getWelcomeLetterModeLabel(mode) {
+  const match = WELCOME_LETTER_MODE_OPTIONS.find((item) => item.value === mode);
+  return match ? match.label : "拆信封欢迎信";
 }
 
 function matchAlbumKeyword(item, keyword) {
@@ -1065,6 +1073,7 @@ function matchAlbumKeyword(item, keyword) {
     item && item.access_key,
     item && item.recipient_name,
     item && item.welcome_letter,
+    item && item.welcome_letter_mode_label,
   ]
     .map((part) => String(part || "").trim())
     .filter(Boolean)
@@ -1195,12 +1204,10 @@ function mapStatsSourceLabel(source) {
 
 function createEmptyStatsMeta() {
   return {
-    generatedAtText: "",
     snapshotDateText: "",
     trendCoverageText: "0/7 天",
     statusText: "暂无统计快照",
     statusTone: "muted",
-    unavailableSourcesText: "",
   };
 }
 
@@ -1227,7 +1234,6 @@ function createEmptyStatsView() {
 function buildStatsMeta(stats) {
   const data = stats && typeof stats === "object" ? stats : {};
   const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
-  const generatedAtText = formatDateTime(meta.generated_at);
   const snapshotDateText = formatDateOnly(meta.snapshot_latest_date);
   const trendDaysExpected = Math.max(0, toSafeNumber(meta.trend_days_expected, 7));
   const trendDaysAvailable = Math.max(0, toSafeNumber(meta.trend_days_available, 0));
@@ -1243,66 +1249,54 @@ function buildStatsMeta(stats) {
 
   if (unavailableSourcesText) {
     return {
-      generatedAtText,
       snapshotDateText,
       trendCoverageText,
       statusText: `部分统计源不可用：${unavailableSourcesText}`,
       statusTone: "warning",
-      unavailableSourcesText,
     };
   }
 
   if (snapshotStatus === "unavailable") {
     return {
-      generatedAtText,
       snapshotDateText,
       trendCoverageText,
       statusText: "趋势快照表不可用",
       statusTone: "warning",
-      unavailableSourcesText,
     };
   }
 
   if (snapshotStatus === "empty" || trendDaysAvailable <= 0) {
     return {
-      generatedAtText,
       snapshotDateText,
       trendCoverageText,
       statusText: "暂无趋势快照，建议执行维护任务",
       statusTone: "muted",
-      unavailableSourcesText,
     };
   }
 
   if (snapshotLagDays !== null && snapshotLagDays > 0) {
     return {
-      generatedAtText,
       snapshotDateText,
       trendCoverageText,
       statusText: `趋势快照落后 ${snapshotLagDays} 天，建议执行维护任务`,
       statusTone: "warning",
-      unavailableSourcesText,
     };
   }
 
   if (trendDaysExpected > 0 && trendDaysAvailable < trendDaysExpected) {
     return {
-      generatedAtText,
       snapshotDateText,
       trendCoverageText,
       statusText: `最近 ${trendDaysExpected} 天趋势仅覆盖 ${trendDaysAvailable} 天`,
       statusTone: "warning",
-      unavailableSourcesText,
     };
   }
 
   return {
-    generatedAtText,
     snapshotDateText,
     trendCoverageText,
     statusText: "统计数据已同步",
     statusTone: "fresh",
-    unavailableSourcesText,
   };
 }
 
@@ -1512,7 +1506,9 @@ Page({
     bookingRows: [],
     bookingCurrentPage: 1,
     bookingPageSize: 10,
+    bookingVisibleCount: 10,
     bookingTotalPages: 1,
+    bookingHasMoreVisible: false,
     bookingUpdatingId: "",
     bookingActionLoading: false,
     bookingSelectionMode: false,
@@ -1597,12 +1593,6 @@ Page({
       donation_qr_code: "",
       author_message: "",
     },
-    aboutStatusText: "",
-    aboutStatusDesc: "",
-    aboutFilledFieldCount: 0,
-    aboutContactCount: 0,
-    aboutMessageLength: 0,
-    aboutHasDonationQr: false,
 
     poseCreating: false,
     posesLoading: true,
@@ -1722,7 +1712,8 @@ Page({
     albumCreateAutoKey: true,
     albumCreateAccessKey: "",
     albumCreateEnableTipping: true,
-    albumCreateEnableWelcomeLetter: true,
+    albumCreateWelcomeLetterMode: "envelope",
+    albumCreateEnableFreeze: true,
     albumCreateExpiryMode: "days",
     albumCreateExpiryDays: 7,
     albumCreateExpiryDate: getDateAfterDaysText(7),
@@ -1745,6 +1736,7 @@ Page({
     albumEditingRecipientTitle: "",
     albumEditingRecipientName: "",
     albumEditingWelcomeLetter: "",
+    albumEditingWelcomeLetterMode: "envelope",
     albumRecipientSaving: false,
     albumExpiryModalOpen: false,
     albumEditingExpiryId: "",
@@ -1911,6 +1903,10 @@ Page({
       this.loadMorePoseRows();
       return;
     }
+    if (this.data.activeSection === "bookings") {
+      this.loadMoreBookingRows();
+      return;
+    }
     if (this.data.activeSection === "gallery") {
       const galleryManager = this.selectComponent("#galleryManager");
       if (galleryManager && typeof galleryManager.loadMorePhotos === "function") {
@@ -2052,6 +2048,7 @@ Page({
       patch.albumEditingRecipientTitle = "";
       patch.albumEditingRecipientName = "";
       patch.albumEditingWelcomeLetter = "";
+      patch.albumEditingWelcomeLetterMode = "envelope";
       patch.albumExpiryModalOpen = false;
       patch.albumEditingExpiryId = "";
       patch.albumEditingExpiryTitle = "";
@@ -2766,14 +2763,14 @@ Page({
     try {
       const row = await getAdminAboutSettings();
       const donationQrRaw = String((row && row.donation_qr_code) || "").trim();
-      const patch = buildAboutSummaryPatch({
+      const patch = buildAboutSettingsPatch({
         id: Number((row && row.id) || 0),
         author_name: String((row && row.author_name) || "").trim(),
         phone: String((row && row.phone) || "").trim(),
         wechat: String((row && row.wechat) || "").trim(),
         email: String((row && row.email) || "").trim(),
         donation_qr_code: donationQrRaw ? resolvePublicUrl(donationQrRaw) : "",
-        author_message: String((row && row.author_message) || "").trim(),
+        author_message: String(row && row.author_message != null ? row.author_message : "").replace(/\r\n/g, "\n"),
       });
       this.setData({
         aboutLoading: false,
@@ -2793,7 +2790,7 @@ Page({
     if (!field) return;
     const value = e && e.detail ? e.detail.value : "";
     const nextSettings = Object.assign({}, this.data.aboutSettings || {}, { [field]: value });
-    this.setData(buildAboutSummaryPatch(nextSettings));
+    this.setData(buildAboutSettingsPatch(nextSettings));
   },
 
   onOpenAboutDonationModal() {
@@ -2832,7 +2829,7 @@ Page({
           });
           this.setData({
             aboutDonationModalOpen: false,
-            ...buildAboutSummaryPatch(nextSettings),
+            ...buildAboutSettingsPatch(nextSettings),
           });
           if (result && result.storageCleanupFailed) {
             this.showNotice("info", `赞赏码已上传，但旧文件清理失败：${result.warning || "请稍后处理"}`);
@@ -2868,7 +2865,7 @@ Page({
       });
       this.setData({
         aboutDonationModalOpen: false,
-        ...buildAboutSummaryPatch(nextSettings),
+        ...buildAboutSettingsPatch(nextSettings),
       });
       if (result && result.storageCleanupFailed) {
         this.showNotice("info", `赞赏码已清空，但旧文件清理失败：${result.warning || "请稍后处理"}`);
@@ -2898,7 +2895,7 @@ Page({
 
     this.setData({
       aboutSaving: true,
-      ...buildAboutSummaryPatch(nextSettings),
+      ...buildAboutSettingsPatch(nextSettings),
     });
     try {
       await saveAdminAboutSettings(nextSettings);
@@ -3768,8 +3765,8 @@ Page({
     const poseHasMoreVisible = pagedRows.length < totalCount;
 
     const poseAllSelected =
-      pagedRows.length > 0 &&
-      pagedRows.every((item) => selectedIdSet.has(Number(item && item.id)));
+      totalCount > 0 &&
+      filteredRows.every((item) => selectedIdSet.has(Number(item && item.id)));
 
     const normalizedPoseTagSelectedIds = normalizePoseTagSelectedIds(this.data.poseTagSelectedIds, rawTagStats);
     const selectedPoseTagIdSet = new Set(normalizedPoseTagSelectedIds);
@@ -3992,11 +3989,15 @@ Page({
 
   onSelectAllFilteredPoses() {
     if (!this.data.poseSelectionMode || this.data.poseBatchDeleting) return;
-    const pageRows = Array.isArray(this.data.posePagedList) ? this.data.posePagedList : [];
-    if (!pageRows.length) return;
-    const allIds = pageRows.map((item) => Number(item && item.id)).filter((id) => Number.isFinite(id) && id > 0);
+    const filteredRows = Array.isArray(this.data.poseFilteredList) ? this.data.poseFilteredList : [];
+    if (!filteredRows.length) return;
+    const totalCount = Math.max(0, Number(this.data.poseTotalCount || filteredRows.length));
+    const allIds = filteredRows.map((item) => Number(item && item.id)).filter((id) => Number.isFinite(id) && id > 0);
     const allSelected = Boolean(this.data.poseAllSelected);
-    this.setData({ poseSelectedIds: allSelected ? [] : allIds }, () => {
+    this.setData({
+      poseSelectedIds: allSelected ? [] : allIds,
+      poseVisibleCount: allSelected ? this.data.poseVisibleCount : Math.max(totalCount, Number(this.data.posePageSize || 10)),
+    }, () => {
       this.refreshPoseModuleView();
     });
   },
@@ -4721,7 +4722,12 @@ Page({
           const recipientName = String((row && row.recipient_name) || "").trim() || "拾光者";
           const welcomeLetter = String((row && row.welcome_letter) || "").trim();
           const enableTipping = Boolean(row && row.enable_tipping);
-          const enableWelcomeLetter = row ? row.enable_welcome_letter !== false : true;
+          const welcomeLetterMode = normalizeWelcomeLetterMode(
+            row && row.welcome_letter_mode,
+            row ? row.enable_welcome_letter !== false : true
+          );
+          const enableWelcomeLetter = welcomeLetterMode !== "none";
+          const enableFreeze = row ? row.enable_freeze !== false : true;
           const createdAt = String((row && row.created_at) || "").trim();
           const expiresAt = String((row && row.expires_at) || "").trim();
           const expiresDate = parseDateTimeUTC8(expiresAt);
@@ -4743,6 +4749,9 @@ Page({
             welcome_letter: welcomeLetter,
             enable_tipping: enableTipping,
             enable_welcome_letter: enableWelcomeLetter,
+            welcome_letter_mode: welcomeLetterMode,
+            welcome_letter_mode_label: getWelcomeLetterModeLabel(welcomeLetterMode),
+            enable_freeze: enableFreeze,
             accessLink: buildAlbumAccessLink(accessKey),
             qrUrl: buildAlbumQrUrl(accessKey),
             created_at: createdAt,
@@ -4855,6 +4864,7 @@ Page({
       patch.albumEditingRecipientTitle = "";
       patch.albumEditingRecipientName = "";
       patch.albumEditingWelcomeLetter = "";
+      patch.albumEditingWelcomeLetterMode = "envelope";
     }
 
     const editingExpiryId = String(this.data.albumEditingExpiryId || "").trim();
@@ -5229,28 +5239,26 @@ Page({
     const pageSize = Math.max(1, Number(this.data.bookingPageSize || 10));
     const totalCount = normalized.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    let currentPage = Number(this.data.bookingCurrentPage || 1);
-    if (!Number.isFinite(currentPage) || currentPage < 1) {
-      currentPage = 1;
-    }
-    if (currentPage > totalPages) {
-      currentPage = totalPages;
-    }
-    const startIndex = (currentPage - 1) * pageSize;
-    const bookingRows = normalized.slice(startIndex, startIndex + pageSize);
+    const rawVisibleCount = Math.max(pageSize, Number(this.data.bookingVisibleCount || pageSize));
+    const visibleCount = totalCount > 0 ? Math.min(rawVisibleCount, totalCount) : pageSize;
+    const bookingRows = normalized.slice(0, visibleCount);
+    const currentPage = totalCount > 0 ? Math.max(1, Math.ceil(bookingRows.length / pageSize)) : 1;
+    const bookingHasMoreVisible = bookingRows.length < totalCount;
     const pageDeletableIds = bookingRows
       .filter((item) => isBookingDeletable(item && item.status))
       .map((item) => String((item && item.id) || ""))
       .filter(Boolean);
     const pageDeletableCount = pageDeletableIds.length;
     const allSelected =
-      pageDeletableCount > 0 && pageDeletableIds.every((id) => selectedSet.has(String(id)));
+      deletableCount > 0 && deletableIds.every((id) => selectedSet.has(String(id)));
 
     const patch = {
       bookingFilteredList: normalized,
       bookingRows,
       bookingCurrentPage: currentPage,
+      bookingVisibleCount: visibleCount,
       bookingTotalPages: totalPages,
+      bookingHasMoreVisible,
       bookingSelectedIds: selectedIds,
       bookingSelectedCount: selectedCount,
       bookingPendingCount: pendingCount,
@@ -5272,6 +5280,7 @@ Page({
     this.setData({
       bookingKeyword: value,
       bookingCurrentPage: 1,
+      bookingVisibleCount: Math.max(1, Number(this.data.bookingPageSize || 10)),
     });
     this.clearBookingSearchTimer();
     this._bookingSearchTimer = setTimeout(() => {
@@ -5283,24 +5292,22 @@ Page({
   onClearBookingKeyword() {
     if (!this.data.bookingKeyword) return;
     this.clearBookingSearchTimer();
-    this.setData({ bookingKeyword: "", bookingCurrentPage: 1 }, () => {
+    this.setData({
+      bookingKeyword: "",
+      bookingCurrentPage: 1,
+      bookingVisibleCount: Math.max(1, Number(this.data.bookingPageSize || 10)),
+    }, () => {
       this.refreshBookingModuleView();
     });
   },
 
-  onBookingPrevPage() {
-    const currentPage = Number(this.data.bookingCurrentPage || 1);
-    if (!Number.isFinite(currentPage) || currentPage <= 1) return;
-    this.setData({ bookingCurrentPage: currentPage - 1 }, () => {
-      this.refreshBookingModuleView();
-    });
-  },
-
-  onBookingNextPage() {
-    const currentPage = Number(this.data.bookingCurrentPage || 1);
-    const totalPages = Number(this.data.bookingTotalPages || 1);
-    if (!Number.isFinite(currentPage) || !Number.isFinite(totalPages) || currentPage >= totalPages) return;
-    this.setData({ bookingCurrentPage: currentPage + 1 }, () => {
+  loadMoreBookingRows() {
+    if (this.data.bookingBatchDeleting || this.data.bookingActionLoading) return;
+    if (String(this.data.bookingPanelTab || "bookings") !== "bookings") return;
+    if (!this.data.bookingHasMoreVisible) return;
+    const pageSize = Math.max(1, Number(this.data.bookingPageSize || 10));
+    const visibleCount = Math.max(pageSize, Number(this.data.bookingVisibleCount || pageSize));
+    this.setData({ bookingVisibleCount: visibleCount + pageSize }, () => {
       this.refreshBookingModuleView();
     });
   },
@@ -5332,6 +5339,9 @@ Page({
       );
       const cleanedBlackouts = Number(result && result.booking_blackouts_cleaned ? result.booking_blackouts_cleaned : 0);
       const cleanedAnalyticsDaily = Number(result && result.analytics_daily_cleaned ? result.analytics_daily_cleaned : 0);
+      const analyticsSnapshotsBackfilled = Number(
+        result && result.analytics_snapshots_backfilled ? result.analytics_snapshots_backfilled : 0
+      );
       const warningList = Array.isArray(cleanup.storage_cleanup_warnings)
         ? cleanup.storage_cleanup_warnings
             .map((item) =>
@@ -5376,6 +5386,9 @@ Page({
         `清理每日统计${cleanedAnalyticsDaily}条`,
       ];
       const extraParts = [];
+      if (analyticsSnapshotsBackfilled > 0) {
+        extraParts.push(`趋势快照已回填 ${analyticsSnapshotsBackfilled} 天`);
+      }
       if (warningList.length > 0) {
         extraParts.push(`存储清理告警：${warningList.join("；")}`);
       }
@@ -6230,6 +6243,7 @@ Page({
       {
         bookingFilter: key,
         bookingCurrentPage: 1,
+        bookingVisibleCount: Math.max(1, Number(this.data.bookingPageSize || 10)),
         bookingSelectionMode: false,
         bookingSelectedIds: [],
         bookingBatchDeleteConfirmOpen: false,
@@ -6308,13 +6322,19 @@ Page({
 
   onToggleSelectAllBookings() {
     if (!this.data.bookingSelectionMode || this.data.bookingBatchDeleting) return;
-    const deletableIds = (this.data.bookingRows || [])
+    const filteredRows = Array.isArray(this.data.bookingFilteredList) ? this.data.bookingFilteredList : [];
+    const deletableIds = filteredRows
       .filter((item) => isBookingDeletable(item && item.status))
       .map((item) => String((item && item.id) || ""))
       .filter(Boolean);
     if (!deletableIds.length) return;
     const nextSelected = this.data.bookingAllSelected ? [] : deletableIds;
-    this.setData({ bookingSelectedIds: nextSelected }, () => {
+    this.setData({
+      bookingSelectedIds: nextSelected,
+      bookingVisibleCount: this.data.bookingAllSelected
+        ? this.data.bookingVisibleCount
+        : Math.max(filteredRows.length, Number(this.data.bookingPageSize || 10)),
+    }, () => {
       this.refreshBookingModuleView();
     });
   },
@@ -8000,7 +8020,8 @@ Page({
       albumCreateAutoKey: true,
       albumCreateAccessKey: generateAlbumAccessKey(),
       albumCreateEnableTipping: true,
-      albumCreateEnableWelcomeLetter: true,
+      albumCreateWelcomeLetterMode: "envelope",
+      albumCreateEnableFreeze: true,
       albumCreateExpiryMode: "days",
       albumCreateExpiryDays: 7,
       albumCreateExpiryDate: getDateAfterDaysText(7),
@@ -8022,7 +8043,8 @@ Page({
       albumCreateAutoKey: true,
       albumCreateAccessKey: "",
       albumCreateEnableTipping: true,
-      albumCreateEnableWelcomeLetter: true,
+      albumCreateWelcomeLetterMode: "envelope",
+      albumCreateEnableFreeze: true,
       albumCreateExpiryMode: "days",
       albumCreateExpiryDays: 7,
       albumCreateExpiryDate: getDateAfterDaysText(7),
@@ -8076,9 +8098,19 @@ Page({
     this.setData({ albumCreateEnableTipping: next });
   },
 
-  onAlbumCreateEnableWelcomeLetterChange(e) {
+  onAlbumCreateWelcomeLetterModeChange(e) {
+    const mode =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.mode || "envelope")
+        : "envelope";
+    this.setData({
+      albumCreateWelcomeLetterMode: normalizeWelcomeLetterMode(mode, true),
+    });
+  },
+
+  onAlbumCreateEnableFreezeChange(e) {
     const next = Boolean(e && e.detail ? e.detail.value : false);
-    this.setData({ albumCreateEnableWelcomeLetter: next });
+    this.setData({ albumCreateEnableFreeze: next });
   },
 
   onChooseAlbumCreateCover() {
@@ -8231,7 +8263,9 @@ Page({
     const autoKey = Boolean(this.data.albumCreateAutoKey);
     const manualKey = normalizeAlbumAccessKey(this.data.albumCreateAccessKey);
     const enableTipping = Boolean(this.data.albumCreateEnableTipping);
-    const enableWelcomeLetter = Boolean(this.data.albumCreateEnableWelcomeLetter);
+    const welcomeLetterMode = normalizeWelcomeLetterMode(this.data.albumCreateWelcomeLetterMode, true);
+    const enableWelcomeLetter = welcomeLetterMode !== "none";
+    const enableFreeze = Boolean(this.data.albumCreateEnableFreeze);
     const expiryMode = String(this.data.albumCreateExpiryMode || "days");
     const expiryDays = Math.max(1, Math.min(365, Number(this.data.albumCreateExpiryDays || 7) || 7));
     const expiryDate = String(this.data.albumCreateExpiryDate || "").trim();
@@ -8263,6 +8297,8 @@ Page({
         access_key: autoKey ? "" : manualKey,
         enable_tipping: enableTipping,
         enable_welcome_letter: enableWelcomeLetter,
+        welcome_letter_mode: welcomeLetterMode,
+        enable_freeze: enableFreeze,
         expires_at: expiresAt,
       });
 
@@ -8301,7 +8337,8 @@ Page({
         albumCreateAutoKey: true,
         albumCreateAccessKey: "",
         albumCreateEnableTipping: true,
-        albumCreateEnableWelcomeLetter: true,
+        albumCreateWelcomeLetterMode: "envelope",
+        albumCreateEnableFreeze: true,
         albumCreateExpiryMode: "days",
         albumCreateExpiryDays: 7,
         albumCreateExpiryDate: getDateAfterDaysText(7),
@@ -8669,6 +8706,10 @@ Page({
       albumEditingRecipientTitle: String(target.title || "未命名空间"),
       albumEditingRecipientName: String(target.recipient_name || ""),
       albumEditingWelcomeLetter: String(target.welcome_letter || ""),
+      albumEditingWelcomeLetterMode: normalizeWelcomeLetterMode(
+        target.welcome_letter_mode,
+        target.enable_welcome_letter !== false
+      ),
     });
   },
 
@@ -8680,6 +8721,7 @@ Page({
       albumEditingRecipientTitle: "",
       albumEditingRecipientName: "",
       albumEditingWelcomeLetter: "",
+      albumEditingWelcomeLetterMode: "envelope",
     });
   },
 
@@ -8693,6 +8735,16 @@ Page({
     this.setData({ albumEditingWelcomeLetter: String(value || "") });
   },
 
+  onAlbumEditingWelcomeLetterModeChange(e) {
+    const mode =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.mode || "envelope")
+        : "envelope";
+    this.setData({
+      albumEditingWelcomeLetterMode: normalizeWelcomeLetterMode(mode, true),
+    });
+  },
+
   async onSubmitAlbumRecipient() {
     const id = String(this.data.albumEditingRecipientId || "").trim();
     if (!id) {
@@ -8703,11 +8755,14 @@ Page({
 
     const recipientName = String(this.data.albumEditingRecipientName || "").trim() || "拾光者";
     const welcomeLetter = String(this.data.albumEditingWelcomeLetter || "").trim();
+    const welcomeLetterMode = normalizeWelcomeLetterMode(this.data.albumEditingWelcomeLetterMode, true);
     this.setData({ albumRecipientSaving: true });
     try {
       await updateAdminAlbumFields(id, {
         recipient_name: recipientName,
         welcome_letter: welcomeLetter,
+        welcome_letter_mode: welcomeLetterMode,
+        enable_welcome_letter: welcomeLetterMode !== "none",
       });
       this.setData({
         albumRecipientModalOpen: false,
@@ -8715,6 +8770,7 @@ Page({
         albumEditingRecipientTitle: "",
         albumEditingRecipientName: "",
         albumEditingWelcomeLetter: "",
+        albumEditingWelcomeLetterMode: "envelope",
       });
       this.showNotice("success", "收件人与欢迎信已更新");
       await this.safeRefresh([this.loadAlbums()], "收件人与欢迎信已更新");
@@ -8867,30 +8923,6 @@ Page({
     }
   },
 
-  async onToggleAlbumWelcomeLetter(e) {
-    const id =
-      e && e.currentTarget && e.currentTarget.dataset
-        ? String(e.currentTarget.dataset.id || "")
-        : "";
-    if (!id) return;
-    if (this.data.albumActionLoading) return;
-
-    const target = (this.data.albums || []).find((item) => String((item && item.id) || "") === id) || null;
-    if (!target) return;
-    const nextEnabled = !Boolean(target.enable_welcome_letter);
-
-    this.setData({ albumActionLoading: true });
-    try {
-      await updateAdminAlbumFields(id, { enable_welcome_letter: nextEnabled });
-      this.showNotice("success", nextEnabled ? "欢迎信已开启" : "欢迎信已关闭");
-      await this.safeRefresh([this.loadAlbums()], nextEnabled ? "欢迎信已开启" : "欢迎信已关闭");
-    } catch (error) {
-      this.showNotice("error", readErrorMessage(error, "更新欢迎信状态失败"));
-    } finally {
-      this.setData({ albumActionLoading: false });
-    }
-  },
-
   async onToggleAlbumTipping(e) {
     const id =
       e && e.currentTarget && e.currentTarget.dataset
@@ -8913,6 +8945,33 @@ Page({
       );
     } catch (error) {
       this.showNotice("error", readErrorMessage(error, "更新打赏状态失败"));
+    } finally {
+      this.setData({ albumActionLoading: false });
+    }
+  },
+
+  async onToggleAlbumFreeze(e) {
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!id) return;
+    if (this.data.albumActionLoading) return;
+
+    const target = (this.data.albums || []).find((item) => String((item && item.id) || "") === id) || null;
+    if (!target) return;
+    const nextEnabled = !Boolean(target.enable_freeze);
+
+    this.setData({ albumActionLoading: true });
+    try {
+      await updateAdminAlbumFields(id, { enable_freeze: nextEnabled });
+      this.showNotice("success", nextEnabled ? "定格功能已开启" : "定格功能已关闭");
+      await this.safeRefresh(
+        [this.loadAlbums()],
+        nextEnabled ? "定格功能已开启" : "定格功能已关闭"
+      );
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "更新定格状态失败"));
     } finally {
       this.setData({ albumActionLoading: false });
     }
@@ -9214,4 +9273,3 @@ Page({
 
 
 });
-

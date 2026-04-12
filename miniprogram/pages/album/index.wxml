@@ -16,18 +16,12 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <view class="loading motion-fade-up motion-delay-2" wx:if="{{pageLoading}}">
-      <view class="loading-ring">
-        <view class="ring ring--outer"></view>
-        <view class="ring ring--inner"></view>
-        <view class="ring-center">
-          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-        </view>
+    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{pageLoading}}">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
       </view>
-      <view class="loading-text">
-        <text class="loading-title">加载中...</text>
-        <text class="loading-desc">正在为你打开空间入口</text>
-      </view>
+      <text class="admin-loading-card__title">{{pageLoadingTitle}}</text>
+      <text class="admin-loading-card__desc">{{pageLoadingDescription}}</text>
     </view>
 
     <view wx:if="{{!pageLoading}}">

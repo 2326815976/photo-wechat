@@ -17,18 +17,12 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading && !album}}">
-      <view class="loading-ring">
-        <view class="ring ring--outer"></view>
-        <view class="ring ring--inner"></view>
-        <view class="ring-center">
-          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-        </view>
+    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading && !album}}">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
       </view>
-      <view class="loading-text">
-        <text class="loading-title">加载中...</text>
-        <text class="loading-desc">正在为你打开相册</text>
-      </view>
+      <text class="admin-loading-card__title">拾光中...</text>
+      <text class="admin-loading-card__desc">正在为你打开相册</text>
     </view>
 
     <view wx:if="{{album}}">
@@ -105,25 +99,21 @@
 
       <view class="gallery-content-shell">
         <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingFolderPhotoIds.length > 0}}" catchtouchmove="noop">
-          <view class="loading-ring album-overlay-loading__ring">
-            <view class="ring ring--outer"></view>
-            <view class="ring ring--inner"></view>
-            <view class="ring-center">
-              <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+          <view class="admin-loading-card admin-loading-card--compact">
+            <view class="admin-loading-card__orb">
+              <view class="admin-loading-card__spinner"></view>
             </view>
-          </view>
-          <view class="loading-text album-overlay-loading__text">
-            <text class="loading-title">拾光中...</text>
-            <text class="loading-desc">正在切换照片标签</text>
+            <text class="admin-loading-card__title">拾光中...</text>
+            <text class="admin-loading-card__desc">正在切换照片标签</text>
           </view>
         </view>
 
       <view class="grid {{rightPhotos.length === 0 ? 'grid--single' : ''}} motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
         <view class="grid-col album-grid-col album-grid-col--left">
           <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
-            <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
-              <block wx:if="{{item.story_open && item.has_story}}">
-                <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
+            <view class="photo-img-wrap {{item.story_visible ? 'photo-img-wrap--story-open' : ''}}" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
+              <block wx:if="{{item.story_visible && item.has_story}}">
+                <view class="photo-story-panel {{item.story_phase === 'closing' ? 'photo-story-panel--closing' : item.story_phase === 'opening' ? 'photo-story-panel--opening' : ''}}" data-id="{{item.id}}" catchtap="toggleStory">
                   <view class="photo-story-panel__paper">
                     <text class="photo-story-panel__title">关于此刻</text>
                     <text class="photo-story-panel__text">{{item.story_text}}</text>
@@ -131,49 +121,51 @@
                 </view>
               </block>
               <block wx:else>
-                <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
-                  <image
-                    class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
-                    src="{{item.card_url_resolved}}"
-                    mode="aspectFill"
-                    lazy-load="{{true}}"
-                    bindload="onPhotoLoad"
-                    binderror="onPhotoError"
-                    data-id="{{item.id}}"
-                  />
-                  <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
-                    <block wx:if="{{item._imageLoadFailed}}">
-                      <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
-                        <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
-                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                <view class="photo-img-stage {{item.story_image_phase === 'entering' ? 'photo-img-stage--entering' : ''}}">
+                  <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                    <image
+                      class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
+                      src="{{item.card_url_resolved}}"
+                      mode="aspectFill"
+                      lazy-load="{{true}}"
+                      bindload="onPhotoLoad"
+                      binderror="onPhotoError"
+                      data-id="{{item.id}}"
+                    />
+                    <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
+                      <block wx:if="{{item._imageLoadFailed}}">
+                        <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
+                          <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
+                            <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                          </view>
+                          <text class="photo-img-loading-card__title">图片开小差了</text>
+                          <text class="photo-img-loading-card__desc">稍后再试试</text>
                         </view>
-                        <text class="photo-img-loading-card__title">图片开小差了</text>
-                        <text class="photo-img-loading-card__desc">稍后再试试</text>
-                      </view>
-                    </block>
-                    <block wx:else>
-                      <view class="photo-img-loading-card__glow"></view>
-                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
-                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-                      </view>
-                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
-                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                      </view>
-                      <view class="photo-img-loading-card__center">
-                        <view class="photo-img-loading-card__camera-wrap">
-                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                      </block>
+                      <block wx:else>
+                        <view class="photo-img-loading-card__glow"></view>
+                        <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
+                          <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
                         </view>
-                        <text class="photo-img-loading-card__title">拾光中...</text>
-                        <view class="photo-img-loading-card__dots">
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                        <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
+                          <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                         </view>
-                      </view>
-                    </block>
+                        <view class="photo-img-loading-card__center">
+                          <view class="photo-img-loading-card__camera-wrap">
+                            <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                          </view>
+                          <text class="photo-img-loading-card__title">拾光中...</text>
+                          <view class="photo-img-loading-card__dots">
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                          </view>
+                        </view>
+                      </block>
+                    </view>
                   </view>
+                  <view wx:else class="photo-img photo-img--empty"></view>
                 </view>
-                <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 
               <view
@@ -187,13 +179,13 @@
                 </view>
               </view>
 
-              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
-                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↗</text>
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" hover-class="story-toggle--touch" hover-stay-time="80" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
             </view>
 
-            <view class="photo-actions" wx:if="{{!hideAudit}}">
+            <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -204,9 +196,9 @@
 
         <view class="grid-col album-grid-col album-grid-col--right">
           <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
-            <view class="photo-img-wrap" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
-              <block wx:if="{{item.story_open && item.has_story}}">
-                <view class="photo-story-panel" data-id="{{item.id}}" catchtap="toggleStory">
+            <view class="photo-img-wrap {{item.story_visible ? 'photo-img-wrap--story-open' : ''}}" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
+              <block wx:if="{{item.story_visible && item.has_story}}">
+                <view class="photo-story-panel {{item.story_phase === 'closing' ? 'photo-story-panel--closing' : item.story_phase === 'opening' ? 'photo-story-panel--opening' : ''}}" data-id="{{item.id}}" catchtap="toggleStory">
                   <view class="photo-story-panel__paper">
                     <text class="photo-story-panel__title">关于此刻</text>
                     <text class="photo-story-panel__text">{{item.story_text}}</text>
@@ -214,49 +206,51 @@
                 </view>
               </block>
               <block wx:else>
-                <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
-                  <image
-                    class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
-                    src="{{item.card_url_resolved}}"
-                    mode="aspectFill"
-                    lazy-load="{{true}}"
-                    bindload="onPhotoLoad"
-                    binderror="onPhotoError"
-                    data-id="{{item.id}}"
-                  />
-                  <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
-                    <block wx:if="{{item._imageLoadFailed}}">
-                      <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
-                        <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
-                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                <view class="photo-img-stage {{item.story_image_phase === 'entering' ? 'photo-img-stage--entering' : ''}}">
+                  <view wx:if="{{item.card_url_resolved}}" class="photo-img-box" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                    <image
+                      class="photo-img {{item._imageLoaded ? 'photo-img--loaded' : ''}}"
+                      src="{{item.card_url_resolved}}"
+                      mode="aspectFill"
+                      lazy-load="{{true}}"
+                      bindload="onPhotoLoad"
+                      binderror="onPhotoError"
+                      data-id="{{item.id}}"
+                    />
+                    <view class="photo-img-loading-card {{item._imageLoaded ? 'photo-img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'photo-img-loading-card--error' : ''}}">
+                      <block wx:if="{{item._imageLoadFailed}}">
+                        <view class="photo-img-loading-card__center photo-img-loading-card__center--error">
+                          <view class="photo-img-loading-card__camera-wrap photo-img-loading-card__camera-wrap--error">
+                            <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                          </view>
+                          <text class="photo-img-loading-card__title">图片开小差了</text>
+                          <text class="photo-img-loading-card__desc">稍后再试试</text>
                         </view>
-                        <text class="photo-img-loading-card__title">图片开小差了</text>
-                        <text class="photo-img-loading-card__desc">稍后再试试</text>
-                      </view>
-                    </block>
-                    <block wx:else>
-                      <view class="photo-img-loading-card__glow"></view>
-                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
-                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-                      </view>
-                      <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
-                        <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                      </view>
-                      <view class="photo-img-loading-card__center">
-                        <view class="photo-img-loading-card__camera-wrap">
-                          <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                      </block>
+                      <block wx:else>
+                        <view class="photo-img-loading-card__glow"></view>
+                        <view class="photo-img-loading-card__spark photo-img-loading-card__spark--left">
+                          <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
                         </view>
-                        <text class="photo-img-loading-card__title">拾光中...</text>
-                        <view class="photo-img-loading-card__dots">
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
-                          <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                        <view class="photo-img-loading-card__spark photo-img-loading-card__spark--right">
+                          <image class="photo-img-loading-card__spark-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                         </view>
-                      </view>
-                    </block>
+                        <view class="photo-img-loading-card__center">
+                          <view class="photo-img-loading-card__camera-wrap">
+                            <image class="photo-img-loading-card__camera" src="/images/icons/camera-brown.svg" mode="aspectFit" />
+                          </view>
+                          <text class="photo-img-loading-card__title">拾光中...</text>
+                          <view class="photo-img-loading-card__dots">
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--1"></view>
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--2"></view>
+                            <view class="photo-img-loading-card__dot photo-img-loading-card__dot--3"></view>
+                          </view>
+                        </view>
+                      </block>
+                    </view>
                   </view>
+                  <view wx:else class="photo-img photo-img--empty"></view>
                 </view>
-                <view wx:else class="photo-img photo-img--empty"></view>
               </block>
 
               <view
@@ -270,13 +264,13 @@
                 </view>
               </view>
 
-              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" data-id="{{item.id}}" catchtap="toggleStory">
-                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↗</text>
+              <view class="story-toggle {{item.story_highlight ? 'story-toggle--highlight' : ''}} {{item.story_open ? 'story-toggle--open' : ''}}" wx:if="{{item.has_story}}" hover-class="story-toggle--touch" hover-stay-time="80" data-id="{{item.id}}" catchtap="toggleStory">
+                <text class="story-toggle__icon {{item.story_open ? 'story-toggle__icon--open' : ''}}">↻</text>
               </view>
 
             </view>
 
-            <view class="photo-actions" wx:if="{{!hideAudit}}">
+            <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -299,7 +293,7 @@
 
       <view class="more" wx:if="{{loadingMore}}">
         <view class="small-spinner"></view>
-        <text class="more-text">加载中...</text>
+        <text class="more-text">拾光中...</text>
       </view>
       <view class="end" wx:if="{{!hasMore && photos.length > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
@@ -308,8 +302,8 @@
     </view>
   </view>
 
-  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && confirmPhotoId}}" bindtap="closePinConfirm"></view>
-  <view class="confirm-modal motion-fade-in" wx:if="{{!hideAudit && confirmPhotoId}}">
+  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && freezeEnabled && confirmPhotoId}}" bindtap="closePinConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{!hideAudit && freezeEnabled && confirmPhotoId}}">
     <view class="confirm-card motion-pop-in" catchtap="noop">
       <view class="confirm-icon-wrap">
         <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
@@ -348,7 +342,7 @@
 
   <view
     class="welcome-easter-egg"
-    wx:if="{{hideAudit && showWelcomeEasterEgg && !showWelcomeLetter}}"
+    wx:if="{{showWelcomeEasterEgg && !showWelcomeLetter}}"
     hover-class="welcome-easter-egg--active"
     hover-stay-time="80"
     bindtap="onOpenWelcomeEasterEgg"
@@ -358,12 +352,12 @@
     </view>
   </view>
 
-  <!-- Web 同款：拆信交互（信封 -> 信纸） -->
+  <!-- 欢迎信：支持拆信封模式与印章入口模式 -->
   <view class="letter-mask motion-fade-in" wx:if="{{showWelcomeLetter}}" bindtap="onLetterMaskTap"></view>
   <view class="letter-modal motion-fade-in" wx:if="{{showWelcomeLetter}}">
     <!-- 信封阶段 -->
-    <view class="envelope-wrap" wx:if="{{letterStage === 'envelope'}}" catchtap="noop">
-      <view class="envelope-float">
+    <view class="envelope-wrap" wx:if="{{letterStage === 'envelope' || letterStage === 'opening-envelope'}}" catchtap="noop">
+      <view class="envelope-float {{letterStage === 'opening-envelope' ? 'envelope-float--exit' : ''}}">
         <view class="envelope-card">
           <view class="envelope-stitch"></view>
           <view class="envelope-noise"></view>

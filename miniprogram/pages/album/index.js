@@ -1,7 +1,7 @@
 const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { resolvePublicUrl } = require("../../utils/storage-url");
-const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { buildManagedPageLoadingCopy } = require("../../utils/page-loading");
 const {
   applyPagePresentationToPage,
   subscribePagePresentation,
@@ -179,6 +179,8 @@ Page({
     backendReconnecting: false,
 
     pageLoading: true,
+    pageLoadingTitle: "提取",
+    pageLoadingDescription: "正在载入专属返图空间内容",
     isLoggedIn: false,
     boundAlbums: [],
     showKeyInput: false,
@@ -195,10 +197,33 @@ Page({
     hasBottomTabbar: true,
   },
 
+  buildPageLoadingData(runtimeConfig, nextState) {
+    const currentState = nextState && typeof nextState === "object" ? nextState : {};
+    const loadingCopy = buildManagedPageLoadingCopy(runtimeConfig, {
+      pagePath: "pages/album/index",
+      pageKey: "album",
+      isLoggedIn:
+        Object.prototype.hasOwnProperty.call(currentState, "isLoggedIn")
+          ? Boolean(currentState.isLoggedIn)
+          : Boolean(this.data.isLoggedIn),
+      fallbackTitle: "专属返图空间",
+    });
+
+    return {
+      normalizedRuntimeConfig: loadingCopy.normalizedRuntimeConfig,
+      pageLoadingTitle: loadingCopy.title,
+      pageLoadingDescription: loadingCopy.description,
+    };
+  },
+
   applyRuntimeConfig(runtimeConfig) {
-    const normalized = normalizeRuntimeConfig(runtimeConfig);
-    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
-    return normalized;
+    const loadingData = this.buildPageLoadingData(runtimeConfig);
+    this.setData({
+      hideAudit: Boolean(loadingData.normalizedRuntimeConfig.hideAudit),
+      pageLoadingTitle: loadingData.pageLoadingTitle,
+      pageLoadingDescription: loadingData.pageLoadingDescription,
+    });
+    return loadingData.normalizedRuntimeConfig;
   },
 
   applyPagePresentation() {
@@ -391,6 +416,8 @@ Page({
           isLoggedIn: false,
           boundAlbums: [],
           pageLoading: false,
+          pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: false }).pageLoadingTitle,
+          pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: false }).pageLoadingDescription,
         });
         return;
       }
@@ -436,6 +463,8 @@ Page({
         isLoggedIn: true,
         boundAlbums,
         pageLoading: false,
+        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: true }).pageLoadingTitle,
+        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: true }).pageLoadingDescription,
       });
     } catch (e) {
       const msg = String((e && e.message) || "").trim();
@@ -445,7 +474,13 @@ Page({
           ? "⚠️ 会话连接超时，请稍后重试"
           : "⚠️ 会话校验失败，请稍后重试"
       );
-      this.setData({ pageLoading: false, isLoggedIn: false, boundAlbums: [] });
+      this.setData({
+        pageLoading: false,
+        isLoggedIn: false,
+        boundAlbums: [],
+        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: false }).pageLoadingTitle,
+        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: false }).pageLoadingDescription,
+      });
     } finally {
       this._albumListBootstrapped = true;
     }

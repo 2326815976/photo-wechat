@@ -1,6 +1,7 @@
 const { requestJson } = require("../../../utils/cloudrun");
 const { clearStoredCookie } = require("../../../utils/auth");
-const { normalizeRuntimeConfig } = require("../../../utils/runtime-config");
+const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function readPayloadMessage(payload, fallback) {
   let current = payload;
@@ -59,6 +60,7 @@ Page({
     safeTop: 0,
     serviceMissing: false,
     hideAudit: false,
+    managedTitle: "删除账户",
 
     showConfirm: false,
     isDeleting: false,
@@ -69,11 +71,16 @@ Page({
 
   applyRuntimeConfig(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
-    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
+    const access = getManagedPageAccess(normalized, "profile-delete-account");
+    this.setData({
+      hideAudit: Boolean(normalized.hideAudit),
+      managedTitle:
+        String((access && (access.headerTitle || access.navText)) || "").trim() || "删除账户",
+    });
     return normalized;
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -89,6 +96,19 @@ Page({
         this.applyRuntimeConfig(runtimeConfig);
       });
     }
+    await this.guardManagedAccess();
+  },
+
+  async onShow() {
+    await this.guardManagedAccess();
+  },
+
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "profile-delete-account",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
   },
 
   onUnload() {
