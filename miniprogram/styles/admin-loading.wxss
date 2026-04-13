@@ -5,12 +5,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14rpx;
-  padding: 52rpx 36rpx;
-  border-radius: 28rpx;
-  border: 2rpx solid rgba(255, 200, 87, 0.16);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(255, 249, 238, 0.96));
-  box-shadow: 0 14rpx 30rpx rgba(93, 64, 55, 0.08);
+  gap: 24rpx;
+  padding: 64rpx 40rpx;
+  background: transparent;
   text-align: center;
 }
 
@@ -18,7 +15,7 @@
   max-width: 640rpx;
   min-height: 420rpx;
   margin: 0 auto;
-  padding: 88rpx 40rpx;
+  padding: 96rpx 40rpx;
 }
 
 .admin-loading-card--inline {
@@ -27,45 +24,95 @@
 
 .admin-loading-card--compact {
   min-height: 200rpx;
-  padding: 48rpx 34rpx;
+  padding: 52rpx 34rpx;
 }
 
 .admin-loading-card__orb {
-  width: 112rpx;
-  height: 112rpx;
+  position: relative;
+  width: 192rpx;
+  height: 192rpx;
   border-radius: 999rpx;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 241, 200, 0.92), rgba(255, 200, 87, 0.22) 58%, rgba(255, 200, 87, 0.05) 100%);
-  box-shadow: inset 0 2rpx 0 rgba(255, 255, 255, 0.76), 0 10rpx 24rpx rgba(255, 200, 87, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .admin-loading-card__spinner {
-  width: 62rpx;
-  height: 62rpx;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   border-radius: 999rpx;
-  border: 6rpx solid rgba(255, 200, 87, 0.18);
+  border: 8rpx solid rgba(255, 200, 87, 0.3);
   border-top-color: #ffc857;
-  border-right-color: #ffb84d;
   box-sizing: border-box;
-  animation: admin-loading-spin 0.9s linear infinite;
+  animation: admin-loading-spin 3s linear infinite;
+}
+
+.admin-loading-card__spinner::before {
+  content: "";
+  position: absolute;
+  top: 24rpx;
+  right: 24rpx;
+  bottom: 24rpx;
+  left: 24rpx;
+  border-radius: 999rpx;
+  border: 8rpx solid rgba(93, 64, 55, 0.2);
+  border-bottom-color: #5d4037;
+  box-sizing: border-box;
+  animation: admin-loading-spin-reverse 2s linear infinite;
+  z-index: 2;
+}
+
+.admin-loading-card__spinner::after {
+  content: "";
+  position: absolute;
+  top: 64rpx;
+  right: 64rpx;
+  bottom: 64rpx;
+  left: 64rpx;
+  background-image: url("/images/icons/sparkles-yellow.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 64rpx 64rpx;
+  z-index: 3;
 }
 
 .admin-loading-card__title {
   display: block;
-  font-size: 28rpx;
+  font-size: 36rpx;
   line-height: 1.4;
-  font-weight: 700;
+  font-weight: 500;
   color: #5d4037;
 }
 
 .admin-loading-card__desc {
   display: block;
   max-width: 520rpx;
-  font-size: 22rpx;
+  font-size: 28rpx;
   line-height: 1.7;
   color: rgba(93, 64, 55, 0.62);
+}
+
+.admin-loading-card--compact .admin-loading-card__orb {
+  width: 160rpx;
+  height: 160rpx;
+}
+
+.admin-loading-card--compact .admin-loading-card__spinner::before {
+  top: 20rpx;
+  right: 20rpx;
+  bottom: 20rpx;
+  left: 20rpx;
+}
+
+.admin-loading-card--compact .admin-loading-card__spinner::after {
+  top: 52rpx;
+  right: 52rpx;
+  bottom: 52rpx;
+  left: 52rpx;
+  background-size: 56rpx 56rpx;
 }
 
 .admin-loading-inline {
@@ -93,5 +140,15 @@
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes admin-loading-spin-reverse {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(-360deg);
   }
 }

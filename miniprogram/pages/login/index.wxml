@@ -54,9 +54,6 @@
           </view>
         </view>
 
-        <view class="forgot-link-row" wx:if="{{forgotEntryVisible}}">
-          <text class="forgot-link" hover-class="forgot-link--active" bindtap="goForgotPassword">{{forgotEntryLabel}}</text>
-        </view>
       </block>
 
       <view class="legal-entry motion-fade-in motion-delay-4">

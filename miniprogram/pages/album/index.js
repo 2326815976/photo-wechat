@@ -179,7 +179,7 @@ Page({
     backendReconnecting: false,
 
     pageLoading: true,
-    pageLoadingTitle: "提取",
+    pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在载入专属返图空间内容",
     isLoggedIn: false,
     boundAlbums: [],

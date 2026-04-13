@@ -1,8 +1,8 @@
 ﻿<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <app-header
-  managedPageKey="profile"
-    title="{{showAuditAboutMode ? '鍏充簬鎴? : '鎴戠殑灏忓ぉ鍦?}}"
-    subtitle="{{showAuditAboutMode ? '鉁?浣滆€呯殑澶╁湴 鉁? : '馃搾 绠＄悊浣犵殑鎷惧厜灏忕瀵?馃搾'}}"
+    managedPageKey="profile"
+    title="{{showAuditAboutMode ? '关于我' : '我的小天地'}}"
+    subtitle="{{showAuditAboutMode ? '✨ 作者的天地 ✨' : '📸 管理你的拾光小秘密 📸'}}"
     safeTop="{{safeTop}}"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
@@ -12,8 +12,8 @@
 
   <view class="content {{pageIsStandalone ? 'content--preview' : ''}}">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">闇€瑕侀厤缃簯鎵樼鏈嶅姟鍚?/text>
-      <text class="config-tip__desc">璇峰湪 miniprogram/config.js 涓～鍐?cloudRunService锛堢敤浜?X-WX-SERVICE锛?/text>
+      <text class="config-tip__title">需要配置云托管服务名</text>
+      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
     </view>
 
     <block wx:if="{{showAuditAboutMode}}">
@@ -32,70 +32,70 @@
 
         <view class="paper-card motion-fade-up motion-delay-2" wx:if="{{about.author_name || about.author_message}}">
           <view class="author-head" wx:if="{{about.author_name}}">
-            <view class="author-avatar">鍏?/view>
+            <view class="author-avatar">关</view>
             <view class="author-main">
               <text class="author-name">{{about.author_name}}</text>
-              <text class="author-sub">鎷惧厜璋ｄ綔鑰?/text>
+              <text class="author-sub">拾光谣作者</text>
             </view>
           </view>
 
           <view class="message-box" wx:if="{{about.author_message}}">
-            <text class="message-title">浣滆€呯暀瑷€</text>
+            <text class="message-title">作者留言</text>
             <text class="message-text" space="ensp">{{about.author_message}}</text>
           </view>
         </view>
 
         <view class="paper-card motion-fade-up motion-delay-3" wx:if="{{about.phone || about.wechat || about.email}}">
-          <text class="section-title">鑱旂郴鏂瑰紡</text>
+          <text class="section-title">联系方式</text>
 
           <view
             class="contact-item"
             wx:if="{{about.phone}}"
-            data-label="鎵嬫満鍙?
+            data-label="手机号"
             data-value="{{about.phone}}"
             bindtap="onCopyField"
           >
             <image class="contact-icon" src="/images/icons/phone-brown.svg" mode="aspectFit" />
             <view class="contact-main">
-              <text class="contact-label">鎵嬫満鍙?/text>
+              <text class="contact-label">手机号</text>
               <text class="contact-value">{{about.phone}}</text>
             </view>
-            <text class="contact-copy">澶嶅埗</text>
+            <text class="contact-copy">复制</text>
           </view>
 
           <view
             class="contact-item"
             wx:if="{{about.wechat}}"
-            data-label="寰俊鍙?
+            data-label="微信号"
             data-value="{{about.wechat}}"
             bindtap="onCopyField"
           >
             <image class="contact-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
             <view class="contact-main">
-              <text class="contact-label">寰俊鍙?/text>
+              <text class="contact-label">微信号</text>
               <text class="contact-value">{{about.wechat}}</text>
             </view>
-            <text class="contact-copy">澶嶅埗</text>
+            <text class="contact-copy">复制</text>
           </view>
 
           <view
             class="contact-item"
             wx:if="{{about.email}}"
-            data-label="閭"
+            data-label="邮箱"
             data-value="{{about.email}}"
             bindtap="onCopyField"
           >
             <image class="contact-icon" src="/images/icons/customer-service.svg" mode="aspectFit" />
             <view class="contact-main">
-              <text class="contact-label">閭</text>
+              <text class="contact-label">邮箱</text>
               <text class="contact-value contact-value--break">{{about.email}}</text>
             </view>
-            <text class="contact-copy">澶嶅埗</text>
+            <text class="contact-copy">复制</text>
           </view>
         </view>
 
         <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && donationQrCodeEnabled}}">
-          <text class="section-title">璧炶祻鐮?/text>
+          <text class="section-title">赞赏码</text>
           <view class="qr-wrap" bindtap="onPreviewDonationQr">
             <image
               class="qr-image"
@@ -104,7 +104,7 @@
               binderror="onDonationQrLoadError"
             />
           </view>
-          <text class="qr-tip">鐐瑰嚮鍙斁澶ч瑙?/text>
+          <text class="qr-tip">点击可放大预览</text>
           <button
             class="qr-save-btn {{savingDonationQr ? 'qr-save-btn--disabled' : ''}}"
             bindtap="onSaveDonationQr"
@@ -112,7 +112,7 @@
             loading="{{savingDonationQr}}"
             disabled="{{savingDonationQr}}"
           >
-            {{savingDonationQr ? "淇濆瓨涓?.." : "淇濆瓨璧炶祻鐮?}}
+            {{savingDonationQr ? "保存中..." : "保存赞赏码"}}
           </button>
         </view>
 
@@ -128,13 +128,13 @@
         <text class="admin-loading-card__desc">{{pageLoadingDescription}}</text>
       </view>
 
-      <!-- 鏈櫥褰?-->
+      <!-- 未登录 -->
       <view wx:if="{{!loading && !isLoggedIn}}" class="guest motion-fade-up motion-delay-2">
         <view class="guest-icon">
           <image class="guest-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
         </view>
-        <text class="guest-title">寮€鍚綘鐨勪笓灞炵┖闂?鉁?/text>
-        <text class="guest-desc">鐧诲綍鍚庤В閿佹洿澶氬姛鑳?/text>
+        <text class="guest-title">开启你的专属空间 ✨</text>
+        <text class="guest-desc">登录后解锁更多功能</text>
 
         <view class="guest-actions" wx:if="{{guestMenuItems.length > 0}}">
           <button
@@ -150,11 +150,11 @@
         </view>
       </view>
 
-      <!-- 宸茬櫥褰?-->
+      <!-- 已登录 -->
       <view wx:if="{{!loading && isLoggedIn}}">
         <view class="id-card motion-fade-up motion-delay-2">
-          <!-- Web 绔浐瀹氬睍绀猴細鍏?-->
-          <view class="avatar">鍏?/view>
+          <!-- Web 端固定展示：我 -->
+          <view class="avatar">我</view>
           <view class="id-info">
             <text class="id-name">{{userName}}</text>
             <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
@@ -162,7 +162,8 @@
           </view>
         </view>
 
-        <view class="menu">          <view
+        <view class="menu">
+          <view
             wx:for="{{profileMenuItems}}"
             wx:key="key"
             class="{{item.itemClass}}"
@@ -180,24 +181,14 @@
             </view>
           </view>
 
-          <view class="menu-item motion-fade-up motion-delay-6" hover-class="menu-item--active" bindtap="goBetaFeatures" wx:if="{{isWechatLogin}}">
-            <view class="menu-icon">
-              <image class="menu-icon-img" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-            </view>
-            <view class="menu-texts">
-              <text class="menu-title">瑙ｉ攣鍐呮祴鍔熻兘</text>
-              <text class="menu-desc">杈撳叆鍐呮祴鐮侊紝瑙ｉ攣涓撳睘鍔熻兘</text>
-            </view>
-          </view>
-
           <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
             <view class="menu-icon">
               <image class="menu-icon-img" src="/images/icons/setting.svg" mode="aspectFit" />
             </view>
             <view class="menu-texts">
-              <text class="menu-title">鍚庡彴绠＄悊</text>
-              <text class="menu-desc" wx:if="{{hideAudit}}">鏌ョ湅缁熻銆佺淮鎶ょ郴缁熴€佺鐞嗛攣妗?/text>
-              <text class="menu-desc" wx:else>鏌ョ湅缁熻銆佺淮鎶ょ郴缁熴€佺鐞嗛绾︿笌閿佹。</text>
+              <text class="menu-title">后台管理</text>
+              <text class="menu-desc" wx:if="{{hideAudit}}">查看统计、维护系统、管理口令</text>
+              <text class="menu-desc" wx:else>查看统计、维护系统、管理预约与锁档</text>
             </view>
           </view>
           <view class="menu-item menu-item--plain motion-fade-up motion-delay-10" hover-class="menu-item--plain-active" bindtap="logout">
@@ -205,8 +196,8 @@
               <image class="menu-icon-img" src="/images/icons/log-out-brown.svg" mode="aspectFit" />
             </view>
             <view class="menu-texts">
-              <text class="menu-title">閫€鍑虹櫥褰?/text>
-              <text class="menu-desc">瀹夊叏閫€鍑哄綋鍓嶈处鎴?/text>
+              <text class="menu-title">退出登录</text>
+              <text class="menu-desc">安全退出当前账户</text>
             </view>
           </view>
         </view>
@@ -214,26 +205,16 @@
     </block>
   </view>
 
-  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading && (phoneLoginEnabled || wechatLoginEnabled)}}">
+  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading && wechatLoginEnabled}}">
     <view class="audit-fixed-login__panel">
       <button
-        wx:if="{{phoneLoginEnabled}}"
         class="audit-fixed-login__btn"
         hover-class="audit-fixed-login__btn--active"
-        bindtap="goLogin"
-        disabled="{{serviceMissing}}"
-      >
-        鍓嶅線鐧诲綍
-      </button>
-      <button
-        wx:if="{{!phoneLoginEnabled && wechatLoginEnabled}}"
-        class="audit-fixed-login__btn"
-        hover-class="audit-fixed-login__btn--active"
-        bindtap="onOpenAuditWechatLogin"
+        bindtap="goWechatLogin"
         loading="{{auditWechatSubmitting}}"
         disabled="{{auditWechatSubmitting || serviceMissing}}"
       >
-        {{auditWechatSubmitting ? "寰俊鐧诲綍涓?.." : "寰俊鐧诲綍"}}
+        {{auditWechatSubmitting ? "微信登录中..." : "微信登录"}}
       </button>
     </view>
   </view>
@@ -298,11 +279,10 @@
       </scroll-view>
 
       <view class="legal-modal__foot legal-modal__foot--dual">
-        <button class="legal-modal__btn legal-modal__btn--reject" hover-class="legal-modal__btn--reject-active" bindtap="onRejectAuditWechatLogin">鎷掔粷</button>
-        <button class="legal-modal__btn legal-modal__btn--agree" hover-class="legal-modal__btn--agree-active" bindtap="onAgreeAuditWechatLogin">鍚屾剰</button>
+        <button class="legal-modal__btn legal-modal__btn--reject" hover-class="legal-modal__btn--reject-active" bindtap="onRejectAuditWechatLogin">拒绝</button>
+        <button class="legal-modal__btn legal-modal__btn--agree" hover-class="legal-modal__btn--agree-active" bindtap="onAgreeAuditWechatLogin">同意</button>
       </view>
     </view>
   </view>
   <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/profile/index" />
 </view>
-

@@ -52,7 +52,13 @@ function normalizeMiniProgramPagePath(value) {
 }
 
 function toText(value) {
-  return String(value || '').trim();
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return '';
+  const normalized = text.toLowerCase();
+  if (normalized === 'null' || normalized === 'undefined' || normalized === 'nil' || normalized === 'none') {
+    return '';
+  }
+  return text;
 }
 
 function parseBooleanLike(value, fallback) {
@@ -381,6 +387,7 @@ function normalizeManagedPageAccessMap(input) {
       routePath: normalizeMiniProgramPagePath(current.routePath),
       previewRoutePath: normalizeMiniProgramPagePath(current.previewRoutePath),
       publishState: toText(current.publishState) || 'offline',
+      navOrder: Number.isFinite(Number(current.navOrder)) ? Number(current.navOrder) : 99,
       navText: toText(current.navText),
       guestNavText: toText(current.guestNavText),
       headerTitle: toText(current.headerTitle),

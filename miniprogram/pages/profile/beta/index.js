@@ -3,6 +3,7 @@ const {
   isTabBarPagePath,
   normalizeRuntimeConfig,
 } = require("../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 const BETA_POSE_BYPASS_STORAGE_KEY = "beta_pose_bypass_until";
 
@@ -307,6 +308,14 @@ Page({
         : { hideAudit: false }
     );
 
+    const accessResult = await guardMiniProgramPageAccess({
+      pageKey: "profile-beta",
+      fallbackTab: "pages/profile/index",
+    });
+    if (!accessResult.allowed) {
+      return;
+    }
+
     this.setData({ loading: true });
 
     let user = null;
@@ -515,9 +524,7 @@ Page({
       this.redirectToProfileForWechatLogin();
       return;
     }
-    wx.navigateTo({
-      url: "/pages/login/index",
-    });
+    wx.switchTab({ url: "/pages/profile/index" });
   },
 });
 

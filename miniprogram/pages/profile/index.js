@@ -37,6 +37,7 @@ const PROFILE_MANAGED_MENU_SPECS = [
   {
     pageKey: "profile-edit",
     action: "goEditProfile",
+    defaultOrder: 110,
     defaultTitle: "编辑个人资料",
     description: "修改用户名、手机号、微信号",
     iconSrc: "/images/icons/user-yellow.svg",
@@ -45,14 +46,25 @@ const PROFILE_MANAGED_MENU_SPECS = [
   {
     pageKey: "profile-bookings",
     action: "goBookings",
+    defaultOrder: 120,
     defaultTitle: "我的预约记录",
     description: "查看所有约拍记录",
     iconSrc: "/images/icons/calendar-yellow.svg",
     featureFlag: "profileBookingsEnabled",
   },
   {
+    pageKey: "profile-beta",
+    action: "goBetaFeatures",
+    defaultOrder: 130,
+    defaultTitle: "内测功能",
+    description: "输入内测码，解锁并进入专属内测页面",
+    iconSrc: "/images/icons/sparkles-yellow.svg",
+    requiresWechatLogin: true,
+  },
+  {
     pageKey: "profile-change-password",
     action: "goChangePassword",
+    defaultOrder: 150,
     defaultTitle: "修改密码",
     description: "更新账户安全信息",
     iconSrc: "/images/icons/lock-yellow.svg",
@@ -61,6 +73,7 @@ const PROFILE_MANAGED_MENU_SPECS = [
   {
     pageKey: "about",
     action: "goAbout",
+    defaultOrder: 140,
     defaultTitle: "关于",
     description: "查看作者联系方式与留言",
     iconSrc: "/images/icons/question.svg",
@@ -69,6 +82,7 @@ const PROFILE_MANAGED_MENU_SPECS = [
   {
     pageKey: "profile-delete-account",
     action: "goDeleteAccount",
+    defaultOrder: 160,
     defaultTitle: "删除账户",
     description: "永久删除账户和所有数据",
     iconSrc: "/images/icons/log-out-red.svg",
@@ -78,20 +92,11 @@ const PROFILE_MANAGED_MENU_SPECS = [
 
 const GUEST_PROFILE_MENU_SPECS = [
   {
-    pageKey: "login",
-    action: "goLogin",
-    defaultTitle: "登录",
+    action: "goWechatLogin",
+    defaultTitle: "微信登录",
     buttonClass: "btn-primary",
     hoverClass: "btn-primary--active",
-    requiresAnyAuthMethod: true,
-  },
-  {
-    pageKey: "register",
-    action: "goRegister",
-    defaultTitle: "注册",
-    buttonClass: "btn-outline",
-    hoverClass: "btn-outline--active",
-    requiresPhoneLogin: true,
+    requiresWechatLogin: true,
   },
 ];
 
@@ -221,6 +226,9 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
     if (spec.requiresPasswordUser && !Boolean(currentState.canChangePassword)) {
       return list;
     }
+    if (spec.requiresWechatLogin && !Boolean(currentState.isWechatLogin)) {
+      return list;
+    }
     if (spec.hideWhenAdmin && Boolean(currentState.isAdmin)) {
       return list;
     }
@@ -234,6 +242,7 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
     list.push({
       key: spec.pageKey,
       action: spec.action,
+      navOrder: Number.isFinite(Number(access.navOrder)) ? Number(access.navOrder) : Number(spec.defaultOrder || 99),
       title,
       description: String(spec.description || "").trim(),
       iconSrc: spec.iconSrc,
@@ -246,35 +255,27 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
       delayMs: 120 + index * 40,
     });
     return list;
-  }, []);
+  }, []).sort((left, right) => {
+    if (left.navOrder !== right.navOrder) {
+      return left.navOrder - right.navOrder;
+    }
+    return String(left.key || "").localeCompare(String(right.key || ""), "zh-CN");
+  });
 }
 
-function buildManagedGuestProfileMenuItems(state, runtimeConfig) {
+function buildManagedGuestProfileMenuItems(state) {
   const currentState = state && typeof state === "object" ? state : {};
   return GUEST_PROFILE_MENU_SPECS.reduce((list, spec) => {
-    const access = getManagedPageAccess(runtimeConfig, spec.pageKey);
-    if (!access || String(access.publishState || "").trim() !== "online") {
+    if (spec.requiresWechatLogin && !Boolean(currentState.wechatLoginEnabled)) {
       return list;
     }
-    if (
-      spec.requiresAnyAuthMethod &&
-      !Boolean(currentState.phoneLoginEnabled) &&
-      !Boolean(currentState.wechatLoginEnabled)
-    ) {
-      return list;
-    }
-    if (spec.requiresPhoneLogin && !Boolean(currentState.phoneLoginEnabled)) {
-      return list;
-    }
-
-    const title =
-      toText(access.navText) || toText(access.headerTitle) || String(spec.defaultTitle || "").trim();
+    const title = String(spec.defaultTitle || "").trim();
     if (!title) {
       return list;
     }
 
     list.push({
-      key: spec.pageKey,
+      key: spec.action,
       action: spec.action,
       title,
       buttonClass: String(spec.buttonClass || "").trim(),
@@ -327,7 +328,7 @@ Page({
     auditActiveLegalFooter: [],
 
     loading: true,
-    pageLoadingTitle: "我的",
+    pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在载入我的小天地内容",
     isLoggedIn: false,
     isWechatLogin: false,
@@ -653,17 +654,11 @@ Page({
     }, 360);
   },
 
-  async submitAuditWechatLogin() {
-    if (
-      !this.data.showAuditAboutMode ||
-      !this.data.wechatLoginEnabled ||
-      this.data.phoneLoginEnabled ||
-      this.data.serviceMissing
-    ) {
+  async submitWechatLogin() {
+    if (!this.data.wechatLoginEnabled || this.data.serviceMissing) {
       return;
     }
     if (this.data.auditWechatSubmitting) return;
-
     this.setData({ auditWechatSubmitting: true });
     try {
       const [loginRes, profile] = await Promise.all([
@@ -742,6 +737,18 @@ Page({
     } finally {
       this.setData({ auditWechatSubmitting: false });
     }
+  },
+
+  async submitAuditWechatLogin() {
+    if (
+      !this.data.showAuditAboutMode ||
+      !this.data.wechatLoginEnabled ||
+      this.data.phoneLoginEnabled ||
+      this.data.serviceMissing
+    ) {
+      return;
+    }
+    await this.submitWechatLogin();
   },
 
   async loadUser() {
@@ -984,20 +991,20 @@ Page({
     }
   },
 
-  goLogin() {
-    if (this.data.showAuditAboutMode && !this.data.phoneLoginEnabled && this.data.wechatLoginEnabled) {
+  goWechatLogin() {
+    if (!this.data.wechatLoginEnabled) {
+      wx.showToast({ title: "当前未开放微信登录", icon: "none" });
+      return;
+    }
+    if (this.data.serviceMissing) {
+      wx.showToast({ title: "当前服务配置不完整", icon: "none" });
+      return;
+    }
+    if (this.data.showAuditAboutMode && !this.data.phoneLoginEnabled) {
       this.onOpenAuditWechatLogin();
       return;
     }
-    wx.navigateTo({ url: "/pages/login/index" });
-  },
-
-  goRegister() {
-    if (!this.data.phoneLoginEnabled) {
-      wx.showToast({ title: "当前配置未开放手机号注册", icon: "none" });
-      return;
-    }
-    wx.navigateTo({ url: "/pages/register/index" });
+    void this.submitWechatLogin();
   },
 
   goEditProfile() {
@@ -1206,10 +1213,8 @@ Page({
       wx.showToast({ title: "已退出登录", icon: "none" });
       if (showGuestAboutMode) {
         this.loadAbout();
-        wx.switchTab({ url: "/pages/profile/index" });
-        return;
       }
-      wx.navigateTo({ url: "/pages/login/index" });
+      wx.switchTab({ url: "/pages/profile/index" });
     }
   },
 

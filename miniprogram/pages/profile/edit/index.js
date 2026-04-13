@@ -92,7 +92,7 @@ Page({
       if (!user || !user.id) {
         this.setData({ loading: false });
         wx.showToast({ title: "请先登录", icon: "none" });
-        wx.navigateTo({ url: "/pages/login/index" });
+        wx.switchTab({ url: "/pages/profile/index" });
         return;
       }
 

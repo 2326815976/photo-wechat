@@ -2646,6 +2646,7 @@ button::after {
 
 .about-textarea {
   min-height: 220rpx;
+  overflow: hidden;
 }
 
 .booking-toolbar {
@@ -5286,6 +5287,8 @@ button::after {
   font-weight: 600;
   line-height: 1;
   border: 2rpx solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .album-card__expiry-badge--normal {
@@ -6240,6 +6243,7 @@ button::after {
   width: 100%;
   height: 240rpx;
   border-radius: 12rpx;
+  background: #ffffff;
 }
 
 .album-upload-preview__qr {

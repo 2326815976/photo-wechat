@@ -993,6 +993,7 @@
                       placeholder="写给用户的一段话"
                       placeholder-class="booking-modal__placeholder"
                       maxlength="2000"
+                      auto-height="{{true}}"
                     />
                   </view>
                 </view>
@@ -3380,7 +3381,7 @@
         <text class="album-modal__subtitle">空间：{{albumCoverTargetTitle}}</text>
         <view class="album-upload-preview" wx:if="{{albumCoverCurrentUrl}}">
           <text class="album-upload-preview__label">当前封面</text>
-          <image class="album-upload-preview__cover" src="{{albumCoverCurrentUrl}}" mode="aspectFill" />
+          <image class="album-upload-preview__cover" src="{{albumCoverCurrentUrl}}" mode="aspectFit" />
         </view>
         <view class="album-upload-preview album-upload-preview--empty" wx:else>
           <text>当前暂无封面图片</text>

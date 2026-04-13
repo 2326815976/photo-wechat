@@ -280,7 +280,7 @@ Page({
     serviceMissing: false,
     isLoggedIn: false,
     loading: true,
-    pageLoadingTitle: "约拍",
+    pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在载入约拍邀请内容",
     showLoginPrompt: false,
 

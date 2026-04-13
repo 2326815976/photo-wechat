@@ -34,14 +34,26 @@ const STATE_FILTER_OPTIONS = [
 const SECONDARY_PAGE_PARENT_MAP = new Map([
   ["login", "profile"],
   ["register", "profile"],
-  ["forgot-password", "profile"],
-  ["reset-password", "profile"],
   ["profile-edit", "profile"],
   ["profile-bookings", "profile"],
+  ["profile-beta", "profile"],
   ["profile-change-password", "profile"],
   ["about", "profile"],
   ["profile-delete-account", "profile"],
   ["album-detail", "album"],
+]);
+const PROFILE_GUEST_SECONDARY_PAGE_KEYS = new Set([
+  "login",
+  "register",
+]);
+const MINIPROGRAM_HIDDEN_PAGE_KEYS = new Set(["login", "register"]);
+const PROFILE_AUTHENTICATED_SECONDARY_PAGE_KEYS = new Set([
+  "profile-edit",
+  "profile-bookings",
+  "profile-beta",
+  "about",
+  "profile-change-password",
+  "profile-delete-account",
 ]);
 const ICON_OPTIONS = ["", "home", "album", "gallery", "booking", "profile", "about"];
 const TAB_OPTIONS = [{ value: "", label: "不绑定底部菜单" }].concat(
@@ -70,6 +82,22 @@ function isSecondaryPageKey(pageKey) {
 
 function resolveSecondaryParentPageKey(pageKey) {
   return SECONDARY_PAGE_PARENT_MAP.get(normalizeText(pageKey)) || "";
+}
+
+function isProfileGuestSecondaryPageKey(pageKey) {
+  return PROFILE_GUEST_SECONDARY_PAGE_KEYS.has(normalizeText(pageKey));
+}
+
+function shouldHidePageForChannel(pageKey, channel) {
+  return normalizeText(channel) === "miniprogram" && MINIPROGRAM_HIDDEN_PAGE_KEYS.has(normalizeText(pageKey));
+}
+
+function isProfileGuestSecondaryPageForChannel(pageKey, channel) {
+  return !shouldHidePageForChannel(pageKey, channel) && isProfileGuestSecondaryPageKey(pageKey);
+}
+
+function isProfileAuthenticatedSecondaryPageKey(pageKey) {
+  return PROFILE_AUTHENTICATED_SECONDARY_PAGE_KEYS.has(normalizeText(pageKey));
 }
 
 function normalizeNumber(value, fallback) {
@@ -526,6 +554,72 @@ function getDisplayStateMeta(row) {
   };
 }
 
+function compareSecondaryRows(left, right) {
+  if (left.currentRule.navOrder !== right.currentRule.navOrder) {
+    return left.currentRule.navOrder - right.currentRule.navOrder;
+  }
+  return normalizeText(left.pageName).localeCompare(normalizeText(right.pageName), "zh-CN");
+}
+
+function sortSecondaryRows(rows) {
+  return (Array.isArray(rows) ? rows : []).slice().sort((left, right) => compareSecondaryRows(left, right));
+}
+
+function buildSecondaryChildGroups(parent, children, channel) {
+  const orderedChildren = sortSecondaryRows(children);
+  if (normalizeText(parent && parent.pageKey) !== "profile") {
+    return orderedChildren.length > 0
+      ? [
+          {
+            key: `${normalizeText(parent && parent.pageKey)}:all`,
+            title: "",
+            description: "",
+            rows: orderedChildren,
+          },
+        ]
+      : [];
+  }
+
+  const guestRows = orderedChildren.filter((item) =>
+    isProfileGuestSecondaryPageForChannel(item && item.pageKey, channel)
+  );
+  const authenticatedRows = orderedChildren.filter((item) =>
+    isProfileAuthenticatedSecondaryPageKey(item && item.pageKey)
+  );
+  const otherRows = orderedChildren.filter(
+    (item) =>
+      !isProfileGuestSecondaryPageForChannel(item && item.pageKey, channel) &&
+      !isProfileAuthenticatedSecondaryPageKey(item && item.pageKey)
+  );
+
+  return [
+    guestRows.length > 0
+      ? {
+          key: `${normalizeText(parent && parent.pageKey)}:guest`,
+          title: "认证流程页",
+          description: "用于登录前流程，不参与登录后「我的」菜单排序。",
+          rows: guestRows,
+        }
+      : null,
+    authenticatedRows.length > 0
+      ? {
+          key: `${normalizeText(parent && parent.pageKey)}:authenticated`,
+          title: "登录后菜单",
+          description: "这里的入口会出现在登录后的「我的」页内，并支持单独调整展示顺序。",
+          rows: authenticatedRows,
+        }
+      : null,
+    otherRows.length > 0
+      ? {
+          key: `${normalizeText(parent && parent.pageKey)}:other`,
+          title: "其他二级页",
+          description: "当前仍属于该一级页的二级页面。",
+          rows: otherRows,
+        }
+      : null,
+  ].filter(Boolean);
+}
+
 function buildPageSections(allRows, visibleRows, channel, expandedKey, hasActiveFilter) {
   const orderedAllRows = Array.isArray(allRows) ? allRows : [];
   const orderedVisibleRows = Array.isArray(visibleRows) ? visibleRows : [];
@@ -547,7 +641,7 @@ function buildPageSections(allRows, visibleRows, channel, expandedKey, hasActive
       return visibleRowKeySet.has(pageKey) || (childrenByParent.get(pageKey) || []).length > 0;
     })
     .map((item) => {
-      const children = (childrenByParent.get(normalizeText(item && item.pageKey)) || []).map((child) =>
+      const children = sortSecondaryRows(childrenByParent.get(normalizeText(item && item.pageKey)) || []).map((child) =>
         Object.assign({}, child, {
           parentPageName: normalizeText(item && item.pageName),
           entryHint:
@@ -559,6 +653,7 @@ function buildPageSections(allRows, visibleRows, channel, expandedKey, hasActive
         key: normalizeText(item && item.pageKey),
         parent: item,
         children,
+        childGroups: buildSecondaryChildGroups(item, children, channel),
         childCount: children.length,
         isExpanded: children.length > 0 && (normalizeText(expandedKey) === normalizeText(item && item.pageKey) || hasActiveFilter),
       };
@@ -572,7 +667,10 @@ function buildPageSections(allRows, visibleRows, channel, expandedKey, hasActive
     {
       key: "collection",
       title: "页面集合",
-      description: `维护当前${channel === "web" ? "Web" : "小程序"}端页面集合。一级页面可展开查看所属二级菜单，当前已支持在“我的”“提取”页下维护二级入口，便于统一定位与精准屏蔽。`,
+      description:
+        channel === "miniprogram"
+          ? "维护当前小程序端页面集合。一级页面可展开查看所属二级菜单；“我的”页仅保留登录后菜单排序，微信登录入口不再作为独立二级页维护。"
+          : "维护当前 Web 端页面集合。一级页面可展开查看所属二级菜单，当前已支持在“我的”“提取”页下维护二级入口，便于统一定位与精准屏蔽。",
       rows: collectionRows,
     },
   ];
@@ -627,6 +725,15 @@ function normalizeRuleForm(row, channel, form) {
   };
 }
 
+function withDisplayLabel(item) {
+  return Object.assign({}, item, {
+    displayLabel:
+      normalizeText(item && item.loginNavLabel) ||
+      normalizeText(item && item.currentRule && item.currentRule.navText) ||
+      normalizeText(item && item.pageName),
+  });
+}
+
 function sortNavRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .filter(
@@ -641,7 +748,19 @@ function sortNavRows(rows) {
         return left.currentRule.navOrder - right.currentRule.navOrder;
       }
       return normalizeText(left.pageName).localeCompare(normalizeText(right.pageName), "zh-CN");
-    });
+    })
+    .map((item) => withDisplayLabel(item));
+}
+
+function sortProfileAuthenticatedSecondaryRows(rows) {
+  return sortSecondaryRows(
+    (Array.isArray(rows) ? rows : []).filter(
+      (item) =>
+        resolveSecondaryParentPageKey(item && item.pageKey) === "profile" &&
+        isProfileAuthenticatedSecondaryPageKey(item && item.pageKey) &&
+        normalizeText(item && item.currentRule && item.currentRule.publishState) === "online"
+    )
+  ).map((item) => withDisplayLabel(item));
 }
 
 function buildRow(item, channel, hideAudit) {
@@ -714,12 +833,29 @@ function buildRow(item, channel, hideAudit) {
   return row;
 }
 function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hideAudit) {
-  const allRows = Array.isArray(rows) ? rows : [];
+  const allRows = (Array.isArray(rows) ? rows : []).filter(
+    (item) => !shouldHidePageForChannel(item && item.pageKey, channel)
+  );
   const normalizedKeyword = normalizeText(keyword).toLowerCase();
   const normalizedStateFilter = normalizeText(stateFilter) || "all";
+  const normalizedExpandedKey = normalizeText(expandedKey);
+  const nextExpandedKey =
+    normalizedExpandedKey && allRows.some((item) => item.pageKey === normalizedExpandedKey)
+      ? normalizedExpandedKey
+      : "";
   const navRows = sortNavRows(allRows);
+  const profileAuthenticatedSecondaryRows = sortProfileAuthenticatedSecondaryRows(allRows);
   const navMetaMap = new Map(
     navRows.map((item, index) => [item.pageKey, { navRank: index + 1, isNavHome: index === 0 }])
+  );
+  const secondaryNavMetaMap = new Map(
+    profileAuthenticatedSecondaryRows.map((item, index) => [
+      item.pageKey,
+      {
+        secondaryNavRank: index + 1,
+        secondaryNavTotal: profileAuthenticatedSecondaryRows.length,
+      },
+    ])
   );
 
   const displayOrderMap = new Map(navRows.map((item, index) => [item.pageKey, index]));
@@ -742,6 +878,10 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hid
     .map((item) => {
       const row = clone(item);
       const navMeta = navMetaMap.get(row.pageKey) || { navRank: 0, isNavHome: false };
+      const secondaryNavMeta = secondaryNavMetaMap.get(row.pageKey) || {
+        secondaryNavRank: 0,
+        secondaryNavTotal: 0,
+      };
       const stateMeta = getDisplayStateMeta(row);
       row.isExpanded = row.pageKey === nextExpandedKey;
       row.statusType = stateMeta.type;
@@ -750,6 +890,11 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hid
       row.navRank = navMeta.navRank;
       row.navTotal = navRows.length;
       row.isNavHome = Boolean(navMeta.isNavHome);
+      row.supportsSecondaryOrder =
+        resolveSecondaryParentPageKey(row.pageKey) === "profile" &&
+        isProfileAuthenticatedSecondaryPageKey(row.pageKey);
+      row.secondaryNavRank = secondaryNavMeta.secondaryNavRank;
+      row.secondaryNavTotal = secondaryNavMeta.secondaryNavTotal;
       row.loginNavLabel =
         normalizeText(row.currentRule.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
       row.guestNavLabel =
@@ -787,9 +932,6 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hid
       .toLowerCase()
       .includes(normalizedKeyword);
   });
-  const nextExpandedKey = normalizeText(expandedKey) && orderedAllRows.some((item) => item.pageKey === normalizeText(expandedKey))
-    ? normalizeText(expandedKey)
-    : "";
   const hasActiveFilter = Boolean(normalizedKeyword) || normalizedStateFilter !== "all";
 
   const summary = allRows.reduce(
@@ -809,6 +951,7 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hid
     rows: visibleRows,
     pageSections: buildPageSections(orderedAllRows, visibleRows, channel, nextExpandedKey, hasActiveFilter),
     navRows,
+    profileAuthenticatedSecondaryRows,
     summary,
     filteredCount: visibleRows.length,
     expandedKey: nextExpandedKey,
@@ -954,6 +1097,7 @@ Component({
     pageRows: [],
     pageSections: [],
     navRows: [],
+    profileAuthenticatedSecondaryRows: [],
     summary: { total: 0, online: 0, beta: 0, offline: 0, nav: 0, betaCodes: 0 },
     hideAudit: false,
     betaEditorFocusPageKey: "",
@@ -1048,6 +1192,7 @@ Component({
       pageRows: presentation.rows,
       pageSections: presentation.pageSections,
       navRows: presentation.navRows,
+      profileAuthenticatedSecondaryRows: presentation.profileAuthenticatedSecondaryRows,
       summary: presentation.summary,
       filteredCount: presentation.filteredCount,
       expandedKey: presentation.expandedKey,
@@ -1549,22 +1694,27 @@ Component({
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const pageKey = normalizeText(dataset.pageKey);
     const direction = normalizeText(dataset.direction);
-    const navRows = sortNavRows(this.data.allRows);
-    const currentIndex = navRows.findIndex((item) => item.pageKey === pageKey);
+    const scope = normalizeText(dataset.scope);
+    const isSecondaryOrder = scope === "profile-authenticated-secondary";
+    const orderedRows = isSecondaryOrder
+      ? sortProfileAuthenticatedSecondaryRows(this.data.allRows)
+      : sortNavRows(this.data.allRows);
+    const currentIndex = orderedRows.findIndex((item) => item.pageKey === pageKey);
     const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= navRows.length) return;
-    const currentRow = navRows[currentIndex];
-    const targetRow = navRows[targetIndex];
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedRows.length) return;
+    const currentRow = orderedRows[currentIndex];
+    const targetRow = orderedRows[targetIndex];
     if (
-      isForcedHomeEntry(currentRow.pageKey, this.data.channel, this.data.hideAudit) ||
-      isForcedHomeEntry(targetRow.pageKey, this.data.channel, this.data.hideAudit)
+      !isSecondaryOrder &&
+      (isForcedHomeEntry(currentRow.pageKey, this.data.channel, this.data.hideAudit) ||
+        isForcedHomeEntry(targetRow.pageKey, this.data.channel, this.data.hideAudit))
     ) {
       this.showNotice("error", "当前环境下 pose 页面固定为首页，菜单顺序不可调整");
       return;
     }
     const currentRule = normalizeRuleForm(currentRow, this.data.channel, currentRow.currentRule);
     const targetRule = normalizeRuleForm(targetRow, this.data.channel, targetRow.currentRule);
-    this.setData({ savingKey: `${pageKey}:move` });
+    this.setData({ savingKey: `${pageKey}:${isSecondaryOrder ? "secondary-move" : "move"}` });
     try {
       await requestJson("/api/admin/page-center/pages", {
         method: "POST",
@@ -1577,9 +1727,15 @@ Component({
         timeout: 10000,
       });
       await this.loadOverview();
-      this.showNotice("success", "底部菜单顺序已更新");
+      this.showNotice(
+        "success",
+        isSecondaryOrder ? "登录后菜单顺序已更新" : "底部菜单顺序已更新"
+      );
     } catch (error) {
-      this.showNotice("error", readErrorMessage(error, "调整菜单顺序失败"));
+      this.showNotice(
+        "error",
+        readErrorMessage(error, isSecondaryOrder ? "调整登录后菜单顺序失败" : "调整底部菜单顺序失败")
+      );
     } finally {
       this.setData({ savingKey: "" });
     }

@@ -140,7 +140,7 @@ function resolveGalleryLoadingCopy(runtimeConfig, isLoggedIn) {
     (normalized.hideAudit ? "拾光谣" : "照片墙");
 
   return {
-    title: pageLabel,
+    title: "拾光中...",
     pageDescription: `正在加载${pageLabel}`,
     switchDescription: `正在切换${pageLabel}标签`,
   };
@@ -553,7 +553,7 @@ Page({
     pendingSwitchPhotoIds: [],
     loadingMore: false,
     hasMore: true,
-    pageLoadingTitle: "照片墙",
+    pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在加载照片墙",
     tagSwitchLoadingDescription: "正在切换照片墙标签",
 

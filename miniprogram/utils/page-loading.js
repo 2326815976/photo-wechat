@@ -46,6 +46,7 @@ function resolveDisplayLabels(runtimeConfig, options) {
 function buildManagedPageLoadingCopy(runtimeConfig, options) {
   const labels = resolveDisplayLabels(runtimeConfig, options);
   const currentOptions = options && typeof options === "object" ? options : {};
+  const title = "拾光中...";
   const description =
     typeof currentOptions.descriptionFormatter === "function"
       ? currentOptions.descriptionFormatter(labels.contentTitle, labels)
@@ -57,7 +58,7 @@ function buildManagedPageLoadingCopy(runtimeConfig, options) {
 
   return {
     normalizedRuntimeConfig: labels.normalizedRuntimeConfig,
-    title: labels.displayTitle,
+    title,
     description,
     switchDescription,
   };

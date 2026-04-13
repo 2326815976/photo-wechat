@@ -65,8 +65,6 @@ Page({
     pageTitle: "登录",
     registerEntryVisible: true,
     registerEntryLabel: "注册",
-    forgotEntryVisible: true,
-    forgotEntryLabel: "忘记密码",
   },
 
   applyRuntimeConfig(runtimeConfig) {
@@ -76,7 +74,6 @@ Page({
     const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
     const loginAccess = getManagedPageAccess(normalized, "login");
     const registerAccess = getManagedPageAccess(normalized, "register");
-    const forgotAccess = getManagedPageAccess(normalized, "forgot-password");
     const pageTitle =
       String((loginAccess && (loginAccess.headerTitle || loginAccess.navText)) || "").trim() || "登录";
     const registerEntryVisible =
@@ -86,11 +83,6 @@ Page({
     const registerEntryLabel =
       String((registerAccess && (registerAccess.navText || registerAccess.headerTitle)) || "").trim() ||
       "注册";
-    const forgotEntryVisible =
-      Boolean(forgotAccess) && String((forgotAccess && forgotAccess.publishState) || "").trim() === "online";
-    const forgotEntryLabel =
-      String((forgotAccess && (forgotAccess.navText || forgotAccess.headerTitle)) || "").trim() ||
-      "忘记密码";
     this.setData({
       hideAudit: Boolean(normalized.hideAudit),
       authMode,
@@ -99,8 +91,6 @@ Page({
       pageTitle,
       registerEntryVisible,
       registerEntryLabel,
-      forgotEntryVisible,
-      forgotEntryLabel,
     });
     this.initLegalDocuments(Boolean(normalized.hideAudit));
     return normalized;
@@ -295,14 +285,6 @@ Page({
       return;
     }
     wx.navigateTo({ url: "/pages/register/index" });
-  },
-
-  goForgotPassword() {
-    if (!this.data.forgotEntryVisible) {
-      this.setData({ error: "当前未开放忘记密码入口" });
-      return;
-    }
-    wx.navigateTo({ url: "/pages/auth/forgot-password/index" });
   },
 
   async submit() {

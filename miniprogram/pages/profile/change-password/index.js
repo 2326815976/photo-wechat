@@ -244,7 +244,7 @@ Page({
       setTimeout(() => {
         clearSessionCache();
         clearStoredCookie();
-        wx.reLaunch({ url: "/pages/login/index" });
+        wx.switchTab({ url: "/pages/profile/index" });
       }, 2000);
     } catch (e) {
       const msg = String((e && e.message) || "");

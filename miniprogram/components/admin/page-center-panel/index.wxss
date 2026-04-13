@@ -267,6 +267,34 @@
   border-top: 1rpx solid rgba(93, 64, 55, 0.08);
 }
 
+.page-card__subtree-group + .page-card__subtree-group {
+  margin-top: 20rpx;
+}
+
+.page-card__subtree-group-head {
+  margin-bottom: 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid rgba(93, 64, 55, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  box-sizing: border-box;
+}
+
+.page-card__subtree-group-title {
+  color: #5d4037;
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.page-card__subtree-group-desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #8d6e63;
+}
+
 .page-card--child {
   margin-bottom: 20rpx;
   padding: 24rpx;
@@ -782,6 +810,10 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
   gap: 12rpx;
+}
+
+.online-actions--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .online-actions__move-btn {

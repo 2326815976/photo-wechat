@@ -22,8 +22,6 @@ const SHARE_TITLE_BY_ROUTE = {
   "pages/album/detail": "「拾光谣」相册分享",
   "pages/album/detail/index": "「拾光谣」相册分享",
   "pages/profile/index": "拾光谣｜定格美好瞬间",
-  "pages/auth/forgot-password/index": "拾光谣｜忘记密码",
-  "pages/auth/reset-password/index": "拾光谣｜重置密码",
 };
 
 function loadCachedRuntimeConfig() {

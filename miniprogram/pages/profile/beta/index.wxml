@@ -1,7 +1,8 @@
 <view class="page">
   <app-header
-    title="功能内测"
-    subtitle="🔓 输入内测码解锁功能"
+    managedPageKey="profile-beta"
+    title="内测功能"
+    subtitle=""
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="pages/profile/index"
