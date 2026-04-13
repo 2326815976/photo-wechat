@@ -209,6 +209,75 @@
   line-height: 1.35;
 }
 
+.page-card__title--child {
+  font-size: 30rpx;
+}
+
+.page-card__subtree {
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-radius: 24rpx;
+  border: 1rpx solid rgba(93, 64, 55, 0.08);
+  background: #fff8f2;
+  box-sizing: border-box;
+}
+
+.page-card__subtree-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.page-card__subtree-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.page-card__subtree-title {
+  color: #5d4037;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.page-card__subtree-desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #8d6e63;
+}
+
+.page-card__subtree-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+
+.page-card__subtree-count,
+.page-card__subtree-toggle {
+  background: #ffffff;
+}
+
+.page-card__subtree-list {
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 1rpx solid rgba(93, 64, 55, 0.08);
+}
+
+.page-card--child {
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  background: #ffffff;
+  box-shadow: 0 10rpx 28rpx rgba(93, 64, 55, 0.05);
+}
+
+.page-card--child:last-child {
+  margin-bottom: 0;
+}
+
 .hint-banner {
   margin-top: 20rpx;
   padding: 18rpx 22rpx;

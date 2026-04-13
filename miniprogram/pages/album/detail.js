@@ -3,7 +3,7 @@ const { resolvePublicUrl } = require("../../utils/storage-url");
 const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { getSessionId } = require("../../utils/session");
-const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
 const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
@@ -70,6 +70,22 @@ function normalizeMaybeText(value) {
     return "";
   }
   return raw;
+}
+
+function resolveManagedAlbumDetailTitle(runtimeConfig) {
+  const access = getManagedPageAccess(runtimeConfig, "album-detail");
+  return String((access && (access.headerTitle || access.navText)) || "").trim() || "专属返图空间";
+}
+
+function resolveAlbumHeaderTitle(options) {
+  const current = options && typeof options === "object" ? options : {};
+  return String(
+    current.albumTitle ||
+      current.rootFolderName ||
+      current.initialRootFolderName ||
+      current.managedTitle ||
+      "专属返图空间"
+  ).trim();
 }
 
 const ALBUM_LAYOUT_RATIO_MIN = 0.78;
@@ -513,6 +529,7 @@ Page({
 
     album: null,
     freezeEnabled: true,
+    managedTitle: "专属返图空间",
     headerTitle: "",
     expiryDays: 7,
     expiryNotice: "",
@@ -573,13 +590,17 @@ Page({
   _lastAlbumAutoLoadAt: 0,
   _windowHeight: 0,
 
-  onLoad(options) {
+  async onLoad(options) {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
+    const runtimeConfig = normalizeRuntimeConfig(
+      globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
+    );
+    const managedTitle = resolveManagedAlbumDetailTitle(runtimeConfig);
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
     this.fullPhotosByFolder = Object.create(null);
@@ -629,16 +650,13 @@ Page({
       backendReady,
       backendReconnecting,
       key,
-      headerTitle: cachedRootFolderName || initialRootFolderName || "",
+      managedTitle,
+      headerTitle: cachedRootFolderName || initialRootFolderName || managedTitle,
       welcomeStorageKey: `album_welcome_seen_${key}`,
       welcomeEggStorageKey: `album_welcome_egg_seen_${key}`,
       rootFolderName: cachedRootFolderName || initialRootFolderName || "根目录",
       initialRootFolderName: cachedRootFolderName || initialRootFolderName || "",
-      ...this.buildHideAuditPatch(
-        Boolean(
-          normalizeRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit }).hideAudit
-        )
-      ),
+      ...this.buildHideAuditPatch(Boolean(runtimeConfig.hideAudit)),
     }, () => {
       this.scheduleToolbarStickyTopSync();
     });
@@ -646,7 +664,17 @@ Page({
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
         const normalized = normalizeRuntimeConfig(runtimeConfig);
-        this.setData(this.buildHideAuditPatch(Boolean(normalized.hideAudit)));
+        const nextManagedTitle = resolveManagedAlbumDetailTitle(normalized);
+        this.setData({
+          ...this.buildHideAuditPatch(Boolean(normalized.hideAudit)),
+          managedTitle: nextManagedTitle,
+          headerTitle: resolveAlbumHeaderTitle({
+            albumTitle: this.data.album && this.data.album.title,
+            rootFolderName: this.data.rootFolderName,
+            initialRootFolderName: this.data.initialRootFolderName,
+            managedTitle: nextManagedTitle,
+          }),
+        });
       });
     }
     if (app && typeof app.subscribeBackendStatus === "function") {
@@ -658,6 +686,10 @@ Page({
           backendReconnecting: reconnecting,
         });
       });
+    }
+    const accessDenied = await this.guardManagedAccess();
+    if (accessDenied) {
+      return;
     }
     if (!serviceMissing) {
       if (backendReady) {
@@ -686,8 +718,20 @@ Page({
         ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
         : { hideAudit: false }
     );
-    this.setData(this.buildHideAuditPatch(Boolean(normalized.hideAudit)));
+    const managedTitle = resolveManagedAlbumDetailTitle(normalized);
+    this.setData({
+      ...this.buildHideAuditPatch(Boolean(normalized.hideAudit)),
+      managedTitle,
+      headerTitle: resolveAlbumHeaderTitle({
+        albumTitle: this.data.album && this.data.album.title,
+        rootFolderName: this.data.rootFolderName,
+        initialRootFolderName: this.data.initialRootFolderName,
+        managedTitle,
+      }),
+    });
     this.scheduleToolbarStickyTopSync();
+    const accessDenied = await this.guardManagedAccess();
+    if (accessDenied) return false;
 
     const appEnterSeq = Math.max(
       0,
@@ -744,6 +788,14 @@ Page({
       silent: true,
       skipWave: true,
     });
+  },
+
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "album-detail",
+      fallbackTab: "pages/album/index",
+    });
+    return !result.allowed;
   },
 
   markTransientForegroundReturn() {
@@ -1564,9 +1616,12 @@ Page({
           {
             album: normalizedAlbum,
             freezeEnabled: normalizedAlbum && normalizedAlbum.enable_freeze !== false,
-            headerTitle:
-              String((normalizedAlbum && normalizedAlbum.title) || "").trim() ||
-              String(rootFolderName || this.data.initialRootFolderName || "").trim(),
+            headerTitle: resolveAlbumHeaderTitle({
+              albumTitle: String((normalizedAlbum && normalizedAlbum.title) || "").trim(),
+              rootFolderName,
+              initialRootFolderName: this.data.initialRootFolderName,
+              managedTitle: this.data.managedTitle,
+            }),
             expiryDays,
             expiryNotice: buildExpiryNotice(normalizedAlbum),
             welcomeText:

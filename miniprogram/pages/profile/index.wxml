@@ -136,9 +136,17 @@
         <text class="guest-title">寮€鍚綘鐨勪笓灞炵┖闂?鉁?/text>
         <text class="guest-desc">鐧诲綍鍚庤В閿佹洿澶氬姛鑳?/text>
 
-        <view class="guest-actions">
-          <button class="btn-primary" hover-class="btn-primary--active" bindtap="goLogin">绔嬪嵆鐧诲綍</button>
-          <button wx:if="{{phoneLoginEnabled}}" class="btn-outline" hover-class="btn-outline--active" bindtap="goRegister">娉ㄥ唽璐﹀彿</button>
+        <view class="guest-actions" wx:if="{{guestMenuItems.length > 0}}">
+          <button
+            wx:for="{{guestMenuItems}}"
+            wx:key="key"
+            class="{{item.buttonClass}}"
+            hover-class="{{item.hoverClass}}"
+            bindtap="onProfileMenuTap"
+            data-action="{{item.action}}"
+          >
+            {{item.title}}
+          </button>
         </view>
       </view>
 

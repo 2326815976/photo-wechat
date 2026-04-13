@@ -12,7 +12,8 @@ const {
   normalizeChinaMobile,
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
-const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 const SLIDER_WIDTH_FALLBACK = 56;
 const CAPTCHA_TOKEN_EXPIRE_MS = 2 * 60 * 1000;
@@ -229,22 +230,37 @@ Page({
     hideAudit: false,
     authMode: "phone_password",
     phoneLoginEnabled: true,
+    pageTitle: "注册",
+    loginEntryVisible: true,
+    loginEntryLabel: "登录",
   },
 
   applyRuntimeConfig(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
     const authMode = String(normalized.authMode || "phone_password");
     const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    const registerAccess = getManagedPageAccess(normalized, "register");
+    const loginAccess = getManagedPageAccess(normalized, "login");
+    const pageTitle =
+      String((registerAccess && (registerAccess.headerTitle || registerAccess.navText)) || "").trim() ||
+      "注册";
+    const loginEntryVisible =
+      Boolean(loginAccess) && String((loginAccess && loginAccess.publishState) || "").trim() === "online";
+    const loginEntryLabel =
+      String((loginAccess && (loginAccess.navText || loginAccess.headerTitle)) || "").trim() || "登录";
     this.setData({
       hideAudit: Boolean(normalized.hideAudit),
       authMode,
       phoneLoginEnabled,
+      pageTitle,
+      loginEntryVisible,
+      loginEntryLabel,
     });
     this.initLegalDocuments(Boolean(normalized.hideAudit));
     return normalized;
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -259,6 +275,10 @@ Page({
     const runtimeConfig = this.applyRuntimeConfig(
       globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
     );
+    const blocked = await this.guardManagedAccess();
+    if (blocked) {
+      return;
+    }
     if (runtimeConfig.authMode === "wechat_only" || !this.data.phoneLoginEnabled) {
       wx.showToast({ title: "当前未开放手机号注册", icon: "none" });
       wx.redirectTo({ url: "/pages/login/index" });
@@ -279,6 +299,30 @@ Page({
     }
   },
 
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+    const normalized = this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    const blocked = await this.guardManagedAccess();
+    if (blocked) {
+      return;
+    }
+    if (normalized.authMode === "wechat_only" || !this.data.phoneLoginEnabled) {
+      wx.showToast({ title: "当前未开放手机号注册", icon: "none" });
+      wx.redirectTo({ url: "/pages/login/index" });
+    }
+  },
+
   onReady() {
     this.measureSlider();
   },
@@ -292,6 +336,14 @@ Page({
     }
   },
 
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "register",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
+  },
+
   goBack() {
     wx.navigateBack({
       delta: 1,
@@ -302,6 +354,10 @@ Page({
   },
 
   goLogin() {
+    if (!this.data.loginEntryVisible) {
+      wx.showToast({ title: "当前未开放登录入口", icon: "none" });
+      return;
+    }
     wx.redirectTo({ url: "/pages/login/index" });
   },
 

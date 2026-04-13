@@ -76,6 +76,25 @@ const PROFILE_MANAGED_MENU_SPECS = [
   },
 ];
 
+const GUEST_PROFILE_MENU_SPECS = [
+  {
+    pageKey: "login",
+    action: "goLogin",
+    defaultTitle: "登录",
+    buttonClass: "btn-primary",
+    hoverClass: "btn-primary--active",
+    requiresAnyAuthMethod: true,
+  },
+  {
+    pageKey: "register",
+    action: "goRegister",
+    defaultTitle: "注册",
+    buttonClass: "btn-outline",
+    hoverClass: "btn-outline--active",
+    requiresPhoneLogin: true,
+  },
+];
+
 function isWechatMiniProgramAccount(user) {
   const email = String((user && user.email) || "").trim().toLowerCase();
   return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
@@ -230,6 +249,41 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
   }, []);
 }
 
+function buildManagedGuestProfileMenuItems(state, runtimeConfig) {
+  const currentState = state && typeof state === "object" ? state : {};
+  return GUEST_PROFILE_MENU_SPECS.reduce((list, spec) => {
+    const access = getManagedPageAccess(runtimeConfig, spec.pageKey);
+    if (!access || String(access.publishState || "").trim() !== "online") {
+      return list;
+    }
+    if (
+      spec.requiresAnyAuthMethod &&
+      !Boolean(currentState.phoneLoginEnabled) &&
+      !Boolean(currentState.wechatLoginEnabled)
+    ) {
+      return list;
+    }
+    if (spec.requiresPhoneLogin && !Boolean(currentState.phoneLoginEnabled)) {
+      return list;
+    }
+
+    const title =
+      toText(access.navText) || toText(access.headerTitle) || String(spec.defaultTitle || "").trim();
+    if (!title) {
+      return list;
+    }
+
+    list.push({
+      key: spec.pageKey,
+      action: spec.action,
+      title,
+      buttonClass: String(spec.buttonClass || "").trim(),
+      hoverClass: String(spec.hoverClass || "").trim(),
+    });
+    return list;
+  }, []);
+}
+
 function extractAuthUserFromPayload(payload) {
   let current = payload;
   for (let depth = 0; depth < 4; depth += 1) {
@@ -285,6 +339,7 @@ Page({
     userRegisterDateText: "",
     canChangePassword: false,
     profileMenuItems: [],
+    guestMenuItems: [],
 
     aboutLoading: true,
     aboutError: "",
@@ -367,6 +422,7 @@ Page({
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
       profileMenuItems: buildManagedProfileMenuItems(nextState, normalized),
+      guestMenuItems: buildManagedGuestProfileMenuItems(nextState, normalized),
     });
     this.initAuditLegalDocuments(enableGuestWechatEntry);
     return normalized;

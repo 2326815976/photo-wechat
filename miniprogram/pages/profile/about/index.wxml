@@ -3,7 +3,7 @@
   managedPageKey="about"
     title="关于"
     safeTop="{{safeTop}}"
-    showBack="{{pageIsStandalone}}"
+    showBack="{{true}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
     preferFallback="{{pageIsStandalone}}"
@@ -117,5 +117,4 @@
       </view>
     </view>
   </view>
-  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/profile/about/index" />
 </view>

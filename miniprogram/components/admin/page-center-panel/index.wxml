@@ -20,24 +20,59 @@
           <text class="page-section__desc">{{item.description}}</text>
         </view>
 
-        <view class="page-card panel-card" wx:for="{{item.rows}}" wx:for-item="row" wx:key="pageKey">
+        <view class="page-card panel-card" wx:for="{{item.rows}}" wx:for-item="group" wx:key="key">
           <view class="page-card__layout page-card__layout--simple">
             <view class="page-card__main">
               <view class="page-card__head">
                 <view class="page-card__title-row">
-                  <view class="page-card__title">{{row.pageName}}</view>
-                  <text class="status-pill status-pill--{{row.statusType}}">{{row.statusLabel}}</text>
-                  <text class="tag-pill">{{row.pageKey}}</text>
-                  <text class="tag-pill tag-pill--soft" wx:if="{{row.isBuiltIn}}">内置页</text>
+                  <view class="page-card__title">{{group.parent.pageName}}</view>
+                  <text class="status-pill status-pill--{{group.parent.statusType}}">{{group.parent.statusLabel}}</text>
+                  <text class="tag-pill">{{group.parent.pageKey}}</text>
+                  <text class="tag-pill tag-pill--soft" wx:if="{{group.parent.isBuiltIn}}">内置页</text>
                 </view>
-                <text class="page-card__desc" wx:if="{{row.pageDescription}}">{{row.pageDescription}}</text>
+                <text class="page-card__desc" wx:if="{{group.parent.pageDescription}}">{{group.parent.pageDescription}}</text>
               </view>
             </view>
 
             <view class="action-grid action-grid--triple page-card__actions">
-              <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="edit">编辑</button>
-              <button class="action-btn {{row.quickActionClassName}}" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="{{row.quickActionType}}" disabled="{{(savingKey ? true : false) || row.quickActionDisabled}}">{{savingKey === (row.pageKey + ':state:' + row.quickActionType) ? row.quickActionLoadingLabel : row.quickActionLabel}}</button>
-              <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="view" disabled="{{!row.supportsPreview || !row.currentPreviewRoutePath}}">查看</button>
+              <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{group.parent.pageKey}}" data-action="edit">编辑</button>
+              <button class="action-btn {{group.parent.quickActionClassName}}" bindtap="onQuickAction" data-page-key="{{group.parent.pageKey}}" data-action="{{group.parent.quickActionType}}" disabled="{{(savingKey ? true : false) || group.parent.quickActionDisabled}}">{{savingKey === (group.parent.pageKey + ':state:' + group.parent.quickActionType) ? group.parent.quickActionLoadingLabel : group.parent.quickActionLabel}}</button>
+              <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{group.parent.pageKey}}" data-action="view" disabled="{{!group.parent.supportsPreview || !group.parent.currentPreviewRoutePath}}">查看</button>
+            </view>
+          </view>
+
+          <view class="page-card__subtree" wx:if="{{group.childCount}}">
+            <view class="page-card__subtree-head" bindtap="onToggleExpand" data-page-key="{{group.parent.pageKey}}">
+              <view class="page-card__subtree-copy">
+                <view class="page-card__subtree-title">所属二级菜单</view>
+                <text class="page-card__subtree-desc">这些入口会展示在“{{group.parent.pageName}}”页内，可单独编辑标题、显示或隐藏。</text>
+              </view>
+              <view class="page-card__subtree-meta">
+                <text class="tag-pill page-card__subtree-count">{{group.childCount}} 个入口</text>
+                <text class="tag-pill page-card__subtree-toggle">{{group.isExpanded ? '收起' : '展开'}}</text>
+              </view>
+            </view>
+
+            <view class="page-card__subtree-list" wx:if="{{group.isExpanded}}">
+              <view class="page-card page-card--child" wx:for="{{group.children}}" wx:for-item="row" wx:key="pageKey">
+                <view class="page-card__layout page-card__layout--simple">
+                  <view class="page-card__main">
+                    <view class="page-card__head">
+                      <view class="page-card__title-row">
+                        <view class="page-card__title page-card__title--child">{{row.pageName}}</view>
+                        <text class="status-pill status-pill--{{row.statusType}}">{{row.statusLabel}}</text>
+                      </view>
+                      <text class="page-card__desc">{{row.entryHint}}</text>
+                    </view>
+                  </view>
+
+                  <view class="action-grid action-grid--triple page-card__actions">
+                    <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="edit">编辑</button>
+                    <button class="action-btn {{row.quickActionClassName}}" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="{{row.quickActionType}}" disabled="{{(savingKey ? true : false) || row.quickActionDisabled}}">{{savingKey === (row.pageKey + ':state:' + row.quickActionType) ? row.quickActionLoadingLabel : row.quickActionLabel}}</button>
+                    <button class="action-btn action-btn--view" bindtap="onQuickAction" data-page-key="{{row.pageKey}}" data-action="view" disabled="{{!row.supportsPreview || !row.currentPreviewRoutePath}}">查看</button>
+                  </view>
+                </view>
+              </view>
             </view>
           </view>
         </view>
@@ -49,7 +84,7 @@
         <view class="modal-head">
           <view class="modal-head__main">
             <view class="modal-title">{{dialogMode === 'offline' ? ((dialogRow.isSecondaryPage ? '确认隐藏 · ' : '确认下线 · ') + dialogRow.pageName) : '编辑页面 · ' + dialogRow.pageName}}</view>
-            <text class="modal-desc" wx:if="{{dialogMode === 'offline'}}">{{dialogRow.isSecondaryPage ? '隐藏后普通用户将无法从“我的”列表进入，管理员仍可通过“查看”无底栏进入。' : '下线后普通用户无法访问该页面，管理员仍可通过“查看”无底栏进入。'}}</text>
+            <text class="modal-desc" wx:if="{{dialogMode === 'offline'}}">{{dialogRow.isSecondaryPage ? '隐藏后普通用户将无法从所属一级页进入，管理员仍可通过“查看”无底栏进入。' : '下线后普通用户无法访问该页面，管理员仍可通过“查看”无底栏进入。'}}</text>
           </view>
           <view class="modal-close" bindtap="closeActionDialog">×</view>
         </view>
@@ -57,7 +92,7 @@
         <block wx:if="{{dialogMode === 'offline'}}">
           <view class="impact-card impact-card--danger">
             <view class="impact-card__title">{{dialogRow.isSecondaryPage ? '隐藏影响' : '下线影响'}}</view>
-            <text class="impact-card__desc">{{dialogRow.isSecondaryPage ? '• 普通用户将无法从“我的”列表进入该二级页面。' : '• 普通用户无法通过正式路由访问该页面。'}}</text>
+            <text class="impact-card__desc">{{dialogRow.isSecondaryPage ? '• 普通用户将无法从所属一级页进入该二级页面。' : '• 普通用户无法通过正式路由访问该页面。'}}</text>
             <text class="impact-card__desc">{{dialogRow.isSecondaryPage ? '• 当前入口名称与页面顶部标题会一起对普通用户隐藏。' : '• 如果页面当前在底栏中，会立即从底部菜单移除。'}}</text>
             <text class="impact-card__desc">• 管理员仍可通过“查看”无底栏预览该页面。</text>
           </view>
@@ -83,8 +118,8 @@
           <view class="modal-section">
             <view class="modal-section__head">
               <view>
-                <view class="modal-section__title">标题设置</view>
-                <text class="modal-section__desc">{{dialogRow.isSecondaryPage ? '二级页入口名称会同步作为页面顶部标题，并与“我的”列表保持一致。' : '大标题如“拾光谣”，小标题如“定格美好瞬间”。'}}</text>
+                <view class="modal-section__title">{{dialogRow.pageKey === 'album-detail' ? '默认名称' : '标题设置'}}</view>
+                <text class="modal-section__desc">{{dialogRow.pageKey === 'album-detail' ? '实际页面顶部优先显示相册名；只有相册未命名时，才会使用这里的默认名称。' : (dialogRow.isSecondaryPage ? '二级页入口名称会同步作为页面顶部标题，并与所属一级页中的入口保持一致。' : '大标题如“拾光谣”，小标题如“定格美好瞬间”。')}}</text>
               </view>
             </view>
             <view class="field-grid field-grid--two modal-section__form-grid" wx:if="{{!dialogRow.isSecondaryPage}}">
@@ -99,12 +134,12 @@
             </view>
             <view class="modal-section__form-grid" wx:else>
               <view class="field-card">
-                <text class="field-label">入口名称 / 顶部标题</text>
-                <input class="field-input" value="{{dialogRow.currentRule.navText}}" data-page-key="{{dialogRow.pageKey}}" data-field="navText" bindinput="onRuleInput" placeholder="如：编辑个人资料" />
+                <text class="field-label">{{dialogRow.pageKey === 'album-detail' ? '默认名称（无相册名时使用）' : '入口名称 / 顶部标题'}}</text>
+                <input class="field-input" value="{{dialogRow.currentRule.navText}}" data-page-key="{{dialogRow.pageKey}}" data-field="navText" bindinput="onRuleInput" placeholder="如：专属返图空间" />
               </view>
             </view>
             <view class="modal-section__actions">
-              <button class="mini-btn mini-btn--strong modal-section__save-btn" bindtap="onSaveTitleRule" data-page-key="{{dialogRow.pageKey}}" disabled="{{savingKey ? true : false}}">{{savingKey === (dialogRow.pageKey + ':rule:title') ? '保存中...' : (dialogRow.isSecondaryPage ? '保存页面标题' : '保存标题设置')}}</button>
+              <button class="mini-btn mini-btn--strong modal-section__save-btn" bindtap="onSaveTitleRule" data-page-key="{{dialogRow.pageKey}}" disabled="{{savingKey ? true : false}}">{{savingKey === (dialogRow.pageKey + ':rule:title') ? '保存中...' : (dialogRow.pageKey === 'album-detail' ? '保存默认名称' : (dialogRow.isSecondaryPage ? '保存页面标题' : '保存标题设置'))}}</button>
             </view>
           </view>
 
@@ -190,26 +225,21 @@
             <view class="modal-section__head">
               <view>
                 <view class="modal-section__title">上线设置</view>
-                <text class="modal-section__desc">{{dialogRow.isSecondaryPage ? (dialogRow.statusType === 'online' ? '当前入口正在“我的”列表中展示，保存后会同步更新页面顶部标题。' : '显示后会出现在“我的”列表中，页面顶部标题会与入口名称保持一致。') : (dialogRow.navSupported ? (dialogRow.statusType === 'online' ? '维护当前底部菜单顺序与上线状态。' : '满足上线条件，保存后会进入底部菜单。') : '当前页面不是底栏候选，不能直接上线到菜单。')}}</text>
+                <text class="modal-section__desc">{{dialogRow.isSecondaryPage ? (dialogRow.pageKey === 'album-detail' ? (dialogRow.statusType === 'online' ? '当前动态详情页已启用。实际页面顶部优先显示相册名；相册未命名时，才回退使用这里的默认名称。' : '显示后允许进入动态详情页。实际页面顶部优先显示相册名；相册未命名时，才回退使用这里的默认名称。') : (dialogRow.statusType === 'online' ? '当前入口正在所属一级页中展示，保存后会同步更新页面顶部标题。' : '显示后会出现在所属一级页中，页面顶部标题会与入口名称保持一致。')) : (dialogRow.navSupported ? (dialogRow.statusType === 'online' ? '维护当前底部菜单顺序与上线状态。' : '满足上线条件，保存后会进入底部菜单。') : '当前页面不是底栏候选，不能直接上线到菜单。')}}</text>
               </view>
             </view>
 
             <view class="info-card info-card--plain" wx:if="{{dialogRow.isSecondaryPage}}">
-              <view class="info-card__title">入口名称预览</view>
+              <view class="info-card__title">{{dialogRow.pageKey === 'album-detail' ? '默认名称预览' : '入口名称预览'}}</view>
               <text class="info-card__desc info-card__desc--strong">{{dialogRow.loginNavLabel}}</text>
-              <text class="helper-text">显示后会同步作为页面顶部标题，隐藏后“我的”列表不再展示。</text>
+              <text class="helper-text">{{dialogRow.pageKey === 'album-detail' ? '这里只维护无相册名时的默认名称，实际页面顶部优先使用相册名。' : '显示后会同步作为页面顶部标题，隐藏后所属一级页不再展示。'}}</text>
             </view>
 
             <view class="order-pills" wx:if="{{!dialogRow.isSecondaryPage}}">
               <text class="{{item.pageKey === dialogRow.pageKey ? 'order-pill order-pill--active' : 'order-pill'}}" wx:for="{{navRows}}" wx:key="pageKey">{{index + 1}}. {{item.displayLabel}}</text>
             </view>
 
-            <view class="online-actions" wx:if="{{dialogRow.isSecondaryPage}}">
-              <button class="modal-btn modal-btn--danger online-actions__save-btn" wx:if="{{dialogRow.statusType === 'online'}}" bindtap="onDialogSubmit" data-action="offline" disabled="{{savingKey ? true : false}}">立即隐藏</button>
-              <button class="modal-btn modal-btn--primary online-actions__save-btn" wx:else bindtap="onDialogSubmit" data-action="online" disabled="{{savingKey ? true : false}}">保存并显示</button>
-            </view>
-
-            <view class="online-actions" wx:else>
+            <view class="online-actions" wx:if="{{!dialogRow.isSecondaryPage}}">
               <button class="mini-btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="up" disabled="{{savingKey ? true : (dialogRow.forcedHomeEntry || dialogRow.navRank <= 1)}}">前移</button>
               <button class="mini-btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="down" disabled="{{savingKey ? true : (dialogRow.forcedHomeEntry || !dialogRow.navRank || dialogRow.navRank >= dialogRow.navTotal)}}">后移</button>
               <button class="modal-btn modal-btn--primary online-actions__save-btn" bindtap="onDialogSubmit" data-action="online" disabled="{{(savingKey ? true : false) || !dialogRow.navSupported}}">保存</button>

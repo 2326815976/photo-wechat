@@ -9,7 +9,7 @@
 
   <view class="content">
     <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">✨ 欢迎注册</text>
+      <text class="title">{{pageTitle}}</text>
       <text class="sub">创建账号，开启美好瞬间记录之旅</text>
     </view>
 
@@ -127,9 +127,9 @@
         <text wx:else>立即注册 →</text>
       </button>
 
-      <view class="footer">
+      <view class="footer" wx:if="{{loginEntryVisible}}">
         <text class="footer-text">已有账号？</text>
-        <text class="footer-link" hover-class="footer-link--active" bindtap="goLogin">立即登录</text>
+        <text class="footer-link" hover-class="footer-link--active" bindtap="goLogin">{{loginEntryLabel}}</text>
       </view>
     </view>
   </view>

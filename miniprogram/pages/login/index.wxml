@@ -9,7 +9,7 @@
 
   <view class="content">
     <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">欢迎回来 👋</text>
+      <text class="title">{{pageTitle}}</text>
       <text class="sub">继续你的拾光之旅</text>
     </view>
 
@@ -52,6 +52,10 @@
           <view class="toggle" hover-class="toggle--active" hover-stay-time="80" bindtap="togglePassword">
             <image class="toggle-icon" src="{{showPassword ? '/images/icons/eye-off-muted.svg' : '/images/icons/eye-muted.svg'}}" mode="aspectFit" />
           </view>
+        </view>
+
+        <view class="forgot-link-row" wx:if="{{forgotEntryVisible}}">
+          <text class="forgot-link" hover-class="forgot-link--active" bindtap="goForgotPassword">{{forgotEntryLabel}}</text>
         </view>
       </block>
 
@@ -97,9 +101,9 @@
         <text wx:else>微信一键登录</text>
       </button>
 
-      <view class="footer motion-fade-in motion-delay-4" wx:if="{{phoneLoginEnabled}}">
+      <view class="footer motion-fade-in motion-delay-4" wx:if="{{registerEntryVisible}}">
         <text class="footer-text">还没有账号？</text>
-        <text class="footer-link" hover-class="footer-link--active" bindtap="goRegister">去注册</text>
+        <text class="footer-link" hover-class="footer-link--active" bindtap="goRegister">{{registerEntryLabel}}</text>
       </view>
     </view>
   </view>

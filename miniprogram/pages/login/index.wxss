@@ -158,6 +158,25 @@
   border: none;
 }
 
+.forgot-link-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -12rpx;
+  margin-bottom: 16rpx;
+  padding: 0 8rpx;
+}
+
+.forgot-link {
+  font-size: 24rpx;
+  color: rgba(93, 64, 55, 0.58);
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.forgot-link--active {
+  color: #5D4037;
+  opacity: 0.9;
+}
+
 .error {
   margin-top: 10rpx;
   margin-bottom: 10rpx;

@@ -1,0 +1,36 @@
+<view class="page">
+  <view style="height: {{safeTop}}px;"></view>
+
+  <view class="back motion-fade-up motion-delay-1" style="top: {{safeTop + 24}}px;" bindtap="goBack">
+    <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80">
+      <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="content">
+    <view class="title-wrap motion-fade-up motion-delay-2">
+      <text class="title">{{managedTitle}}</text>
+      <text class="sub">{{managedSubtitle}}</text>
+    </view>
+
+    <view class="card motion-fade-up motion-delay-3">
+      <view class="card-icon-wrap">
+        <image class="card-icon" src="/images/icons/rotate-ccw-brown.svg" mode="aspectFit" />
+      </view>
+      <text class="card-title">请先回到登录流程</text>
+      <text class="card-desc">当前版本不提供访客态直接重置密码，请先回到登录页查看忘记密码说明。</text>
+
+      <view class="note-box">
+        <view class="note-row">
+          <image class="note-icon" src="/images/icons/lock-muted.svg" mode="aspectFit" />
+          <text class="note-text">如你已登录，请前往「个人中心 - 修改密码」完成密码更新；如你未登录，可先查看忘记密码页说明。</text>
+        </view>
+      </view>
+
+      <view class="actions">
+        <button wx:if="{{loginEntryVisible}}" class="btn-primary" hover-class="btn-primary--active" bindtap="goLogin">{{loginEntryLabel}}</button>
+        <button wx:if="{{forgotEntryVisible}}" class="btn-secondary" hover-class="btn-secondary--active" bindtap="goForgotPassword">{{forgotEntryLabel}}</button>
+      </view>
+    </view>
+  </view>
+</view>

@@ -5,8 +5,9 @@ const {
   normalizeChinaMobile,
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
-const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
 const { requestWechatUserProfile } = require("../../utils/wechat-profile");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -61,6 +62,11 @@ Page({
     authMode: "phone_password",
     phoneLoginEnabled: true,
     wechatLoginEnabled: false,
+    pageTitle: "登录",
+    registerEntryVisible: true,
+    registerEntryLabel: "注册",
+    forgotEntryVisible: true,
+    forgotEntryLabel: "忘记密码",
   },
 
   applyRuntimeConfig(runtimeConfig) {
@@ -68,17 +74,39 @@ Page({
     const authMode = String(normalized.authMode || "phone_password");
     const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
     const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
+    const loginAccess = getManagedPageAccess(normalized, "login");
+    const registerAccess = getManagedPageAccess(normalized, "register");
+    const forgotAccess = getManagedPageAccess(normalized, "forgot-password");
+    const pageTitle =
+      String((loginAccess && (loginAccess.headerTitle || loginAccess.navText)) || "").trim() || "登录";
+    const registerEntryVisible =
+      Boolean(registerAccess) &&
+      String((registerAccess && registerAccess.publishState) || "").trim() === "online" &&
+      phoneLoginEnabled;
+    const registerEntryLabel =
+      String((registerAccess && (registerAccess.navText || registerAccess.headerTitle)) || "").trim() ||
+      "注册";
+    const forgotEntryVisible =
+      Boolean(forgotAccess) && String((forgotAccess && forgotAccess.publishState) || "").trim() === "online";
+    const forgotEntryLabel =
+      String((forgotAccess && (forgotAccess.navText || forgotAccess.headerTitle)) || "").trim() ||
+      "忘记密码";
     this.setData({
       hideAudit: Boolean(normalized.hideAudit),
       authMode,
       phoneLoginEnabled,
       wechatLoginEnabled,
+      pageTitle,
+      registerEntryVisible,
+      registerEntryLabel,
+      forgotEntryVisible,
+      forgotEntryLabel,
     });
     this.initLegalDocuments(Boolean(normalized.hideAudit));
     return normalized;
   },
 
-  onLoad() {
+  async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -91,6 +119,25 @@ Page({
         this.applyRuntimeConfig(runtimeConfig);
       });
     }
+
+    await this.guardManagedAccess();
+  },
+
+  async onShow() {
+    const app = typeof getApp === "function" ? getApp() : null;
+    if (app && typeof app.ensureAuditConfig === "function") {
+      try {
+        await app.ensureAuditConfig();
+      } catch (error) {
+        // ignore
+      }
+    }
+    this.applyRuntimeConfig(
+      app && app.globalData
+        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
+        : { hideAudit: false }
+    );
+    await this.guardManagedAccess();
   },
 
   onUnload() {
@@ -234,12 +281,28 @@ Page({
     this.setData({ showPassword: !this.data.showPassword });
   },
 
+  async guardManagedAccess() {
+    const result = await guardMiniProgramPageAccess({
+      pageKey: "login",
+      fallbackTab: "pages/profile/index",
+    });
+    return !result.allowed;
+  },
+
   goRegister() {
-    if (!this.data.phoneLoginEnabled) {
+    if (!this.data.phoneLoginEnabled || !this.data.registerEntryVisible) {
       this.setData({ error: "当前配置未开放手机号注册" });
       return;
     }
     wx.navigateTo({ url: "/pages/register/index" });
+  },
+
+  goForgotPassword() {
+    if (!this.data.forgotEntryVisible) {
+      this.setData({ error: "当前未开放忘记密码入口" });
+      return;
+    }
+    wx.navigateTo({ url: "/pages/auth/forgot-password/index" });
   },
 
   async submit() {
