@@ -329,7 +329,7 @@ Page({
 
     loading: true,
     pageLoadingTitle: "拾光中...",
-    pageLoadingDescription: "正在载入我的小天地内容",
+    pageLoadingDescription: "正在加载页面",
     isLoggedIn: false,
     isWechatLogin: false,
     isAdmin: false,

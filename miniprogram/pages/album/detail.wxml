@@ -22,7 +22,7 @@
         <view class="admin-loading-card__spinner"></view>
       </view>
       <text class="admin-loading-card__title">拾光中...</text>
-      <text class="admin-loading-card__desc">正在为你打开相册</text>
+      <text class="admin-loading-card__desc">正在加载页面</text>
     </view>
 
     <view wx:if="{{album}}">
@@ -104,7 +104,7 @@
               <view class="admin-loading-card__spinner"></view>
             </view>
             <text class="admin-loading-card__title">拾光中...</text>
-            <text class="admin-loading-card__desc">正在切换照片标签</text>
+            <text class="admin-loading-card__desc">正在加载页面</text>
           </view>
         </view>
 
@@ -186,7 +186,7 @@
             </view>
 
             <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
-              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
+              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}" loading="{{item._pinning}}" disabled="{{item._pinning}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
               </button>
@@ -271,7 +271,7 @@
             </view>
 
             <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
-              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}">
+              <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}" loading="{{item._pinning}}" disabled="{{item._pinning}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
               </button>

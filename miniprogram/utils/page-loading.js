@@ -1,3 +1,8 @@
+const PAGE_LOADING_COPY = {
+  title: "拾光中...",
+  description: "正在加载页面",
+};
+
 const { normalizeMiniProgramPagePath, normalizeRuntimeConfig } = require("./runtime-config");
 
 function toText(value) {
@@ -46,15 +51,15 @@ function resolveDisplayLabels(runtimeConfig, options) {
 function buildManagedPageLoadingCopy(runtimeConfig, options) {
   const labels = resolveDisplayLabels(runtimeConfig, options);
   const currentOptions = options && typeof options === "object" ? options : {};
-  const title = "拾光中...";
+  const title = PAGE_LOADING_COPY.title;
   const description =
     typeof currentOptions.descriptionFormatter === "function"
       ? currentOptions.descriptionFormatter(labels.contentTitle, labels)
-      : `正在载入${labels.contentTitle}内容`;
+      : PAGE_LOADING_COPY.description;
   const switchDescription =
     typeof currentOptions.switchDescriptionFormatter === "function"
       ? currentOptions.switchDescriptionFormatter(labels.contentTitle, labels)
-      : `正在切换${labels.contentTitle}标签`;
+      : PAGE_LOADING_COPY.description;
 
   return {
     normalizedRuntimeConfig: labels.normalizedRuntimeConfig,
@@ -65,5 +70,6 @@ function buildManagedPageLoadingCopy(runtimeConfig, options) {
 }
 
 module.exports = {
+  PAGE_LOADING_COPY,
   buildManagedPageLoadingCopy,
 };

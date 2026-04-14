@@ -156,7 +156,8 @@
 .bind-row {
   margin-top: 16rpx;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10rpx;
 }
 
@@ -418,6 +419,9 @@
 
 .submit-btn--bind {
   height: 72rpx;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
   border-radius: 16rpx;
   font-size: 23rpx;
   font-weight: 700;

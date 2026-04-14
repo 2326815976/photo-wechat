@@ -141,8 +141,8 @@ function resolveGalleryLoadingCopy(runtimeConfig, isLoggedIn) {
 
   return {
     title: "拾光中...",
-    pageDescription: `正在加载${pageLabel}`,
-    switchDescription: `正在切换${pageLabel}标签`,
+    pageDescription: "正在加载页面",
+    switchDescription: "正在加载页面",
   };
 }
 
@@ -554,8 +554,8 @@ Page({
     loadingMore: false,
     hasMore: true,
     pageLoadingTitle: "拾光中...",
-    pageLoadingDescription: "正在加载照片墙",
-    tagSwitchLoadingDescription: "正在切换照片墙标签",
+    pageLoadingDescription: "正在加载页面",
+    tagSwitchLoadingDescription: "正在加载页面",
 
     isLoggedIn: false,
 
@@ -1769,6 +1769,7 @@ Page({
         page_no: pageNo,
         page_size: PAGE_SIZE,
         folder_id: targetFolderId,
+        client_source: "mini",
       });
 
       if (ticket !== this.galleryLoadTicket) {

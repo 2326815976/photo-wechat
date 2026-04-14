@@ -211,11 +211,21 @@ function normalizePhoto(photo) {
   });
 }
 
-function withSelection(list, selectedMap) {
+function withPhotoUiState(list, selectedMap, pinningPhotoIds) {
   const map = selectedMap || {};
+  const pinningSet = pinningPhotoIds instanceof Set
+    ? pinningPhotoIds
+    : new Set(Array.isArray(pinningPhotoIds) ? pinningPhotoIds : []);
   return (list || []).map((item) =>
-    Object.assign({}, item, { _selected: Boolean(map[String(item.id)]) })
+    Object.assign({}, item, {
+      _selected: Boolean(map[String(item.id)]),
+      _pinning: pinningSet.has(String(item.id)),
+    })
   );
+}
+
+function withSelection(list, selectedMap) {
+  return withPhotoUiState(list, selectedMap, null);
 }
 
 function isExplicitRpcFailure(payload) {
@@ -555,6 +565,7 @@ Page({
     batchLoading: false,
 
     confirmPhotoId: "",
+    pinConfirmPending: false,
     showDeleteConfirm: false,
     showWelcomeLetter: false,
     showWelcomeEasterEgg: false,
@@ -584,6 +595,7 @@ Page({
   photoColumnMap: null,
   relayoutTimer: null,
   photoLoadTicket: 0,
+  pendingPinPhotoIds: null,
   useLegacyPhotoPaging: false,
   legacyPhotosByFolder: null,
   fullPhotosByFolder: null,
@@ -608,6 +620,7 @@ Page({
     this.rightHeight = 0;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
+    this.pendingPinPhotoIds = new Set();
     this.relayoutTimer = null;
     this._lastAlbumAutoLoadAt = 0;
     this._windowHeight = 0;
@@ -1025,7 +1038,7 @@ Page({
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
         : "";
-    if (!id) return;
+    if (!id || this.isPinActionPending(id)) return;
 
     const current = this.findPhotoById(id);
     if (current && (!current._imageLoaded || current._imageLoadFailed)) {
@@ -1080,7 +1093,7 @@ Page({
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
         : "";
-    if (!id) return;
+    if (!id || this.isPinActionPending(id)) return;
 
     const current = this.findPhotoById(id);
     if (!current || current._imageLoadFailed) return;
@@ -1464,6 +1477,38 @@ Page({
     this.setData({ allPhotos: nextAll }, () => this.applyFilter());
   },
 
+  isPinActionPending(id) {
+    const normalizedId = String(id || "").trim();
+    if (!normalizedId || !(this.pendingPinPhotoIds instanceof Set)) {
+      return false;
+    }
+    return this.pendingPinPhotoIds.has(normalizedId);
+  },
+
+  setPinActionPending(id, pending) {
+    const normalizedId = String(id || "").trim();
+    if (!normalizedId) {
+      return;
+    }
+
+    if (!(this.pendingPinPhotoIds instanceof Set)) {
+      this.pendingPinPhotoIds = new Set();
+    }
+
+    if (pending) {
+      this.pendingPinPhotoIds.add(normalizedId);
+    } else {
+      this.pendingPinPhotoIds.delete(normalizedId);
+    }
+
+    this.setData(
+      {
+        pinConfirmPending: this.isPinActionPending(this.data.confirmPhotoId),
+      },
+      () => this.applyFilter()
+    );
+  },
+
   getCachedFullPhotosForFolder(folderId) {
     const targetFolderId = String(folderId || ROOT_FOLDER_ID);
     const currentFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
@@ -1754,7 +1799,11 @@ Page({
   },
 
   applyFilter() {
-    const selectedPhotos = withSelection(this.data.allPhotos || [], this.data.selectedPhotoMap || {});
+    const selectedPhotos = withPhotoUiState(
+      this.data.allPhotos || [],
+      this.data.selectedPhotoMap || {},
+      this.pendingPinPhotoIds
+    );
     this.applyWaterfallPhotos(selectedPhotos);
   },
 
@@ -2710,7 +2759,7 @@ Page({
     if (this.data.hideAudit) return;
     if (!this.data.freezeEnabled) return;
     const id = String(this.data.confirmPhotoId || "");
-    if (!id) return;
+    if (!id || this.isPinActionPending(id)) return;
 
     await this.performTogglePin(id);
     this.setData({ confirmPhotoId: "" });
@@ -2726,6 +2775,7 @@ Page({
 
     const photo = this.findPhotoById(id);
     if (!photo) return;
+    if (this.isPinActionPending(id)) return;
     if (!this.data.freezeEnabled) {
       this.showToast("当前专属空间未开启定格功能", "error", 2600);
       return;
@@ -2743,14 +2793,20 @@ Page({
     if (this.data.hideAudit) return;
     const photo = this.findPhotoById(id);
     if (!photo) return;
+    if (this.isPinActionPending(id)) return;
     if (!this.data.freezeEnabled) {
       this.showToast("当前专属空间未开启定格功能", "error", 2600);
       return;
     }
+    this.setPinActionPending(id, true);
     try {
       const r = await dbRpc("pin_photo_to_wall", {
         p_access_key: this.data.key,
         p_photo_id: id,
+        p_client_source: "mini",
+      }, {
+        disableTransientRetry: true,
+        disableBackendRecovery: true,
       });
 
       if (r && r.error) {
@@ -2787,7 +2843,7 @@ Page({
 
       if (becamePublic) {
         this.showToast(
-          "✨ 照片已定格到照片墙！虽然照片7天后会像魔法一样消失，但现在它会被魔法定格，永远保留哦！",
+          `✨ 照片已定格到照片墙，不再受当前相册剩余 ${this.data.expiryDays} 天有效期限制。`,
           "success",
           5000
         );
@@ -2796,6 +2852,8 @@ Page({
       }
     } catch (e2) {
       this.showToast("操作失败", "error", 2600);
+    } finally {
+      this.setPinActionPending(id, false);
     }
   },
 

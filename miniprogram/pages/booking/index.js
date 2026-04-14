@@ -281,7 +281,7 @@ Page({
     isLoggedIn: false,
     loading: true,
     pageLoadingTitle: "拾光中...",
-    pageLoadingDescription: "正在载入约拍邀请内容",
+    pageLoadingDescription: "正在加载页面",
     showLoginPrompt: false,
 
     tearDots: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],

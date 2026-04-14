@@ -180,7 +180,7 @@ Page({
 
     pageLoading: true,
     pageLoadingTitle: "拾光中...",
-    pageLoadingDescription: "正在载入专属返图空间内容",
+    pageLoadingDescription: "正在加载页面",
     isLoggedIn: false,
     boundAlbums: [],
     showKeyInput: false,
