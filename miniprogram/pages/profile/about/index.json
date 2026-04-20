@@ -1,6 +1,0 @@
-{
-  "usingComponents": {
-    "app-header": "/components/app-header/index",
-    "app-bottom-nav": "/components/app-bottom-nav/index"
-  }
-}

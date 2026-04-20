@@ -1255,7 +1255,7 @@ Page({
           count: "exact",
         });
 
-        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鑾峰彇鐓х墖澶辫触"), "url")) {
+        if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "获取照片失败"), "url")) {
           activeColumnSet = fallbackColumnSet;
           result = await dbQuery({
             table: "album_photos",
@@ -3495,7 +3495,7 @@ Page({
         maybeSingle: true,
         columns: "id,url,thumbnail_url,preview_url,original_url",
       });
-      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鍒犻櫎澶辫触"), "url")) {
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "删除失败"), "url")) {
         result = await dbQuery({
           table: "album_photos",
           action: "delete",
@@ -3585,7 +3585,7 @@ Page({
         selectAfterWrite: true,
         columns: "id,url,thumbnail_url,preview_url,original_url",
       });
-      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "鍒犻櫎澶辫触"), "url")) {
+      if (hasRpcError(result) && isColumnMissingError(readRpcError(result, "删除失败"), "url")) {
         result = await dbQuery({
           table: "album_photos",
           action: "delete",

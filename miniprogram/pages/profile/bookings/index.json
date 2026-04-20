@@ -1,5 +1,6 @@
 {
+  "navigationBarTitleText": "我的预约记录",
   "usingComponents": {
-    "app-header": "/components/app-header/index"
+    "secondary-page-shell": "/components/secondary-page-shell/index"
   }
 }

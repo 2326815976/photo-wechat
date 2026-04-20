@@ -4,6 +4,7 @@ const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
 const { getSessionId } = require("../../utils/session");
 const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
@@ -524,7 +525,6 @@ Page({
     safeTop: 0,
     toolbarStickyTop: 0,
     serviceMissing: false,
-    hideAudit: false,
     backendReady: false,
     backendReconnecting: false,
 
@@ -541,6 +541,7 @@ Page({
     freezeEnabled: true,
     managedTitle: "专属返图空间",
     headerTitle: "",
+    pageScaffoldReady: false,
     expiryDays: 7,
     expiryNotice: "",
     showNotice: true,
@@ -609,9 +610,7 @@ Page({
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
-    const runtimeConfig = normalizeRuntimeConfig(
-      globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
-    );
+    const runtimeConfig = normalizeRuntimeConfig(globalData.runtimeConfig || null);
     const managedTitle = resolveManagedAlbumDetailTitle(runtimeConfig);
     this.useLegacyPhotoPaging = false;
     this.legacyPhotosByFolder = Object.create(null);
@@ -664,12 +663,12 @@ Page({
       backendReconnecting,
       key,
       managedTitle,
-      headerTitle: cachedRootFolderName || initialRootFolderName || managedTitle,
+      headerTitle: serviceMissing ? (cachedRootFolderName || initialRootFolderName || managedTitle) : "",
+      pageScaffoldReady: Boolean(serviceMissing),
       welcomeStorageKey: `album_welcome_seen_${key}`,
       welcomeEggStorageKey: `album_welcome_egg_seen_${key}`,
       rootFolderName: cachedRootFolderName || initialRootFolderName || "根目录",
       initialRootFolderName: cachedRootFolderName || initialRootFolderName || "",
-      ...this.buildHideAuditPatch(Boolean(runtimeConfig.hideAudit)),
     }, () => {
       this.scheduleToolbarStickyTopSync();
     });
@@ -679,7 +678,6 @@ Page({
         const normalized = normalizeRuntimeConfig(runtimeConfig);
         const nextManagedTitle = resolveManagedAlbumDetailTitle(normalized);
         this.setData({
-          ...this.buildHideAuditPatch(Boolean(normalized.hideAudit)),
           managedTitle: nextManagedTitle,
           headerTitle: resolveAlbumHeaderTitle({
             albumTitle: this.data.album && this.data.album.title,
@@ -728,12 +726,11 @@ Page({
 
     const normalized = normalizeRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig || null
+        : null
     );
     const managedTitle = resolveManagedAlbumDetailTitle(normalized);
     this.setData({
-      ...this.buildHideAuditPatch(Boolean(normalized.hideAudit)),
       managedTitle,
       headerTitle: resolveAlbumHeaderTitle({
         albumTitle: this.data.album && this.data.album.title,
@@ -855,17 +852,6 @@ Page({
       this._unsubscribeBackendStatus();
     }
     this._unsubscribeBackendStatus = null;
-  },
-
-  buildHideAuditPatch(nextHideAudit) {
-    const hideAuditEnabled = Boolean(nextHideAudit);
-    const patch = {
-      hideAudit: hideAuditEnabled,
-    };
-    if (hideAuditEnabled && this.data.confirmPhotoId) {
-      patch.confirmPhotoId = "";
-    }
-    return patch;
   },
 
   noop() {},
@@ -1553,25 +1539,6 @@ Page({
     this.fullPhotosByFolder = Object.create(null);
     try {
       const app = typeof getApp === "function" ? getApp() : null;
-      let effectiveHideAudit = Boolean(this.data.hideAudit);
-      if (app && typeof app.ensureAuditConfig === "function") {
-        try {
-          await app.ensureAuditConfig();
-          effectiveHideAudit = Boolean(
-            normalizeRuntimeConfig(
-              app && app.globalData
-                ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-                : { hideAudit: effectiveHideAudit }
-            ).hideAudit
-          );
-        } catch (error) {
-          effectiveHideAudit = Boolean(this.data.hideAudit);
-        }
-      }
-      if (effectiveHideAudit !== Boolean(this.data.hideAudit)) {
-        this.setData({ hideAudit: effectiveHideAudit });
-      }
-
       const r = await dbRpc("get_album_content", {
         input_key: this.data.key,
         include_photos: false,
@@ -1667,6 +1634,7 @@ Page({
               initialRootFolderName: this.data.initialRootFolderName,
               managedTitle: this.data.managedTitle,
             }),
+            pageScaffoldReady: true,
             expiryDays,
             expiryNotice: buildExpiryNotice(normalizedAlbum),
             welcomeText:
@@ -2756,7 +2724,6 @@ Page({
   },
 
   async confirmPin() {
-    if (this.data.hideAudit) return;
     if (!this.data.freezeEnabled) return;
     const id = String(this.data.confirmPhotoId || "");
     if (!id || this.isPinActionPending(id)) return;
@@ -2766,7 +2733,6 @@ Page({
   },
 
   async togglePin(e) {
-    if (this.data.hideAudit) return;
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
@@ -2790,7 +2756,6 @@ Page({
   },
 
   async performTogglePin(id) {
-    if (this.data.hideAudit) return;
     const photo = this.findPhotoById(id);
     if (!photo) return;
     if (this.isPinActionPending(id)) return;

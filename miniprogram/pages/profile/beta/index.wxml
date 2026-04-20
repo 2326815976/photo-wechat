@@ -1,14 +1,14 @@
-<view class="page">
-  <app-header
+<view>
+  <secondary-page-shell
+    shell-class="page"
     managedPageKey="profile-beta"
     title="内测功能"
     subtitle=""
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
     fallbackTab="pages/profile/index"
-  />
-
-  <scroll-view class="content" scroll-y="true" enable-flex="true">
+    content-class="content"
+    useScrollView="{{true}}"
+    enableFlex="{{true}}"
+  >
     <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading}}">
       <view class="admin-loading-card__orb">
         <view class="admin-loading-card__spinner"></view>
@@ -22,8 +22,8 @@
         <image class="empty-icon" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
       </view>
       <text class="empty-title">请先登录</text>
-      <text class="empty-desc">{{hideAudit ? '请先在关于页使用微信登录' : '登录后可输入管理员提供的内测码'}}</text>
-      <button class="primary-btn" bindtap="onGoLogin">{{hideAudit ? '返回关于' : '前往登录'}}</button>
+      <text class="empty-desc">登录后可输入管理员提供的内测码</text>
+      <button class="primary-btn" bindtap="onGoLogin">前往登录</button>
     </view>
 
     <view wx:else class="beta-shell">
@@ -124,5 +124,5 @@
         </view>
       </view>
     </view>
-  </scroll-view>
+  </secondary-page-shell>
 </view>

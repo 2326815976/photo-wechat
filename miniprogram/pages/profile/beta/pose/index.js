@@ -5,6 +5,7 @@ const {
   subscribePagePresentation,
 } = require("../../../../utils/page-presentation");
 const { normalizeRuntimeConfig } = require("../../../../utils/runtime-config");
+const { guardMiniProgramPageAccess } = require("../../../../utils/page-access");
 
 const TAGS_CACHE_KEY = "pose-tags-cache-v2";
 const TAGS_CACHE_TTL = 2 * 60 * 60 * 1000;
@@ -95,7 +96,6 @@ Page({
     tagbarStickyTop: 0,
 
     serviceMissing: false,
-    hideAudit: false,
     betaPoseBypassAllowed: false,
     backendReady: false,
     backendReconnecting: false,
@@ -150,7 +150,6 @@ Page({
       normalized.featureFlags && normalized.featureFlags.allowPoseBetaBypass
     );
     this.setData({
-      hideAudit: Boolean(normalized.hideAudit),
       betaPoseBypassAllowed: Boolean(this.betaPoseBypassAllowed),
       auditChecking: false,
     });
@@ -179,7 +178,7 @@ Page({
       backendReady,
       backendReconnecting,
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyRuntimeConfig(globalData.runtimeConfig || null);
     this.applyPagePresentation();
 
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
@@ -213,15 +212,15 @@ Page({
 
   async onShow() {
     const app = typeof getApp === "function" ? getApp() : null;
-    this.applyPagePresentation();
+    const presentationState = this.applyPagePresentation();
     const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
     const isForegroundReturn = appEnterSeq > lastSeenAppEnterSeq;
     this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig || null
+        : null
     );
     if (!this.data.serviceMissing) {
       const accessResult = await guardMiniProgramPageAccess({
@@ -367,7 +366,7 @@ Page({
 
   startHomePageIfNeeded() {
     if (this.homeBootstrapped) return;
-    if ((this.data.hideAudit && !this.betaPoseBypassAllowed) || this.data.auditChecking) return;
+    if (this.data.auditChecking) return;
     if (!this.data.serviceMissing && !this.data.backendReady) return;
     this.homeBootstrapped = true;
 

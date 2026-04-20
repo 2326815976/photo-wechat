@@ -16,7 +16,7 @@ let backendRecoveryPromise = null;
 const BACKEND_HEALTH_CHECK_PATH = "/api/health/ready";
 const BACKEND_RECOVERY_MAX_WAIT_MS = 45 * 1000;
 const BACKEND_RECOVERY_INTERVAL_MS = 2500;
-const BACKEND_HEALTH_CHECK_TIMEOUT_MS = 5000;
+const BACKEND_HEALTH_CHECK_TIMEOUT_MS = 12000;
 const BACKEND_POST_RECOVERY_RETRY_TIMES = 2;
 const BACKEND_POST_RECOVERY_RETRY_DELAY_MS = 1500;
 
@@ -173,13 +173,23 @@ function hasBackendUnavailableMessageKeyword(message) {
 function hasBackendTransientMessageKeyword(message) {
   const text = String(message || "").trim().toLowerCase();
   if (!text) return false;
+  const hasDatabaseOutageSignal =
+    text.includes("connection failed") ||
+    text.includes("connect timeout") ||
+    text.includes("request timeout") ||
+    text.includes("timed out") ||
+    text.includes("econnreset") ||
+    text.includes("connection reset") ||
+    text.includes("socket hang up") ||
+    text.includes("connection refused") ||
+    text.includes("econnrefused") ||
+    text.includes("service unavailable") ||
+    text.includes("temporarily unavailable");
   return (
     hasBackendUnavailableMessageKeyword(text) ||
-    text.includes("invalidparameter") ||
-    text.includes("parameter error") && text.includes("run query failed") ||
-    text.includes("run query failed, database") ||
+    ((text.includes("run query failed, database") || text.includes("run query failed: database")) &&
+      hasDatabaseOutageSignal) ||
     text.includes("database connection failed") ||
-    text.includes("sql 执行失败") ||
     text.includes("服务暂时不可用") ||
     text.includes("服务正在恢复")
   );
@@ -250,6 +260,12 @@ function shouldTriggerBackendRecovery(error, statusCodeHint) {
       : 0
   );
   if (isBackendUnavailableStatus(statusCode)) {
+    return true;
+  }
+
+  const errorCode =
+    error && typeof error === "object" ? String(error.code || "").trim().toUpperCase() : "";
+  if (errorCode === "TRANSIENT_BACKEND") {
     return true;
   }
 
@@ -642,6 +658,7 @@ async function requestJson(path, init) {
   const buildHttpError = (res, statusCode, parsedData) => {
     const apiPath = String(path || "");
     const message = resolveErrorMessage(parsedData, statusCode, `请求失败（${statusCode}）`);
+    const payloadErrorInfo = extractPayloadErrorInfo(parsedData) || {};
     const hint =
       statusCode === 404
         ? `（接口不存在：${method.toUpperCase()} ${apiPath}，当前服务：${String(
@@ -649,6 +666,7 @@ async function requestJson(path, init) {
           )}，请确认云托管服务名是否正确且后端已部署最新版本）`
         : "";
     const err = new Error(String(message));
+    err.code = String(payloadErrorInfo.code || "").trim();
     err.statusCode = statusCode;
     err.response = res;
     err.path = apiPath;

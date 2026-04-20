@@ -174,7 +174,6 @@ Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
-    hideAudit: false,
     backendReady: false,
     backendReconnecting: false,
 
@@ -219,7 +218,6 @@ Page({
   applyRuntimeConfig(runtimeConfig) {
     const loadingData = this.buildPageLoadingData(runtimeConfig);
     this.setData({
-      hideAudit: Boolean(loadingData.normalizedRuntimeConfig.hideAudit),
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
     });
@@ -246,7 +244,7 @@ Page({
       backendReady,
       backendReconnecting,
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyRuntimeConfig(globalData.runtimeConfig || null);
     this.applyPagePresentation();
 
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
@@ -286,8 +284,8 @@ Page({
     }
     this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig || null
+        : null
     );
     const presentationState = this.applyPagePresentation();
     if (!this.data.serviceMissing) {
@@ -304,10 +302,16 @@ Page({
     if (!this.data.serviceMissing) {
       if (app && typeof app.ensureBackendReady === "function") {
         if (!this.data.backendReady) {
-          this.setData({
-            pageLoading: true,
-            backendReconnecting: true,
-          });
+          this.setData(
+            this._albumListBootstrapped
+              ? {
+                  backendReconnecting: true,
+                }
+              : {
+                  pageLoading: true,
+                  backendReconnecting: true,
+                }
+          );
         }
         try {
           await app.ensureBackendReady();
@@ -323,15 +327,13 @@ Page({
         backendReady: nextBackendReady,
         backendReconnecting: nextBackendReconnecting,
       });
-      if (
-        hasNewAppEntry &&
-        this._albumListBootstrapped &&
-        !this.data.pageLoading &&
-        !nextBackendReconnecting
-      ) {
-        return;
-      }
-      this.loadUserData();
+      this.loadUserData({
+        silent:
+          !hasNewAppEntry &&
+          this._albumListBootstrapped &&
+          !this.data.pageLoading &&
+          !nextBackendReconnecting,
+      });
     } else {
       this.setData({ pageLoading: false });
     }
@@ -389,8 +391,14 @@ Page({
     }, ttl);
   },
 
-  async loadUserData() {
-    this.setData({ pageLoading: true, error: "", listNotice: null });
+  async loadUserData(options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const silent = Boolean(opts.silent) && this._albumListBootstrapped;
+    const nextState = { error: "", listNotice: null };
+    if (!silent) {
+      nextState.pageLoading = true;
+    }
+    this.setData(nextState);
 
     try {
       let session;
@@ -400,8 +408,7 @@ Page({
         const firstMsg = String((firstError && firstError.message) || "").trim();
         const shouldRetry =
           isTransientConnectionError(firstMsg) ||
-          firstMsg.toLowerCase().includes("database connection failed") ||
-          firstMsg.toLowerCase().includes("invalidparameter");
+          firstMsg.toLowerCase().includes("database connection failed");
         if (!shouldRetry) {
           throw firstError;
         }
@@ -442,6 +449,7 @@ Page({
         const daysRemaining = a && a.expires_at ? getDaysRemaining(a.expires_at) : 7;
         const hasExpiryDate = Boolean(a && a.expires_at);
         const isExpired = Boolean(a && (a.is_expired || (hasExpiryDate && daysRemaining <= 0)));
+        const normalizedDaysRemaining = Math.max(daysRemaining, 0);
         const accessKey = String((a && a.access_key) || "").trim().toUpperCase();
         const rootFolderName =
           readRootFolderNameFromPayload(a) ||
@@ -455,7 +463,7 @@ Page({
           root_folder_name: rootFolderName,
           is_expired: isExpired,
           days_remaining: daysRemaining,
-          expiry_text: isExpired ? "已过期" : `剩余 ${Math.max(daysRemaining, 0)} 天`,
+          expiry_text: isExpired ? "已过期" : `剩余 ${normalizedDaysRemaining} 天`,
         });
       });
 
@@ -514,6 +522,7 @@ Page({
   },
 
   openAlbum(e) {
+    if (this.data.unbindingAlbumId) return;
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const key = String(dataset.key || "").trim();
     const rootFolderName =

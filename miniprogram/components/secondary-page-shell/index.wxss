@@ -1,0 +1,84 @@
+.secondary-page-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 100vh;
+  width: 100%;
+  background: #fffbf0;
+}
+
+.secondary-page-shell__header {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  background: rgba(255, 251, 240, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 4rpx dashed rgba(93, 64, 55, 0.15);
+  box-shadow: 0 4rpx 24rpx rgba(93, 64, 55, 0.08);
+}
+
+.secondary-page-shell__header-inner {
+  padding: 24rpx 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 24rpx;
+  box-sizing: border-box;
+}
+
+.secondary-page-shell__back-wrap {
+  flex: none;
+}
+
+.secondary-page-shell__back-btn {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 200, 87, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.secondary-page-shell__back-btn--active {
+  background: rgba(255, 200, 87, 0.3);
+}
+
+.secondary-page-shell__back-icon {
+  width: 40rpx;
+  height: 40rpx;
+}
+
+.secondary-page-shell__title-wrap {
+  flex: none;
+  min-width: 0;
+}
+
+.secondary-page-shell__title {
+  display: block;
+  font-size: 48rpx;
+  font-weight: 700;
+  color: #5d4037;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
+}
+
+.secondary-page-shell__content {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx calc(88rpx + env(safe-area-inset-bottom));
+  background-image:
+    radial-gradient(circle at 6% 0%, rgba(255, 200, 87, 0.15), transparent 38%),
+    radial-gradient(circle at 94% 16%, rgba(255, 153, 102, 0.1), transparent 36%);
+}
+
+.secondary-page-shell__content--scroll {
+  height: 0;
+}

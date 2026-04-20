@@ -1,20 +1,5 @@
 @import "../../../styles/admin-loading.wxss";
-
-.page {
-  min-height: 100vh;
-  background: #fffbf0;
-  display: flex;
-  flex-direction: column;
-}
-
-.content {
-  flex: 1;
-  padding: 28rpx 28rpx calc(88rpx + env(safe-area-inset-bottom));
-  box-sizing: border-box;
-  background-image:
-    radial-gradient(circle at 6% 0%, rgba(255, 200, 87, 0.15), transparent 38%),
-    radial-gradient(circle at 94% 16%, rgba(255, 153, 102, 0.1), transparent 36%);
-}
+@import "../../../styles/secondary-page-frame.wxss";
 
 .beta-shell {
   display: flex;
@@ -156,13 +141,13 @@
 .bind-row {
   margin-top: 16rpx;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: stretch;
   gap: 10rpx;
 }
 
 .bind-input-box {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   position: relative;
 }
@@ -418,13 +403,15 @@
 }
 
 .submit-btn--bind {
+  flex: 0 0 132rpx;
+  width: 132rpx;
+  min-width: 132rpx;
   height: 72rpx;
-  width: 100%;
-  min-width: 0;
   align-self: stretch;
   border-radius: 16rpx;
-  font-size: 23rpx;
+  font-size: 22rpx;
   font-weight: 700;
+  padding: 0 18rpx;
 }
 
 .submit-btn--feature {

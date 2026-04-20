@@ -1,9 +1,8 @@
-﻿<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
-  <app-header
+<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
+  <primary-page-shell
     managedPageKey="profile"
-    title="{{showAuditAboutMode ? '关于我' : '我的小天地'}}"
-    subtitle="{{showAuditAboutMode ? '✨ 作者的天地 ✨' : '📸 管理你的拾光小秘密 📸'}}"
-    safeTop="{{safeTop}}"
+    title="我的小天地"
+    subtitle="📒 管理你的拾光小秘密 📒"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
@@ -16,273 +15,86 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
     </view>
 
-    <block wx:if="{{showAuditAboutMode}}">
-      <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{aboutLoading}}">
-        <view class="admin-loading-card__orb">
-          <view class="admin-loading-card__spinner"></view>
-        </view>
-        <text class="admin-loading-card__title">{{pageLoadingTitle}}</text>
-        <text class="admin-loading-card__desc">{{pageLoadingDescription}}</text>
+    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
       </view>
-
-      <view wx:if="{{!aboutLoading}}">
-        <view class="error motion-pop-in" wx:if="{{aboutError}}">
-          <text class="error-text">{{aboutError}}</text>
-        </view>
-
-        <view class="paper-card motion-fade-up motion-delay-2" wx:if="{{about.author_name || about.author_message}}">
-          <view class="author-head" wx:if="{{about.author_name}}">
-            <view class="author-avatar">关</view>
-            <view class="author-main">
-              <text class="author-name">{{about.author_name}}</text>
-              <text class="author-sub">拾光谣作者</text>
-            </view>
-          </view>
-
-          <view class="message-box" wx:if="{{about.author_message}}">
-            <text class="message-title">作者留言</text>
-            <text class="message-text" space="ensp">{{about.author_message}}</text>
-          </view>
-        </view>
-
-        <view class="paper-card motion-fade-up motion-delay-3" wx:if="{{about.phone || about.wechat || about.email}}">
-          <text class="section-title">联系方式</text>
-
-          <view
-            class="contact-item"
-            wx:if="{{about.phone}}"
-            data-label="手机号"
-            data-value="{{about.phone}}"
-            bindtap="onCopyField"
-          >
-            <image class="contact-icon" src="/images/icons/phone-brown.svg" mode="aspectFit" />
-            <view class="contact-main">
-              <text class="contact-label">手机号</text>
-              <text class="contact-value">{{about.phone}}</text>
-            </view>
-            <text class="contact-copy">复制</text>
-          </view>
-
-          <view
-            class="contact-item"
-            wx:if="{{about.wechat}}"
-            data-label="微信号"
-            data-value="{{about.wechat}}"
-            bindtap="onCopyField"
-          >
-            <image class="contact-icon" src="/images/icons/message-square-brown.svg" mode="aspectFit" />
-            <view class="contact-main">
-              <text class="contact-label">微信号</text>
-              <text class="contact-value">{{about.wechat}}</text>
-            </view>
-            <text class="contact-copy">复制</text>
-          </view>
-
-          <view
-            class="contact-item"
-            wx:if="{{about.email}}"
-            data-label="邮箱"
-            data-value="{{about.email}}"
-            bindtap="onCopyField"
-          >
-            <image class="contact-icon" src="/images/icons/customer-service.svg" mode="aspectFit" />
-            <view class="contact-main">
-              <text class="contact-label">邮箱</text>
-              <text class="contact-value contact-value--break">{{about.email}}</text>
-            </view>
-            <text class="contact-copy">复制</text>
-          </view>
-        </view>
-
-        <view class="paper-card motion-fade-up motion-delay-4" wx:if="{{hasDonationQrCode && donationQrCodeEnabled}}">
-          <text class="section-title">赞赏码</text>
-          <view class="qr-wrap" bindtap="onPreviewDonationQr">
-            <image
-              class="qr-image"
-              src="{{about.donation_qr_code}}"
-              mode="widthFix"
-              binderror="onDonationQrLoadError"
-            />
-          </view>
-          <text class="qr-tip">点击可放大预览</text>
-          <button
-            class="qr-save-btn {{savingDonationQr ? 'qr-save-btn--disabled' : ''}}"
-            bindtap="onSaveDonationQr"
-            hover-class="qr-save-btn--active"
-            loading="{{savingDonationQr}}"
-            disabled="{{savingDonationQr}}"
-          >
-            {{savingDonationQr ? "保存中..." : "保存赞赏码"}}
-          </button>
-        </view>
-
-      </view>
-    </block>
-
-    <block wx:else>
-      <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading}}">
-        <view class="admin-loading-card__orb">
-          <view class="admin-loading-card__spinner"></view>
-        </view>
-        <text class="admin-loading-card__title">{{pageLoadingTitle}}</text>
-        <text class="admin-loading-card__desc">{{pageLoadingDescription}}</text>
-      </view>
-
-      <!-- 未登录 -->
-      <view wx:if="{{!loading && !isLoggedIn}}" class="guest motion-fade-up motion-delay-2">
-        <view class="guest-icon">
-          <image class="guest-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
-        </view>
-        <text class="guest-title">开启你的专属空间 ✨</text>
-        <text class="guest-desc">登录后解锁更多功能</text>
-
-        <view class="guest-actions" wx:if="{{guestMenuItems.length > 0}}">
-          <button
-            wx:for="{{guestMenuItems}}"
-            wx:key="key"
-            class="{{item.buttonClass}}"
-            hover-class="{{item.hoverClass}}"
-            bindtap="onProfileMenuTap"
-            data-action="{{item.action}}"
-          >
-            {{item.title}}
-          </button>
-        </view>
-      </view>
-
-      <!-- 已登录 -->
-      <view wx:if="{{!loading && isLoggedIn}}">
-        <view class="id-card motion-fade-up motion-delay-2">
-          <!-- Web 端固定展示：我 -->
-          <view class="avatar">我</view>
-          <view class="id-info">
-            <text class="id-name">{{userName}}</text>
-            <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
-            <text class="id-sub id-sub--register" wx:if="{{!userPhone && userRegisterDateText}}">{{userRegisterDateText}}</text>
-          </view>
-        </view>
-
-        <view class="menu">
-          <view
-            wx:for="{{profileMenuItems}}"
-            wx:key="key"
-            class="{{item.itemClass}}"
-            hover-class="{{item.hoverClass}}"
-            bindtap="onProfileMenuTap"
-            data-action="{{item.action}}"
-            style="animation-delay: {{item.delayMs}}ms;"
-          >
-            <view class="{{item.iconClass}}">
-              <image class="menu-icon-img" src="{{item.iconSrc}}" mode="aspectFit" />
-            </view>
-            <view class="menu-texts">
-              <text class="{{item.titleClass}}">{{item.title}}</text>
-              <text class="menu-desc">{{item.description}}</text>
-            </view>
-          </view>
-
-          <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
-            <view class="menu-icon">
-              <image class="menu-icon-img" src="/images/icons/setting.svg" mode="aspectFit" />
-            </view>
-            <view class="menu-texts">
-              <text class="menu-title">后台管理</text>
-              <text class="menu-desc" wx:if="{{hideAudit}}">查看统计、维护系统、管理口令</text>
-              <text class="menu-desc" wx:else>查看统计、维护系统、管理预约与锁档</text>
-            </view>
-          </view>
-          <view class="menu-item menu-item--plain motion-fade-up motion-delay-10" hover-class="menu-item--plain-active" bindtap="logout">
-            <view class="menu-icon menu-icon--logout">
-              <image class="menu-icon-img" src="/images/icons/log-out-brown.svg" mode="aspectFit" />
-            </view>
-            <view class="menu-texts">
-              <text class="menu-title">退出登录</text>
-              <text class="menu-desc">安全退出当前账户</text>
-            </view>
-          </view>
-        </view>
-      </view>
-    </block>
-  </view>
-
-  <view class="audit-fixed-login motion-fade-up" wx:if="{{showAuditAboutMode && !aboutLoading && wechatLoginEnabled}}">
-    <view class="audit-fixed-login__panel">
-      <button
-        class="audit-fixed-login__btn"
-        hover-class="audit-fixed-login__btn--active"
-        bindtap="goWechatLogin"
-        loading="{{auditWechatSubmitting}}"
-        disabled="{{auditWechatSubmitting || serviceMissing}}"
-      >
-        {{auditWechatSubmitting ? "微信登录中..." : "微信登录"}}
-      </button>
+      <text class="admin-loading-card__title">{{pageLoadingTitle}}</text>
+      <text class="admin-loading-card__desc">{{pageLoadingDescription}}</text>
     </view>
-  </view>
 
-  <view
-    wx:if="{{showAuditAboutMode && showAuditLegalModal}}"
-    class="legal-modal-mask"
-    bindtap="onCloseAuditLegalModal"
-    catchtouchmove="onStopPropagation"
-  >
-    <view class="legal-modal" catchtap="onStopPropagation" catchtouchmove="onStopPropagation">
-      <view class="legal-modal__head">
-        <text class="legal-modal__title">{{auditActiveLegalTitle}}</text>
-        <view class="legal-modal__close" bindtap="onCloseAuditLegalModal">
-          <image class="legal-modal__close-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+    <view wx:elif="{{!isLoggedIn}}" class="guest motion-fade-up motion-delay-2">
+      <view class="guest-icon">
+        <image class="guest-icon-img" src="/images/icons/lock-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="guest-title">开启你的专属空间 ✨</text>
+      <text class="guest-desc">登录后解锁更多功能</text>
+
+      <view class="guest-actions" wx:if="{{guestMenuItems.length > 0}}">
+        <button
+          wx:for="{{guestMenuItems}}"
+          wx:key="key"
+          class="{{item.buttonClass}}"
+          hover-class="{{item.hoverClass}}"
+          bindtap="onProfileMenuTap"
+          data-action="{{item.action}}"
+        >
+          {{item.title}}
+        </button>
+      </view>
+    </view>
+
+    <view wx:else>
+      <view class="id-card motion-fade-up motion-delay-2">
+        <view class="avatar">{{userAvatarText}}</view>
+        <view class="id-info">
+          <text class="id-name">{{userName}}</text>
+          <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
+          <view class="id-sub-row id-sub-row--register" wx:if="{{!userPhone && userRegisterDateText}}">
+            <text class="id-sub id-sub--register">{{userRegisterDateText}}</text>
+          </view>
         </view>
       </view>
 
-      <scroll-view class="legal-modal__tabs" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
-        <view class="legal-modal__tabs-inner">
-          <view
-            wx:for="{{auditLegalDocTabs}}"
-            wx:for-item="tab"
-            wx:for-index="tabIndex"
-            wx:key="key"
-            class="legal-modal__tab {{auditActiveLegalKey === tab.key ? 'legal-modal__tab--active' : ''}}"
-            data-doc-key="{{tab.key}}"
-            bindtap="onSwitchAuditLegalDoc"
-          >
-            {{tab.shortTitle || tab.title}}
+      <view class="menu">
+        <view
+          wx:for="{{profileMenuItems}}"
+          wx:key="key"
+          class="{{item.itemClass}}"
+          hover-class="{{item.hoverClass}}"
+          bindtap="onProfileMenuTap"
+          data-action="{{item.action}}"
+          style="animation-delay: {{item.delayMs}}ms;"
+        >
+          <view class="{{item.iconClass}}">
+            <image class="menu-icon-img" src="{{item.iconSrc}}" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="{{item.titleClass}}">{{item.title}}</text>
+            <text class="menu-desc">{{item.description}}</text>
           </view>
         </view>
-      </scroll-view>
 
-      <scroll-view class="legal-modal__body" scroll-y="{{true}}" enable-flex="{{true}}">
-        <text class="legal-modal__version">{{auditActiveLegalVersion}}</text>
-
-        <view wx:for="{{auditActiveLegalSections}}" wx:for-item="section" wx:for-index="sectionIndex" wx:key="sectionIndex" class="legal-section">
-          <text class="legal-section__title">{{section.title}}</text>
-          <text
-            wx:for="{{section.paragraphs}}"
-            wx:for-item="line"
-            wx:for-index="lineIndex"
-            wx:key="lineIndex"
-            class="legal-section__paragraph"
-          >
-            {{line}}
-          </text>
+        <view class="menu-item motion-fade-up motion-delay-7" hover-class="menu-item--active" bindtap="goAdmin" wx:if="{{isAdmin}}">
+          <view class="menu-icon">
+            <image class="menu-icon-img" src="/images/icons/setting.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">后台管理系统</text>
+            <text class="menu-desc">查看统计、维护系统、管理内容</text>
+          </view>
         </view>
 
-        <view class="legal-footer" wx:if="{{auditActiveLegalFooter.length > 0}}">
-          <text
-            wx:for="{{auditActiveLegalFooter}}"
-            wx:for-item="line"
-            wx:for-index="lineIndex"
-            wx:key="lineIndex"
-            class="legal-footer__line"
-          >
-            {{line}}
-          </text>
+        <view class="menu-item menu-item--plain motion-fade-up motion-delay-10" hover-class="menu-item--plain-active" bindtap="logout">
+          <view class="menu-icon menu-icon--logout">
+            <image class="menu-icon-img" src="/images/icons/log-out-brown.svg" mode="aspectFit" />
+          </view>
+          <view class="menu-texts">
+            <text class="menu-title">退出登录</text>
+            <text class="menu-desc">安全退出当前账户</text>
+          </view>
         </view>
-      </scroll-view>
-
-      <view class="legal-modal__foot legal-modal__foot--dual">
-        <button class="legal-modal__btn legal-modal__btn--reject" hover-class="legal-modal__btn--reject-active" bindtap="onRejectAuditWechatLogin">拒绝</button>
-        <button class="legal-modal__btn legal-modal__btn--agree" hover-class="legal-modal__btn--agree-active" bindtap="onAgreeAuditWechatLogin">同意</button>
       </view>
     </view>
   </view>
-  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/profile/index" />
 </view>

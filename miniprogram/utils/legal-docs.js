@@ -212,7 +212,7 @@ const DOCUMENTS = [
   },
 ];
 
-const HIDE_AUDIT_SECTION_PARAGRAPHS = {
+const RUNTIME_SECTION_PARAGRAPHS = {
   terms: {
     "一、协议适用范围": [
       `本协议适用于“${APP_NAME}”微信小程序（以下简称“本服务”）在审核模式下提供的照片墙浏览、相册提取（密钥访问）、关于页面展示、微信登录及管理后台功能。`,
@@ -278,15 +278,6 @@ const HIDE_AUDIT_SECTION_PARAGRAPHS = {
   },
 };
 
-function normalizeLegalOptions(options) {
-  if (!options || typeof options !== "object") {
-    return { hideAudit: false };
-  }
-  return {
-    hideAudit: Boolean(options.hideAudit),
-  };
-}
-
 function cloneDocument(doc) {
   return {
     key: String(doc.key || ""),
@@ -303,9 +294,9 @@ function cloneDocument(doc) {
   };
 }
 
-function applyHideAuditOverrides(doc) {
+function applyRuntimeSectionOverrides(doc) {
   const key = String((doc && doc.key) || "").trim();
-  const overrides = HIDE_AUDIT_SECTION_PARAGRAPHS[key];
+  const overrides = RUNTIME_SECTION_PARAGRAPHS[key];
   if (!overrides || typeof overrides !== "object") {
     return cloneDocument(doc);
   }
@@ -327,19 +318,18 @@ function applyHideAuditOverrides(doc) {
 
 function buildLegalDocument(doc, options) {
   if (!doc) return null;
-  return options.hideAudit ? applyHideAuditOverrides(doc) : cloneDocument(doc);
+  void options;
+  return applyRuntimeSectionOverrides(doc);
 }
 
 function getLegalDocuments(options) {
-  const normalizedOptions = normalizeLegalOptions(options);
-  return DOCUMENTS.map((doc) => buildLegalDocument(doc, normalizedOptions));
+  return DOCUMENTS.map((doc) => buildLegalDocument(doc, options));
 }
 
 function getLegalDocumentByKey(key, options) {
-  const normalizedOptions = normalizeLegalOptions(options);
   const normalized = String(key || "").trim();
   const matched = DOCUMENTS.find((doc) => String(doc.key || "") === normalized) || DOCUMENTS[0];
-  return matched ? buildLegalDocument(matched, normalizedOptions) : null;
+  return matched ? buildLegalDocument(matched, options) : null;
 }
 
 module.exports = {

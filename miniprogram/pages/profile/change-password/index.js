@@ -1,7 +1,6 @@
 const { getSession, loginWithPassword, dbQuery, clearSessionCache, extractSessionUser } = require("../../../services/photo-api");
 const { requestJson } = require("../../../utils/cloudrun");
 const { clearStoredCookie } = require("../../../utils/auth");
-const { getManagedPageAccess } = require("../../../utils/runtime-config");
 const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function extractAuthUserFromPayload(payload) {
@@ -62,9 +61,7 @@ function hasPayloadFailure(payload) {
 
 Page({
   data: {
-    safeTop: 0,
     serviceMissing: false,
-    managedTitle: "修改密码",
 
     formData: {
       currentPassword: "",
@@ -83,15 +80,9 @@ Page({
   async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
-    const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    const runtimeConfig = globalData.runtimeConfig || { hideAudit: globalData.hideAudit };
-    const access = getManagedPageAccess(runtimeConfig, "profile-change-password");
     this.setData({
-      safeTop,
       serviceMissing,
-      managedTitle:
-        String((access && (access.headerTitle || access.navText)) || "").trim() || "修改密码",
     });
     await this.guardManagedAccess();
   },
@@ -106,33 +97,6 @@ Page({
       fallbackTab: "pages/profile/index",
     });
     return !result.allowed;
-  },
-
-  goBack() {
-    const pages = getCurrentPages();
-    const canNavigateBack = Array.isArray(pages) && pages.length > 1;
-
-    if (canNavigateBack) {
-      wx.navigateBack({
-        delta: 1,
-        fail: () => {
-          wx.switchTab({
-            url: "/pages/profile/index",
-            fail: () => {
-              wx.reLaunch({ url: "/pages/profile/index" });
-            },
-          });
-        },
-      });
-      return;
-    }
-
-    wx.switchTab({
-      url: "/pages/profile/index",
-      fail: () => {
-        wx.reLaunch({ url: "/pages/profile/index" });
-      },
-    });
   },
 
   onInput(e) {

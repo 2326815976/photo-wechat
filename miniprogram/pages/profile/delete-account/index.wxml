@@ -1,69 +1,129 @@
-﻿<view class="page">
-  <view wx:if="{{!showSuccess}}" style="height: {{safeTop}}px;"></view>
+<view>
+  <secondary-page-shell
+    wx:if="{{!showSuccess}}"
+    shell-class="page"
+    managedPageKey="profile-delete-account"
+    title="删除账户"
+    subtitle=""
+    fallbackTab="pages/profile/index"
+    content-class="content"
+    useScrollView="{{true}}"
+    enableFlex="{{true}}"
+  >
+    <view class="delete-shell">
+      <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
+        <text class="config-tip__title">需要配置云托管服务名</text>
+        <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
+      </view>
 
-  <!-- Web: top-4 -->
-  <view class="back motion-fade-up motion-delay-1" wx:if="{{!showSuccess}}" style="top: {{safeTop + 16}}px;" bindtap="goBack">
-    <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80">
-      <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
-    </view>
-  </view>
+      <view class="warn-card motion-fade-up motion-delay-2">
+        <view class="warn-card__glow warn-card__glow--red"></view>
+        <view class="warn-card__glow warn-card__glow--gold"></view>
 
-  <view class="content motion-fade-up motion-delay-2" wx:if="{{!showSuccess}}">
-    <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">{{managedTitle}}</text>
+        <view class="warn-head">
+          <view class="warn-icon-wrap">
+            <image class="warn-icon" src="/images/icons/alert-triangle-red.svg" mode="aspectFit" />
+          </view>
 
-      <view class="warn-body">
-        <text class="warn-p">
-          亲爱的小伙伴，删除账户就像是把你的
-          <text class="warn-highlight">拾光小秘密</text>
-          全部装进时光机，然后按下“永久消失”按钮 🫠
-        </text>
-        <text class="warn-p">这意味着：</text>
-        <view class="warn-list">
-          <text class="warn-li">📷 所有珍藏的照片会消失不见</text>
-          <text class="warn-li" wx:if="{{!hideAudit}}">🗓 所有预约记录会烟消云散</text>
-          <text class="warn-li" wx:else>🗂 已绑定空间记录会被清空</text>
-          <text class="warn-li">👤 你的账户信息会彻底清空</text>
-          <text class="warn-li">⚠️ 这个操作 <text class="warn-danger">无法撤销</text></text>
+          <view class="warn-head__main">
+            <view class="danger-pill">
+              <view class="danger-pill__dot"></view>
+              <text class="danger-pill__text">高风险操作</text>
+            </view>
+
+            <text class="warn-title">删除账户前，请确认一次</text>
+            <text class="warn-subtitle">删除后，当前账户资料与相关数据会被清空。</text>
+          </view>
         </view>
-        <text class="warn-p warn-p--tip">
-          💡 如果只是想暂时休息一下，可以选择“退出登录”哦！这样你的数据仍然存在，随时欢迎你回来！✨
-        </text>
+
+        <view class="warn-divider"></view>
+
+        <view class="risk-list">
+          <view class="risk-item">
+            <view class="risk-item__icon-wrap">
+              <image class="risk-item__icon" src="/images/icons/log-out-red.svg" mode="aspectFit" />
+            </view>
+            <view class="risk-item__main">
+              <text class="risk-item__title">当前登录状态会立即失效</text>
+              <text class="risk-item__desc">删除完成后会退出当前账号；后续如需继续使用，可重新登录。</text>
+            </view>
+          </view>
+
+          <view class="risk-item">
+            <view class="risk-item__icon-wrap">
+              <image class="risk-item__icon" src="/images/icons/user-brown.svg" mode="aspectFit" />
+            </view>
+            <view class="risk-item__main">
+              <text class="risk-item__title">个人资料会被清空</text>
+              <text class="risk-item__desc">昵称、头像、联系方式等当前账户资料会被删除。</text>
+            </view>
+          </view>
+
+          <view class="risk-item">
+            <view class="risk-item__icon-wrap">
+              <image class="risk-item__icon" src="/images/icons/unlink-red.svg" mode="aspectFit" />
+            </view>
+            <view class="risk-item__main">
+              <text class="risk-item__title">相关数据会被清理</text>
+              <text class="risk-item__desc">与当前账户关联的使用数据和绑定数据会一并删除。</text>
+            </view>
+          </view>
+
+          <view class="risk-item risk-item--danger">
+            <view class="risk-item__icon-wrap risk-item__icon-wrap--danger">
+              <image class="risk-item__icon" src="/images/icons/alert-triangle-red.svg" mode="aspectFit" />
+            </view>
+            <view class="risk-item__main">
+              <text class="risk-item__title">该操作无法撤销</text>
+              <text class="risk-item__desc">一旦确认删除，当前账户下的数据将无法恢复。</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="tip-box">
+          <image class="tip-box__icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+          <text class="tip-box__text">如果你只是想暂时离开，直接退出登录即可；删除账户会清空当前账户下的数据。</text>
+        </view>
+      </view>
+
+      <view class="error motion-pop-in" wx:if="{{error}}">
+        <text class="error-text">{{error}}</text>
+      </view>
+
+      <button
+        class="btn-next"
+        hover-class="btn-next--active"
+        wx:if="{{!showConfirm}}"
+        bindtap="openConfirm"
+        disabled="{{serviceMissing}}"
+      >
+        我已了解风险，继续删除
+      </button>
+
+      <view class="confirm-box motion-pop-in" wx:if="{{showConfirm}}">
+        <view class="confirm-tip">
+          <text class="confirm-tip__eyebrow">最后确认</text>
+          <text class="confirm-tip-text">确认删除当前账户，并清空相关数据吗？</text>
+        </view>
+
+        <view class="confirm-actions">
+          <button class="btn-ghost" hover-class="btn-ghost--active" bindtap="cancelConfirm">再想想</button>
+          <button class="btn-danger" hover-class="btn-danger--active" bindtap="submitDelete" disabled="{{isDeleting}}">
+            {{isDeleting ? '删除中...' : '确认删除'}}
+          </button>
+        </view>
       </view>
     </view>
-
-    <view class="error motion-pop-in" wx:if="{{error}}">
-      <text class="error-text">{{error}}</text>
-    </view>
-
-    <button class="btn-next" hover-class="btn-next--active" wx:if="{{!showConfirm}}" bindtap="openConfirm" disabled="{{serviceMissing}}">
-      我已了解风险，继续删除
-    </button>
-
-    <view class="confirm-box motion-pop-in" wx:if="{{showConfirm}}">
-      <view class="confirm-tip">
-        <text class="confirm-tip-text">🥹 真的要说再见了吗？</text>
-      </view>
-
-      <view class="confirm-actions">
-        <button class="btn-ghost" hover-class="btn-ghost--active" bindtap="cancelConfirm">再想想</button>
-        <button class="btn-danger" hover-class="btn-danger--active" bindtap="submitDelete" disabled="{{isDeleting}}">
-          {{isDeleting ? '删除中...' : '确认删除'}}
-        </button>
-      </view>
-    </view>
-  </view>
+  </secondary-page-shell>
 
   <view class="success-page motion-fade-in" wx:if="{{showSuccess}}">
     <view class="success-wrap motion-pop-in">
       <view class="success-icon-wrap">
         <image class="success-icon" src="/images/icons/circle-check-yellow.svg" mode="aspectFit" />
       </view>
-      <text class="success-title">再见啦，小伙伴！👋</text>
-      <text class="success-desc">你的账户已经安全删除，所有数据都已清空。</text>
-      <text class="success-desc">期待未来某天能再次相遇 ✨</text>
+      <text class="success-title">账户已删除</text>
+      <text class="success-desc">当前账户资料与相关记录已清理完成，正在返回我的页；后续如需继续使用，可重新登录。</text>
       <text class="success-warning" wx:if="{{postDeleteWarning}}">{{postDeleteWarning}}</text>
     </view>
   </view>
 </view>
-

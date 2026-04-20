@@ -1,0 +1,13 @@
+<app-header
+  wx:if="{{!hidden}}"
+  managedPageKey="{{managedPageKey}}"
+  title="{{title}}"
+  subtitle="{{subtitle}}"
+  safeTop="{{resolvedSafeTop}}"
+  showBack="{{showBack}}"
+  fallbackRoute="{{fallbackRoute}}"
+  fallbackTab="{{fallbackTab}}"
+  preferFallback="{{preferFallback}}"
+  isHomePage="{{isHomePage}}"
+  animateIn="{{animateIn}}"
+/>

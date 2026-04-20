@@ -1,6 +1,6 @@
 {
   "navigationBarTitleText": "功能内测",
   "usingComponents": {
-    "app-header": "/components/app-header/index"
+    "secondary-page-shell": "/components/secondary-page-shell/index"
   }
 }

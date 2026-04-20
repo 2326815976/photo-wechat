@@ -1,1 +1,6 @@
-{}
+{
+  "navigationBarTitleText": "删除账户",
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
+}

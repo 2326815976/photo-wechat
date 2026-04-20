@@ -1,19 +1,15 @@
-﻿<view class="page">
-  <view wx:if="{{!showSuccess}}" style="height: {{safeTop}}px;"></view>
-
-  <!-- Web: top-6 -->
-  <view class="back motion-fade-up motion-delay-1" wx:if="{{!showSuccess}}" style="top: {{safeTop + 24}}px;">
-    <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80" bindtap="goBack">
-      <image class="back-icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
-    </view>
-  </view>
-
-  <view class="content motion-fade-up motion-delay-2" wx:if="{{!showSuccess}}">
-    <view class="title-wrap motion-fade-up motion-delay-2">
-      <text class="title">{{managedTitle}}</text>
-      <text class="sub">请输入当前密码和新密码</text>
-    </view>
-
+<view>
+  <secondary-page-shell
+    wx:if="{{!showSuccess}}"
+    shell-class="page"
+    managedPageKey="profile-change-password"
+    title="修改密码"
+    subtitle=""
+    fallbackTab="pages/profile/index"
+    content-class="content"
+    useScrollView="{{true}}"
+    enableFlex="{{true}}"
+  >
     <view class="config-tip motion-fade-up motion-delay-3" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
@@ -82,7 +78,7 @@
         {{isLoading ? '修改中...' : '确认修改'}}
       </button>
     </view>
-  </view>
+  </secondary-page-shell>
 
   <view class="success-page motion-fade-in" wx:if="{{showSuccess}}">
     <view class="success-wrap motion-pop-in">
@@ -94,4 +90,3 @@
     </view>
   </view>
 </view>
-

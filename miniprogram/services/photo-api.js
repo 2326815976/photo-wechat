@@ -104,6 +104,18 @@ function readPayloadFailureCode(payload) {
 function hasTransientBackendMessage(message) {
   const text = String(message || "").trim().toLowerCase();
   if (!text) return false;
+  const hasDatabaseOutageSignal =
+    text.includes("connection failed") ||
+    text.includes("connect timeout") ||
+    text.includes("request timeout") ||
+    text.includes("timed out") ||
+    text.includes("econnreset") ||
+    text.includes("connection reset") ||
+    text.includes("socket hang up") ||
+    text.includes("connection refused") ||
+    text.includes("econnrefused") ||
+    text.includes("service unavailable") ||
+    text.includes("temporarily unavailable");
   return (
     text.includes("service unavailable") ||
     text.includes("upstream connect error") ||
@@ -120,9 +132,8 @@ function hasTransientBackendMessage(message) {
     text.includes("连接超时") ||
     text.includes("暂不可用") ||
     text.includes("云托管请求失败") ||
-    text.includes("invalidparameter") ||
-    text.includes("parameter error") && text.includes("run query failed") ||
-    text.includes("run query failed, database") ||
+    ((text.includes("run query failed, database") || text.includes("run query failed: database")) &&
+      hasDatabaseOutageSignal) ||
     text.includes("database connection failed") ||
     text.includes("服务暂时不可用") ||
     text.includes("服务正在恢复")

@@ -9,7 +9,8 @@ const {
 const CLOUDRUN_HEALTH_ENDPOINT = "/api/health/ready";
 const AUDIT_CONFIG_ENDPOINT = "/api/miniprogram/runtime-config";
 const BACKEND_RETRY_INTERVAL_MS = 2500;
-const BACKEND_HEALTH_TIMEOUT_MS = 5000;
+const BACKEND_HEALTH_TIMEOUT_MS = 12000;
+const AUDIT_CONFIG_REQUEST_TIMEOUT_MS = 12000;
 const RUNTIME_CONFIG_CACHE_KEY = "miniprogram-runtime-config-v1";
 const AUDIT_CONFIG_REFRESH_TTL_MS = 15000;
 const DEFAULT_SHARE_TITLE = "拾光谣小工具";
@@ -20,7 +21,6 @@ const SHARE_TITLE_BY_ROUTE = {
   "pages/booking/index": "拾光谣｜预约拍摄入口，来定格你的故事",
   "pages/album/index": "拾光谣｜相册提取",
   "pages/album/detail": "「拾光谣」相册分享",
-  "pages/album/detail/index": "「拾光谣」相册分享",
   "pages/profile/index": "拾光谣｜定格美好瞬间",
 };
 
@@ -41,6 +41,22 @@ function saveCachedRuntimeConfig(runtimeConfig) {
   } catch (error) {
     // ignore cache errors
   }
+}
+
+function isDevtoolsEnvironment() {
+  try {
+    if (wx && typeof wx.getDeviceInfo === "function") {
+      const deviceInfo = wx.getDeviceInfo();
+      return String((deviceInfo && deviceInfo.platform) || "").toLowerCase() === "devtools";
+    }
+    if (wx && typeof wx.getSystemInfoSync === "function") {
+      const systemInfo = wx.getSystemInfoSync();
+      return String((systemInfo && systemInfo.platform) || "").toLowerCase() === "devtools";
+    }
+  } catch (error) {
+    return false;
+  }
+  return false;
 }
 
 function buildQueryString(options) {
@@ -96,18 +112,47 @@ function buildShareTimelinePayload() {
 }
 
 function ensureShareMenuEnabled() {
+  if (isDevtoolsEnvironment()) {
+    return;
+  }
+
+  const invokeShareMenu = (options, onRejected) => {
+    try {
+      const result = wx.showShareMenu(options);
+      if (result && typeof result.catch === "function") {
+        result.catch((error) => {
+          if (typeof onRejected === "function") {
+            onRejected(error);
+          }
+        });
+      }
+      return true;
+    } catch (error) {
+      if (typeof onRejected === "function") {
+        onRejected(error);
+      }
+      return false;
+    }
+  };
+
+  const fallback = () => {
+    invokeShareMenu({ withShareTicket: true });
+  };
+
   try {
-    wx.showShareMenu({
+    const triggered = invokeShareMenu({
       withShareTicket: true,
       menus: ["shareAppMessage", "shareTimeline"],
-    });
-    return;
+    }, fallback);
+    if (triggered) {
+      return;
+    }
   } catch (error) {
     // ignore and fallback
   }
 
   try {
-    wx.showShareMenu({ withShareTicket: true });
+    fallback();
   } catch (error) {
     // ignore
   }
@@ -173,6 +218,19 @@ function normalizePagePresentation(input) {
       "pages/index/index",
   };
 }
+
+function isSamePagePresentation(left, right) {
+  const current = normalizePagePresentation(left);
+  const next = normalizePagePresentation(right);
+  return (
+    current.mode === next.mode &&
+    current.pageKey === next.pageKey &&
+    current.routePath === next.routePath &&
+    current.fallbackRoute === next.fallbackRoute &&
+    current.fallbackTab === next.fallbackTab
+  );
+}
+
 async function diagnoseCloudRunConnectivity() {
   try {
     await requestJson(CLOUDRUN_HEALTH_ENDPOINT, {
@@ -191,12 +249,10 @@ async function diagnoseCloudRunConnectivity() {
 App({
   auditConfigPromise: null,
   auditConfigFetchedAt: 0,
-  auditConfigListeners: [],
   runtimeConfigListeners: [],
   backendReadyPromise: null,
   backendStatusListeners: [],
   pagePresentationListeners: [],
-
   globalData: {
     // 云环境、云托管与后端连通性相关状态
     // 供页面与网络层共享，避免重复探测后端可用性
@@ -219,9 +275,8 @@ App({
     statusBarHeight: 0,
     safeArea: null,
 
-    // 兼容旧 hideAudit 开关（true: 审核态，false: 正式态）
+    // 统一运行时配置
     runtimeConfig: buildRuntimeConfigPreset("standard"),
-    hideAudit: false,
     auditConfigReady: false,
     betaFeatureBypassRoute: "",
     betaFeatureBypassExpiresAt: 0,
@@ -300,6 +355,15 @@ App({
       ? String(next.backendLastError || "")
       : String(this.globalData.backendLastError || "");
 
+    if (
+      backendReady === Boolean(this.globalData.backendReady) &&
+      backendReconnecting === Boolean(this.globalData.backendReconnecting) &&
+      backendRetryCount === Math.max(0, Number(this.globalData.backendRetryCount || 0)) &&
+      backendLastError === String(this.globalData.backendLastError || "")
+    ) {
+      return;
+    }
+
     this.globalData.backendReady = backendReady;
     this.globalData.backendReconnecting = backendReconnecting;
     this.globalData.backendRetryCount = backendRetryCount;
@@ -372,10 +436,13 @@ App({
 
   applyRuntimeConfig(runtimeConfig, options) {
     const normalized = normalizeRuntimeConfigPayload(runtimeConfig);
+    const markReady =
+      !options || !Object.prototype.hasOwnProperty.call(options, "markReady")
+        ? true
+        : Boolean(options.markReady);
     this.globalData.runtimeConfig = normalized;
-    this.globalData.hideAudit = Boolean(normalized.hideAudit);
-    this.globalData.auditConfigReady = true;
-    if (!options || options.markFetchedAt !== false) {
+    this.globalData.auditConfigReady = markReady;
+    if (markReady && (!options || options.markFetchedAt !== false)) {
       this.auditConfigFetchedAt = Date.now();
     }
 
@@ -383,9 +450,8 @@ App({
       saveCachedRuntimeConfig(normalized);
     }
 
-    if (!options || options.notify !== false) {
+    if ((!options || options.notify !== false) && markReady) {
       this.notifyRuntimeConfigChange(normalized);
-      this.notifyAuditConfigChange(Boolean(normalized.hideAudit));
     }
 
     return normalized;
@@ -428,47 +494,6 @@ App({
         ? this.runtimeConfigListeners
         : [];
       this.runtimeConfigListeners = rows.filter((item) => item !== listener);
-    };
-  },
-
-  notifyAuditConfigChange(hideAudit) {
-    const listeners = Array.isArray(this.auditConfigListeners)
-      ? this.auditConfigListeners.slice()
-      : [];
-    const nextValue = Boolean(hideAudit);
-    listeners.forEach((listener) => {
-      if (typeof listener !== "function") return;
-      try {
-        listener(nextValue);
-      } catch (error) {
-        // ignore listener errors
-      }
-    });
-  },
-
-  subscribeAuditConfig(listener) {
-    if (typeof listener !== "function") {
-      return () => {};
-    }
-
-    if (!Array.isArray(this.auditConfigListeners)) {
-      this.auditConfigListeners = [];
-    }
-    this.auditConfigListeners.push(listener);
-
-    if (this.globalData && this.globalData.auditConfigReady) {
-      try {
-        listener(Boolean(this.globalData.hideAudit));
-      } catch (error) {
-        // ignore listener errors
-      }
-    }
-
-    return () => {
-      const rows = Array.isArray(this.auditConfigListeners)
-        ? this.auditConfigListeners
-        : [];
-      this.auditConfigListeners = rows.filter((item) => item !== listener);
     };
   },
 
@@ -523,7 +548,13 @@ App({
     if (!this.globalData) {
       this.globalData = {};
     }
-    this.globalData.pagePresentation = normalizePagePresentation(presentation);
+    const nextPresentation = normalizePagePresentation(presentation);
+    const currentPresentation = normalizePagePresentation(this.globalData.pagePresentation);
+    if (isSamePagePresentation(currentPresentation, nextPresentation)) {
+      this.globalData.pagePresentation = currentPresentation;
+      return currentPresentation;
+    }
+    this.globalData.pagePresentation = nextPresentation;
     this.notifyPagePresentationChange();
     return this.globalData.pagePresentation;
   },
@@ -548,7 +579,12 @@ App({
     if (!service) {
       const cached = loadCachedRuntimeConfig();
       const fallback = cached || buildRuntimeConfigPreset("standard");
-      const applied = this.applyRuntimeConfig(fallback, { notify: true, persistCache: Boolean(cached) });
+      const applied = this.applyRuntimeConfig(fallback, {
+        notify: true,
+        persistCache: Boolean(cached),
+        markFetchedAt: Boolean(cached),
+        markReady: Boolean(cached),
+      });
       this.auditConfigPromise = Promise.resolve(applied).finally(() => {
         this.auditConfigPromise = null;
       });
@@ -557,7 +593,7 @@ App({
 
     this.auditConfigPromise = requestJson(AUDIT_CONFIG_ENDPOINT, {
       method: "GET",
-      timeout: 8000,
+      timeout: AUDIT_CONFIG_REQUEST_TIMEOUT_MS,
     })
       .then((payload) => {
         const runtimeConfig = normalizeRuntimeConfigPayload(payload);
@@ -566,7 +602,12 @@ App({
       .catch((error) => {
         const cached = loadCachedRuntimeConfig();
         const fallback = cached || buildRuntimeConfigPreset("standard");
-        const applied = this.applyRuntimeConfig(fallback, { notify: true, persistCache: Boolean(cached) });
+        const applied = this.applyRuntimeConfig(fallback, {
+          notify: true,
+          persistCache: Boolean(cached),
+          markFetchedAt: Boolean(cached),
+          markReady: Boolean(cached),
+        });
 
         try {
           console.warn(
@@ -586,9 +627,13 @@ App({
 
   onLaunch: function () {
     const cachedRuntimeConfig = loadCachedRuntimeConfig();
-    if (cachedRuntimeConfig) {
-      this.applyRuntimeConfig(cachedRuntimeConfig, { notify: false, persistCache: false, markFetchedAt: false });
-    }
+    const bootRuntimeConfig = cachedRuntimeConfig || buildRuntimeConfigPreset("standard");
+    this.applyRuntimeConfig(bootRuntimeConfig, {
+      notify: false,
+      persistCache: Boolean(cachedRuntimeConfig),
+      markFetchedAt: Boolean(cachedRuntimeConfig),
+      markReady: Boolean(cachedRuntimeConfig),
+    });
 
     try {
       const windowInfo = wx.getWindowInfo();
@@ -601,7 +646,12 @@ App({
     if (!wx.cloud) {
       console.error("请使用 2.2.3 或以上的基础库以使用云能力");
       const fallback = cachedRuntimeConfig || buildRuntimeConfigPreset("standard");
-      const applied = this.applyRuntimeConfig(fallback, { notify: true, persistCache: Boolean(cachedRuntimeConfig) });
+      const applied = this.applyRuntimeConfig(fallback, {
+        notify: true,
+        persistCache: Boolean(cachedRuntimeConfig),
+        markFetchedAt: Boolean(cachedRuntimeConfig),
+        markReady: Boolean(cachedRuntimeConfig),
+      });
       this.auditConfigPromise = Promise.resolve(applied);
       return;
     }
@@ -617,7 +667,12 @@ App({
       );
     }
     if (this.globalData.cloudRunService) {
-      void this.ensureBackendReady().then(() => this.ensureAuditConfig());
+      this.setBackendStatus({
+        backendReady: false,
+        backendReconnecting: false,
+        backendRetryCount: 0,
+        backendLastError: "",
+      });
     } else {
       this.setBackendStatus({
         backendReady: true,
@@ -625,7 +680,10 @@ App({
         backendRetryCount: 0,
         backendLastError: "",
       });
-      void this.ensureAuditConfig();
+    }
+
+    if (typeof this.ensureAuditConfig === "function") {
+      this.ensureAuditConfig().catch(() => {});
     }
   },
 });

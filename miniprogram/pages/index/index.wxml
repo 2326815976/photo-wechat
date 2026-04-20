@@ -1,10 +1,9 @@
 <view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
-  <app-header
-  managedPageKey="pose"
+  <primary-page-shell
+    managedPageKey="pose"
     wx:if="{{!auditChecking && backendReady && (pageIsStandalone || homeRedirectPath === 'pages/index/index' || betaPoseBypassAllowed)}}"
     title="拾光谣"
     subtitle="✨ 记录此刻的不期而遇 ✨"
-    safeTop="{{safeTop}}"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
@@ -198,5 +197,4 @@
 
   <view class="audit-guard" wx:if="{{auditChecking}}"></view>
 
-  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/index/index" />
 </view>

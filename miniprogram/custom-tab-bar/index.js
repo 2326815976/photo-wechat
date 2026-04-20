@@ -45,30 +45,47 @@ function hydrateTabBarItems(runtimeConfig, isLoggedIn) {
   });
 }
 
+function resolveCurrentRouteFromStack() {
+  try {
+    const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
+    const currentPage = Array.isArray(pages) && pages.length > 0 ? pages[pages.length - 1] : null;
+    return normalizeMiniProgramRoutePath(currentPage && currentPage.route);
+  } catch (error) {
+    return "";
+  }
+}
+
 Component({
   data: {
     selected: 0,
-    selectedPath: "pages/index/index",
+    selectedPath: "",
     visible: false,
-    hideAudit: false,
     isLoggedIn: false,
+    runtimeConfigReady: false,
     presentationMode: "tabbar",
     hasBottomTabbar: true,
     runtimeConfig: buildRuntimeConfigPreset("standard"),
-    list: hydrateTabBarItems(buildRuntimeConfigPreset("standard"), false),
+    list: [],
   },
   lifetimes: {
     attached() {
       const app = typeof getApp === "function" ? getApp() : null;
       const globalData = app && app.globalData ? app.globalData : {};
       const auditConfigReady = Boolean(globalData.auditConfigReady);
-      if (!auditConfigReady) {
-        this.setData({ visible: false });
-        if (app && typeof app.ensureAuditConfig === "function") {
-          app.ensureAuditConfig().catch(() => {});
-        }
+      const bootRuntimeConfig = globalData.runtimeConfig || buildRuntimeConfigPreset("standard");
+
+      if (auditConfigReady) {
+        this.applyRuntimeConfig(bootRuntimeConfig);
       } else {
-        this.applyRuntimeConfig(globalData.runtimeConfig || buildRuntimeConfigPreset("standard"));
+        this.setData({
+          runtimeConfigReady: false,
+          visible: false,
+          list: [],
+        });
+      }
+
+      if (!auditConfigReady && app && typeof app.ensureAuditConfig === "function") {
+        app.ensureAuditConfig().catch(() => {});
       }
 
       if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
@@ -85,9 +102,18 @@ Component({
         this.applyPresentation(app.getPagePresentation());
       }
 
+      if (app && typeof app.subscribeBackendStatus === "function") {
+        this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+          if (status && status.backendReady) {
+            this.refreshLoginState();
+          }
+        });
+      }
+
       this.refreshLoginState();
     },
     detached() {
+      this.releaseSwitchLock();
       if (typeof this._unsubscribeRuntimeConfig === "function") {
         this._unsubscribeRuntimeConfig();
       }
@@ -96,38 +122,64 @@ Component({
         this._unsubscribePresentation();
       }
       this._unsubscribePresentation = null;
+      if (typeof this._unsubscribeBackendStatus === "function") {
+        this._unsubscribeBackendStatus();
+      }
+      this._unsubscribeBackendStatus = null;
     },
   },
   pageLifetimes: {
     show() {
+      this.releaseSwitchLock();
+      this.setData({ selectedPath: resolveCurrentRouteFromStack() });
       this.refreshLoginState();
+      this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
     },
   },
   methods: {
+    releaseSwitchLock() {
+      if (this._switchLockTimer) {
+        clearTimeout(this._switchLockTimer);
+      }
+      this._switchLockTimer = null;
+      this._switchingPath = "";
+    },
+
     applyList(list) {
+      const nextList = Array.isArray(list) ? list : [];
+      const pendingPath = String(this._switchingPath || "")
+        .trim()
+        .replace(/^\/+/, "");
       const selectedPath = String(this.data.selectedPath || "")
         .trim()
         .replace(/^\/+/, "");
+      const currentRoute = resolveCurrentRouteFromStack();
       const selectedIndex = Number(this.data.selected);
 
       let nextSelected = -1;
-      if (selectedPath) {
-        nextSelected = list.findIndex((item) => item.pagePath === selectedPath);
+      if (pendingPath) {
+        nextSelected = nextList.findIndex((item) => item.pagePath === pendingPath);
       }
-
+      if (nextSelected < 0 && currentRoute) {
+        nextSelected = nextList.findIndex((item) => item.pagePath === currentRoute);
+      }
+      if (nextSelected < 0 && selectedPath) {
+        nextSelected = nextList.findIndex((item) => item.pagePath === selectedPath);
+      }
       if (nextSelected < 0) {
         const safeIndex = Number.isFinite(selectedIndex) ? Math.round(selectedIndex) : 0;
-        nextSelected = safeIndex >= 0 && safeIndex < list.length ? safeIndex : 0;
+        nextSelected = safeIndex >= 0 && safeIndex < nextList.length ? safeIndex : 0;
       }
 
-      const nextSelectedPath = list[nextSelected]
-        ? String(list[nextSelected].pagePath || "")
-        : "";
+      const nextSelectedPath = nextList[nextSelected]
+        ? String(nextList[nextSelected].pagePath || "")
+        : currentRoute;
 
       this.setData({
-        visible: Boolean(this.data.hasBottomTabbar) && list.length > 0,
-        list,
-        selected: nextSelected,
+        visible:
+          Boolean(this.data.runtimeConfigReady) && Boolean(this.data.hasBottomTabbar) && nextList.length > 0,
+        list: nextList,
+        selected: nextSelected < 0 ? 0 : nextSelected,
         selectedPath: nextSelectedPath,
       });
     },
@@ -156,13 +208,16 @@ Component({
 
       this.setData({
         runtimeConfig: normalized,
-        hideAudit: Boolean(normalized.hideAudit),
+        runtimeConfigReady: true,
       });
       this.applyList(nextList);
     },
 
     applyLoginState(isLoggedIn) {
       const nextLoggedIn = Boolean(isLoggedIn);
+      if (nextLoggedIn === Boolean(this.data.isLoggedIn)) {
+        return;
+      }
       const normalized = normalizeRuntimeConfig(this.data.runtimeConfig);
       const nextList = hydrateTabBarItems(normalized, nextLoggedIn);
       this.setData({
@@ -172,11 +227,24 @@ Component({
     },
 
     async refreshLoginState() {
+      const app = typeof getApp === "function" ? getApp() : null;
+      const globalData = app && app.globalData ? app.globalData : {};
+      if (globalData.cloudRunService && !globalData.backendReady) {
+        return;
+      }
+
       try {
         const session = await getSession();
         const user = extractSessionUser(session);
         this.applyLoginState(Boolean(user && user.id));
       } catch (error) {
+        const errorCode = String((error && error.code) || "").trim();
+        if (
+          errorCode === "TRANSIENT_BACKEND" ||
+          (globalData.cloudRunService && globalData.backendReconnecting)
+        ) {
+          return;
+        }
         this.applyLoginState(false);
       }
     },
@@ -190,12 +258,24 @@ Component({
       if (!path) return;
 
       const list = Array.isArray(this.data.list) ? this.data.list : [];
-      const selectedPath = String(this.data.selectedPath || "").trim().replace(/^\/+/, "");
+      const currentRoute = resolveCurrentRouteFromStack();
       const index = list.findIndex((item) => item.pagePath === path);
 
-      if (selectedPath === path && index >= 0 && index === Number(this.data.selected)) {
+      if (currentRoute === path) {
+        this.releaseSwitchLock();
+        this.applyList(list);
         return;
       }
+
+      if (this._switchingPath) {
+        return;
+      }
+
+      this._switchingPath = path;
+      this._switchLockTimer = setTimeout(() => {
+        this.releaseSwitchLock();
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+      }, 900);
 
       if (index >= 0) {
         this.setData({ selected: index, selectedPath: path });
@@ -203,11 +283,29 @@ Component({
         this.setData({ selectedPath: path });
       }
 
+      const revertSelection = () => {
+        const fallbackPath = currentRoute || resolveCurrentRouteFromStack();
+        const fallbackIndex = list.findIndex((item) => item.pagePath === fallbackPath);
+        this.releaseSwitchLock();
+        if (fallbackIndex >= 0) {
+          this.setData({
+            selected: fallbackIndex,
+            selectedPath: fallbackPath,
+          });
+        } else {
+          this.setData({ selectedPath: fallbackPath });
+        }
+        this.applyList(list);
+      };
+
       const app = typeof getApp === "function" ? getApp() : null;
       if (app && typeof app.resetPagePresentation === "function") {
         app.resetPagePresentation();
       }
-      wx.switchTab({ url: `/${path}` });
+      wx.switchTab({
+        url: `/${path}`,
+        fail: revertSelection,
+      });
     },
   },
 });

@@ -1,15 +1,4 @@
-﻿<view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
-  <app-header
-    wx:if="{{backendReady}}"
-    title="摆姿推荐"
-    managedPageKey="pose"
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
-    fallbackRoute="{{pageFallbackRoute}}"
-    fallbackTab="{{pageFallbackTab}}"
-    preferFallback="{{pageIsStandalone}}"
-  />
-
+﻿<view>
   <view class="boot-loading motion-fade-up motion-delay-2" wx:if="{{!serviceMissing && !backendReady}}">
     <view class="admin-loading-card admin-loading-card--page">
       <view class="admin-loading-card__orb">
@@ -20,7 +9,16 @@
     </view>
   </view>
 
-  <view class="content {{pageIsStandalone ? 'content--standalone' : ''}}" wx:if="{{backendReady}}">
+  <secondary-page-shell
+    wx:if="{{backendReady}}"
+    shell-class="page"
+    title="摆姿推荐"
+    managedPageKey="pose"
+    fallbackRoute="{{pageFallbackRoute}}"
+    fallbackTab="{{pageFallbackTab}}"
+    preferFallback="{{pageIsStandalone}}"
+    content-class="content {{pageIsStandalone ? 'content--standalone' : ''}}"
+  >
     <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
@@ -141,7 +139,7 @@
       </view>
       <text class="shuffle-text">{{isAnimating ? '正在切换...' : '点击换个姿势'}}</text>
     </view>
-  </view>
+  </secondary-page-shell>
 
   <!-- 标签选择器（Web 同款：固定在页头下方） -->
   <view class="tag-selector-mask tag-selector-mask--enter motion-fade-in" wx:if="{{showTagSelector}}" bindtap="closeTagSelector"></view>

@@ -1,9 +1,5 @@
 @import "../../styles/admin-loading.wxss";
-
-﻿.page {
-  min-height: 100vh;
-  background: #fffbf0;
-}
+@import "../../styles/secondary-page-frame.wxss";
 
 /* 重置小程序 button 默认样式，避免与 Web 对标样式出现偏差 */
 button {
@@ -16,13 +12,6 @@ button {
 
 button::after {
   border: none;
-}
-
-.content {
-  /* 使用页面原生滚动，确保 onReachBottom 能正常触发分页加载 */
-  /* Web: px-2 pb-32（顶部间距按模块控制，避免 sticky 工具栏出现顶部缝隙） */
-  padding: 0 16rpx calc(256rpx + env(safe-area-inset-bottom));
-  box-sizing: border-box;
 }
 
 .config-tip {

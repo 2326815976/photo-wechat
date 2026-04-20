@@ -38,7 +38,6 @@ const SECONDARY_PAGE_PARENT_MAP = new Map([
   ["profile-bookings", "profile"],
   ["profile-beta", "profile"],
   ["profile-change-password", "profile"],
-  ["about", "profile"],
   ["profile-delete-account", "profile"],
   ["album-detail", "album"],
 ]);
@@ -51,11 +50,10 @@ const PROFILE_AUTHENTICATED_SECONDARY_PAGE_KEYS = new Set([
   "profile-edit",
   "profile-bookings",
   "profile-beta",
-  "about",
   "profile-change-password",
   "profile-delete-account",
 ]);
-const ICON_OPTIONS = ["", "home", "album", "gallery", "booking", "profile", "about"];
+const ICON_OPTIONS = ["", "home", "album", "gallery", "booking", "profile"];
 const TAB_OPTIONS = [{ value: "", label: "不绑定底部菜单" }].concat(
   TAB_PAGE_OPTIONS.map((item) => ({
     value: normalizeText(item && item.key),
@@ -446,22 +444,21 @@ function canShowInNav(row, channel) {
   );
 }
 
-function resolveForcedPublishState(pageKey, channel, hideAudit) {
-  if (channel !== "miniprogram" || normalizeText(pageKey) !== "pose") {
-    return "";
-  }
-  return hideAudit ? "beta" : "online";
+function resolveForcedPublishState(pageKey, channel) {
+  void pageKey;
+  void channel;
+  return "";
 }
 
-function isForcedHomeEntry(pageKey, channel, hideAudit) {
-  return channel === "miniprogram" && normalizeText(pageKey) === "pose" && hideAudit === false;
+function isForcedHomeEntry(pageKey, channel) {
+  void pageKey;
+  void channel;
+  return false;
 }
 
-function buildForcedStateHint(forcedState, hideAudit) {
-  if (!forcedState) return "";
-  return hideAudit
-    ? "当前受兼容规则控制：pose 页面只能以内测无底栏方式进入，不能手动切换为上线或下线。"
-    : "当前受兼容规则控制：pose 页面必须进入首页 / 底栏体系，并固定为首页，菜单顺序不可调整。";
+function buildForcedStateHint(forcedState) {
+  void forcedState;
+  return "";
 }
 
 function buildQuickActionSuccessNotice(pageName, channel, state, isSecondaryPage) {
@@ -484,10 +481,10 @@ function buildQuickActionSuccessNotice(pageName, channel, state, isSecondaryPage
   return `${pageName} 已下线，普通用户无法访问`;
 }
 
-function resolveQuickActionMeta(row, channel, hideAudit) {
+function resolveQuickActionMeta(row, channel) {
   const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
   const isSecondaryPage = isSecondaryPageKey(row && row.pageKey);
-  const forcedState = resolveForcedPublishState(row && row.pageKey, channel, hideAudit);
+  const forcedState = resolveForcedPublishState(row && row.pageKey, channel);
   const betaSummary = row && row.betaCodeSummary ? row.betaCodeSummary : summarizeDecoratedBetaCodes(decorateBetaCodesByChannel(row && row.betaCodes, channel));
   const canOnline = (isSecondaryPage || canShowInNav(row, channel)) && (!forcedState || forcedState === "online");
   const canBeta = normalizeBoolean(row && row.supportsBeta, false) && normalizeNumber(betaSummary && betaSummary.usable, 0) > 0 && (!forcedState || forcedState === "beta");
@@ -679,7 +676,12 @@ function buildPageSections(allRows, visibleRows, channel, expandedKey, hasActive
 function createRuleForm(rule, row) {
   const current = rule && typeof rule === "object" ? rule : {};
   const isSecondaryPage = isSecondaryPageKey(row && row.pageKey);
-  const navText = normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
+  const isMiniProgramProfilePrimaryPage =
+    normalizeText(row && row.routePathMiniProgram) === "pages/profile/index" &&
+    !isSecondaryPage;
+  const navText = isMiniProgramProfilePrimaryPage
+    ? "我的"
+    : normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
   return {
     publishState: normalizeText(current.publishState) || "offline",
     showInNav: isSecondaryPage ? false : normalizeBoolean(current.showInNav, false),
@@ -687,6 +689,8 @@ function createRuleForm(rule, row) {
     navText,
     guestNavText: isSecondaryPage
       ? navText
+      : isMiniProgramProfilePrimaryPage
+        ? "我的"
       : normalizeText(current.guestNavText) ||
         normalizeText(row.defaultGuestTabText) ||
         navText ||
@@ -705,9 +709,17 @@ function normalizeRuleForm(row, channel, form) {
   const navSupported = canShowInNav(row, channel);
   const showInNav = isSecondaryPage ? false : publishState === "online" && navSupported;
   const resolvedNavOrder = normalizeNumber(current.navOrder, isSecondaryPage ? 99 : 0);
-  const navText = normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
+  const isMiniProgramProfilePrimaryPage =
+    normalizeText(channel) === "miniprogram" &&
+    normalizeText(row && row.pageKey) === "profile" &&
+    !isSecondaryPage;
+  const navText = isMiniProgramProfilePrimaryPage
+    ? "我的"
+    : normalizeText(current.navText) || normalizeText(row.defaultTabText) || normalizeText(row.pageName);
   const guestNavText = isSecondaryPage
     ? navText
+    : isMiniProgramProfilePrimaryPage
+      ? "我的"
     : normalizeText(current.guestNavText) ||
       normalizeText(row.defaultGuestTabText) ||
       navText ||
@@ -763,7 +775,7 @@ function sortProfileAuthenticatedSecondaryRows(rows) {
   ).map((item) => withDisplayLabel(item));
 }
 
-function buildRow(item, channel, hideAudit) {
+function buildRow(item, channel) {
   const current = item && typeof item === "object" ? item : {};
   const channels = current.channels && typeof current.channels === "object" ? current.channels : {};
   const currentChannelRule = channels[channel] && typeof channels[channel] === "object" ? channels[channel] : {};
@@ -826,13 +838,13 @@ function buildRow(item, channel, hideAudit) {
   row.currentRoutePath = normalizeText(row.channels[channel] && row.channels[channel].routePath);
   row.currentPreviewRoutePath = normalizeText(row.channels[channel] && row.channels[channel].previewRoutePath);
   applyBetaPresentation(row, channel);
-  row.forcedState = resolveForcedPublishState(row.pageKey, channel, hideAudit);
+  row.forcedState = resolveForcedPublishState(row.pageKey, channel);
   row.forcedStateLabel = STATE_LABEL_MAP[row.forcedState] || "";
-  row.forcedStateHint = buildForcedStateHint(row.forcedState, hideAudit);
-  row.forcedHomeEntry = isForcedHomeEntry(row.pageKey, channel, hideAudit);
+  row.forcedStateHint = buildForcedStateHint(row.forcedState);
+  row.forcedHomeEntry = isForcedHomeEntry(row.pageKey, channel);
   return row;
 }
-function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hideAudit) {
+function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
   const allRows = (Array.isArray(rows) ? rows : []).filter(
     (item) => !shouldHidePageForChannel(item && item.pageKey, channel)
   );
@@ -905,7 +917,7 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter, hid
         normalizeText(row.currentRule.headerTitle) || row.loginNavLabel || normalizeText(row.pageName);
       row.headerSubtitlePreview =
         normalizeText(row.currentRule.headerSubtitle) || "留空时不单独显示";
-      const quickAction = resolveQuickActionMeta(row, channel, hideAudit);
+      const quickAction = resolveQuickActionMeta(row, channel);
       row.quickActionType = quickAction.type;
       row.quickActionLabel = quickAction.label;
       row.quickActionLoadingLabel = quickAction.loadingLabel;
@@ -1015,43 +1027,15 @@ function buildAdminWebPreviewUrl(routePath) {
   return `${appUrl}${normalizedRoute.startsWith("/") ? normalizedRoute : `/${normalizedRoute}`}`;
 }
 
-function buildChannelPanelCopy(channel, hideAudit) {
-  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
-  const meta = CHANNEL_META[currentChannel];
-  const navLabel = currentChannel === "web" ? "Web 底部菜单" : "小程序底部菜单";
-  const currentScopeDesc = currentChannel === "web"
-    ? "这里只维护 Web 页面路由、查看入口与底栏规则；不会改动小程序页面排序。"
-    : "这里只维护小程序页面路由、查看入口、菜单键与底栏规则；不会改动 Web 页面排序。";
-  const rangeScopeDesc = currentChannel === "web"
-    ? "先确认这里只影响 Web 页面，避免误以为会同步修改小程序页面。"
-    : "先确认这里只影响小程序页面，避免误以为会同步修改 Web 页面。";
-  const navJourneyDesc = currentChannel === "web"
-    ? "上线页面会进入 Web 底部菜单；顺序第 1 项自动作为首页。"
-    : "上线页面会进入小程序底部菜单；顺序第 1 项自动作为首页。";
-  const summaryTotalNote = currentChannel === "web" ? "Web 端当前已登记页总数" : "小程序端当前已登记页总数";
-  const summaryNavNote = currentChannel === "web" ? "Web 底部菜单容量" : "小程序底部菜单容量";
-  const runtimeHint = currentChannel === "miniprogram"
-    ? (hideAudit
-      ? "当前兼容规则生效：pose 页面固定为“内测 + 无底栏”，管理员只能维护其余小程序页面的常规编排。"
-      : "当前兼容规则生效：pose 页面固定为“上线 + 首页/底栏”，且在小程序端仍保留首页优先级约束。")
-    : (hideAudit
-      ? "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“内测 + 无底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。"
-      : "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“上线 + 首页/底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。");
-
+function buildChannelPanelCopy(channel) {
+  const currentMeta = CHANNEL_META[normalizeText(channel) === "miniprogram" ? "miniprogram" : "web"] || CHANNEL_META.web;
   return {
-    channelTitle: meta.title,
-    channelBadge: meta.badge,
-    channelDesc: meta.desc,
-    heroOnlineTip: `上线：进入${navLabel}，最多 5 个`,
-    channelOnlyDesc: currentScopeDesc,
-    journeyRangeDesc: rangeScopeDesc,
-    journeyNavDesc: navJourneyDesc,
-    summaryTotalNote,
-    summaryNavNote,
-    runtimeHint,
-    compactNavHint: `• 上线后进入${navLabel}，顺序第 1 项自动成为首页`,
-    navPanelHint: `查看与内测均走无底栏路由；上线后进入${navLabel}并支持顺序调整，第 1 项自动作为首页。`,
-    embeddedChannelTag: `当前入口：${meta.title}`,
+    pageTitle: currentMeta.title,
+    pageBadge: currentMeta.badge,
+    pageDesc: currentMeta.desc,
+    runtimeHint: normalizeText(channel) === "miniprogram"
+      ? "页面显示与隐藏统一由页面管理控制；一级页进入底部菜单，二级页进入“我的”菜单，不再受旧审核开关影响。"
+      : "页面显示与隐藏统一由页面管理控制；这里只维护 Web 页面，不会改动小程序页面排序。",
   };
 }
 Component({
@@ -1083,7 +1067,7 @@ Component({
     journeyNavDesc: "上线页面会进入 Web 底部菜单；顺序第 1 项自动作为首页。",
     summaryTotalNote: "Web 端当前已登记页总数",
     summaryNavNote: "Web 底部菜单容量",
-    runtimeHint: "当前仍保持与小程序端的兼容链路：小程序 pose 页面会锁定为“上线 + 首页/底栏”；本页仅维护 Web 页面规则，不会改动小程序排序。",
+    runtimeHint: "页面显示与隐藏统一由页面管理控制；一级页进入底部菜单，二级页进入“我的”菜单，不再受旧审核开关影响。",
     compactNavHint: "• 上线后进入 Web 底部菜单，顺序第 1 项自动成为首页",
     navPanelHint: "查看与内测均走无底栏路由；上线后进入 Web 底部菜单并支持顺序调整，第 1 项自动作为首页。",
     embeddedChannelTag: "当前入口：Web 页面管理",
@@ -1099,8 +1083,7 @@ Component({
     navRows: [],
     profileAuthenticatedSecondaryRows: [],
     summary: { total: 0, online: 0, beta: 0, offline: 0, nav: 0, betaCodes: 0 },
-    hideAudit: false,
-    betaEditorFocusPageKey: "",
+        betaEditorFocusPageKey: "",
     iconOptions: ICON_OPTIONS,
     stateFilterOptions: STATE_FILTER_OPTIONS,
     tabOptions: TAB_OPTIONS,
@@ -1108,7 +1091,7 @@ Component({
   observers: {
     channel(nextChannel) {
       const currentChannel = normalizeText(nextChannel) === "miniprogram" ? "miniprogram" : "web";
-      this.setData(buildChannelPanelCopy(currentChannel, this.data.hideAudit));
+      this.setData(buildChannelPanelCopy(currentChannel));
     },
   },
   lifetimes: {
@@ -1119,7 +1102,7 @@ Component({
       const channel = normalizeText(this.properties.channel) === "miniprogram" ? "miniprogram" : "web";
       this.setData(Object.assign({
         safeTop,
-      }, buildChannelPanelCopy(channel, false)), () => {
+      }, buildChannelPanelCopy(channel)), () => {
         void this.bootstrap();
       });
     },
@@ -1181,8 +1164,7 @@ Component({
       this.data.channel,
       keyword,
       expandedKey,
-      stateFilter,
-      this.data.hideAudit
+      stateFilter
     );
     const dialogRow = dialogPageKey
       ? presentation.rows.find((item) => item.pageKey === dialogPageKey) || null
@@ -1209,13 +1191,8 @@ Component({
     const payload = await requestJson("/api/admin/page-center/overview", { method: "GET", timeout: 10000 });
     if (payload && payload.error) {
       throw new Error(String(payload.error || "读取页面管理数据失败"));
-    }
-    const app = typeof getApp === "function" ? getApp() : null;
-    const runtimeConfig = app && app.globalData ? app.globalData.runtimeConfig : null;
-    const runtimeHideAudit = Boolean(runtimeConfig && normalizeBoolean(runtimeConfig.hideAudit, false));
-    const hideAudit = normalizeBoolean(payload && payload.meta ? payload.meta.hideAudit : runtimeHideAudit, runtimeHideAudit);
-    this.setData(Object.assign({ hideAudit }, buildChannelPanelCopy(this.data.channel, hideAudit)));
-    const rows = readArrayFromPayload(payload).map((item) => buildRow(item, this.data.channel, hideAudit));
+    }    this.setData(buildChannelPanelCopy(this.data.channel));
+    const rows = readArrayFromPayload(payload).map((item) => buildRow(item, this.data.channel));
     this.refreshPresentation({ rows });
   },
 
@@ -1461,9 +1438,9 @@ Component({
     const row = this.findRow(pageKey);
     if (!row) return false;
     const nextRule = normalizeRuleForm(row, this.data.channel, form);
-    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, this.data.hideAudit);
+    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, false);
     if (forcedState && nextRule.publishState !== forcedState) {
-      this.showNotice("error", buildForcedStateHint(forcedState, this.data.hideAudit));
+      this.showNotice("error", buildForcedStateHint(forcedState, false));
       return false;
     }
     const nextCount = countMiniprogramNavItems(this.data.allRows, pageKey, nextRule);
@@ -1574,9 +1551,9 @@ Component({
       this.openActionDialog(pageKey, "edit");
       return;
     }
-    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, this.data.hideAudit);
+    const forcedState = resolveForcedPublishState(pageKey, this.data.channel, false);
     if (forcedState && action !== forcedState) {
-      this.showNotice("error", buildForcedStateHint(forcedState, this.data.hideAudit));
+      this.showNotice("error", buildForcedStateHint(forcedState, false));
       return;
     }
     if (action === "online" || action === "beta") {
@@ -1706,8 +1683,8 @@ Component({
     const targetRow = orderedRows[targetIndex];
     if (
       !isSecondaryOrder &&
-      (isForcedHomeEntry(currentRow.pageKey, this.data.channel, this.data.hideAudit) ||
-        isForcedHomeEntry(targetRow.pageKey, this.data.channel, this.data.hideAudit))
+      (isForcedHomeEntry(currentRow.pageKey, this.data.channel, false) ||
+        isForcedHomeEntry(targetRow.pageKey, this.data.channel, false))
     ) {
       this.showNotice("error", "当前环境下 pose 页面固定为首页，菜单顺序不可调整");
       return;

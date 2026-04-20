@@ -8,7 +8,7 @@
         wx:for="{{list}}"
         wx:key="pagePath"
         data-path="{{item.pagePath}}"
-        bindtap="onTapItem"
+        catchtap="onTapItem"
       >
         <view class="tab-glow" wx:if="{{selectedPath === item.pagePath}}"></view>
         <view class="tab-icon-wrap {{selectedPath === item.pagePath ? 'tab-icon-wrap--active' : ''}}">

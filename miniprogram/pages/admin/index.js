@@ -181,7 +181,6 @@ const BETA_PRESET_ROUTE_OPTIONS = [
   { route_path: "/pages/gallery/index", route_title: "照片墙" },
   { route_path: "/pages/album/index", route_title: "相册提取" },
   { route_path: "/pages/profile/index", route_title: "我的" },
-  { route_path: "/pages/profile/about/index", route_title: "关于页面" },
   { route_path: "/pages/booking/index", route_title: "约拍" },
   { route_path: "/pages/admin/index", route_title: "后台管理" },
 ];

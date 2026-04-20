@@ -1,1 +1,6 @@
-{}
+{
+  "navigationBarTitleText": "修改密码",
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
+}

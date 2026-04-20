@@ -36,7 +36,7 @@ const TAB_PAGE_OPTIONS = [
   },
 ];
 
-const SUPPORTED_ICON_KEYS = new Set(['home', 'album', 'gallery', 'booking', 'profile', 'about']);
+const SUPPORTED_ICON_KEYS = new Set(['home', 'album', 'gallery', 'booking', 'profile']);
 const TAB_PAGE_MAP = TAB_PAGE_OPTIONS.reduce((map, item) => {
   map[item.pagePath] = item;
   return map;
@@ -120,20 +120,11 @@ function normalizeIconKey(value, fallback) {
   return fallback || 'profile';
 }
 
-function buildFeatureFlags(hideAudit) {
-  return hideAudit
-    ? {
-        showProfileEdit: false,
-        showProfileBookings: false,
-        showDonationQrCode: false,
-        allowPoseBetaBypass: true,
-      }
-    : {
-        showProfileEdit: true,
-        showProfileBookings: true,
-        showDonationQrCode: true,
-        allowPoseBetaBypass: false,
-      };
+function buildFeatureFlags() {
+  return {
+    showDonationQrCode: true,
+    allowPoseBetaBypass: false,
+  };
 }
 
 function buildStandardTabBarItems() {
@@ -182,72 +173,69 @@ function buildStandardTabBarItems() {
 }
 
 function buildReviewTabBarItems() {
-  return [
-    {
-      key: 'gallery',
-      iconKey: 'gallery',
-      pagePath: 'pages/gallery/index',
-      text: '照片墙',
-      guestText: '照片墙',
-      enabled: true,
-    },
-    {
-      key: 'album',
-      iconKey: 'album',
-      pagePath: 'pages/album/index',
-      text: '提取',
-      guestText: '提取',
-      enabled: true,
-    },
-    {
-      key: 'profile',
-      iconKey: 'profile',
-      pagePath: 'pages/profile/index',
-      text: '我的',
-      guestText: '关于',
-      enabled: true,
-    },
-  ];
+  return buildStandardTabBarItems();
+}
+
+function buildDefaultManagedPageAccessMap(tabBarItems) {
+  return (Array.isArray(tabBarItems) ? tabBarItems : []).reduce((map, item, index) => {
+    if (!item || !item.pagePath) {
+      return map;
+    }
+
+    const pageKey = item.key === 'home' ? 'pose' : normalizeTabKey(item.key, '');
+    if (!pageKey) {
+      return map;
+    }
+
+    const routePath = normalizeMiniProgramPagePath(item.pagePath);
+    if (!routePath) {
+      return map;
+    }
+
+    map[pageKey] = {
+      pageKey,
+      routePath,
+      previewRoutePath: routePath,
+      publishState: item.enabled ? 'online' : 'offline',
+      navOrder: Number.isFinite(Number(index)) ? Number(index) : 99,
+      navText: toText(item.text),
+      guestNavText: toText(item.guestText) || toText(item.text),
+      headerTitle: '',
+      headerSubtitle: '',
+    };
+    return map;
+  }, {});
 }
 
 function buildRuntimeConfigPreset(sceneCode) {
-  if (sceneCode === 'review') {
-    return {
-      configKey: 'default',
-      configName: '审核版配置',
-      sceneCode: 'review',
-      hideAudit: true,
-      homeMode: 'gallery',
-      homeEntryPagePath: 'pages/gallery/index',
-      guestProfileMode: 'about',
-      authMode: 'wechat_only',
-      tabBarItems: buildReviewTabBarItems(),
-      featureFlags: buildFeatureFlags(true),
-      notes: '',
-      source: 'default_fallback',
-      updatedAt: '',
-    };
-  }
-
+  const normalizedSceneCode = ['standard', 'review', 'custom'].includes(toText(sceneCode))
+    ? toText(sceneCode)
+    : 'standard';
   return {
     configKey: 'default',
-    configName: sceneCode === 'custom' ? '自定义配置' : '正式版配置',
-    sceneCode: sceneCode === 'custom' ? 'custom' : 'standard',
-    hideAudit: false,
+    configName:
+      normalizedSceneCode === 'review'
+        ? '审核场景配置'
+        : normalizedSceneCode === 'custom'
+          ? '自定义页面配置'
+          : '标准发布配置',
+    sceneCode: normalizedSceneCode,
     homeMode: 'pose',
     homeEntryPagePath: 'pages/index/index',
     guestProfileMode: 'login',
-    authMode: 'phone_password',
+    authMode: 'wechat_only',
     tabBarItems: buildStandardTabBarItems(),
-    featureFlags: buildFeatureFlags(false),
+    featureFlags: buildFeatureFlags(),
+    managedPageMetaMap: {},
+    managedPageAccessMap: {},
     notes: '',
     source: 'default_fallback',
     updatedAt: '',
   };
 }
 
-function normalizeTabBarItems(input, hideAudit) {
-  const fallback = hideAudit ? buildReviewTabBarItems() : buildStandardTabBarItems();
+function normalizeTabBarItems(input) {
+  const fallback = buildStandardTabBarItems();
   const rows = parseJsonArray(input);
   if (!rows || rows.length === 0) {
     return fallback;
@@ -268,12 +256,16 @@ function normalizeTabBarItems(input, hideAudit) {
     }
     seen.add(resolvedPagePath);
 
-    const text = toText(row.text) || (option && option.defaultText) || '页面';
-    const guestText =
-      toText(row.guestText) ||
-      toText(row.guest_label) ||
-      (option && option.defaultGuestText) ||
-      text;
+    const isProfileTab = resolvedPagePath === 'pages/profile/index' || (option && option.key === 'profile');
+    const text = isProfileTab
+      ? ((option && option.defaultText) || '我的')
+      : toText(row.text) || (option && option.defaultText) || '页面';
+    const guestText = isProfileTab
+      ? ((option && option.defaultGuestText) || text)
+      : toText(row.guestText) ||
+        toText(row.guest_label) ||
+        (option && option.defaultGuestText) ||
+        text;
     const keyFallback = (option && option.key) || resolvedPagePath;
     const iconFallback = (option && option.iconKey) || 'profile';
 
@@ -326,16 +318,14 @@ function isTabBarPagePath(pagePath, runtimeConfig, options) {
   return getTabBarPagePathSet(runtimeConfig, options).has(normalizedPagePath);
 }
 
-function normalizeFeatureFlags(input, hideAudit) {
-  const fallback = buildFeatureFlags(hideAudit);
+function normalizeFeatureFlags(input) {
+  const fallback = buildFeatureFlags();
   const row = parseJsonObject(input);
   if (!row) {
     return fallback;
   }
 
   return {
-    showProfileEdit: parseBooleanLike(row.showProfileEdit, fallback.showProfileEdit),
-    showProfileBookings: parseBooleanLike(row.showProfileBookings, fallback.showProfileBookings),
     showDonationQrCode: parseBooleanLike(row.showDonationQrCode, fallback.showDonationQrCode),
     allowPoseBetaBypass: parseBooleanLike(row.allowPoseBetaBypass, fallback.allowPoseBetaBypass),
   };
@@ -399,39 +389,28 @@ function normalizeManagedPageAccessMap(input) {
 
 function normalizeRuntimeConfig(input) {
   const current = input && typeof input === 'object' ? input : {};
-  const directHideAudit =
-    current && Object.prototype.hasOwnProperty.call(current, 'hideAudit')
-      ? parseBooleanLike(current.hideAudit, null)
-      : null;
-  const hideAudit = directHideAudit === null ? false : directHideAudit;
   const sceneCode = ['standard', 'review', 'custom'].includes(toText(current.sceneCode))
     ? toText(current.sceneCode)
-    : hideAudit
-      ? 'review'
-      : 'standard';
+    : 'standard';
 
   const homeMode = ['pose', 'gallery'].includes(toText(current.homeMode))
     ? toText(current.homeMode)
-    : hideAudit
-      ? 'gallery'
-      : 'pose';
+    : 'pose';
 
-  const guestProfileMode = ['login', 'about'].includes(toText(current.guestProfileMode))
-    ? toText(current.guestProfileMode)
-    : hideAudit
-      ? 'about'
-      : 'login';
+  const guestProfileMode = 'login';
 
   const authMode = ['phone_password', 'wechat_only', 'mixed'].includes(toText(current.authMode))
     ? toText(current.authMode)
-    : hideAudit
-      ? 'wechat_only'
-      : 'phone_password';
+    : 'wechat_only';
 
-  const tabBarItems = normalizeTabBarItems(current.tabBarItems, hideAudit);
-  const featureFlags = normalizeFeatureFlags(current.featureFlags, hideAudit);
+  const tabBarItems = normalizeTabBarItems(current.tabBarItems);
+  const featureFlags = normalizeFeatureFlags(current.featureFlags);
   const managedPageMetaMap = normalizeManagedPageMetaMap(current.managedPageMetaMap);
-  const managedPageAccessMap = normalizeManagedPageAccessMap(current.managedPageAccessMap);
+  const normalizedManagedPageAccessMap = normalizeManagedPageAccessMap(current.managedPageAccessMap);
+  const managedPageAccessMap =
+    Object.keys(normalizedManagedPageAccessMap).length > 0
+      ? normalizedManagedPageAccessMap
+      : buildDefaultManagedPageAccessMap(tabBarItems);
   const homeEntryPagePath = normalizeHomeEntryPagePath(
     current.homeEntryPagePath,
     tabBarItems,
@@ -442,9 +421,12 @@ function normalizeRuntimeConfig(input) {
     configKey: toText(current.configKey) || 'default',
     configName:
       toText(current.configName) ||
-      (hideAudit ? '审核版配置' : sceneCode === 'custom' ? '自定义配置' : '正式版配置'),
+      (sceneCode === 'review'
+        ? '审核场景配置'
+        : sceneCode === 'custom'
+          ? '自定义页面配置'
+          : '标准发布配置'),
     sceneCode,
-    hideAudit,
     homeMode,
     homeEntryPagePath,
     guestProfileMode,
@@ -470,13 +452,6 @@ function normalizeRuntimeConfigPayload(payload) {
         Object.prototype.hasOwnProperty.call(current, 'featureFlags')
       ) {
         return normalizeRuntimeConfig(current);
-      }
-
-      if (Object.prototype.hasOwnProperty.call(current, 'hideAudit')) {
-        return normalizeRuntimeConfig({
-          hideAudit: current.hideAudit,
-          source: toText(current.source) || 'default_fallback',
-        });
       }
     }
 

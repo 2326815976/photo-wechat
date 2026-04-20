@@ -1,15 +1,5 @@
 @import "../../../styles/admin-loading.wxss";
-
-.page {
-  min-height: 100vh;
-  background: #FFFBF0;
-}
-
-.content {
-  /* Web: px-6 pt-6 pb-20 */
-  padding: 48rpx 48rpx calc(160rpx + env(safe-area-inset-bottom));
-  box-sizing: border-box;
-}
+@import "../../../styles/secondary-page-frame.wxss";
 
 .config-tip {
   background: rgba(255, 255, 255, 0.75);

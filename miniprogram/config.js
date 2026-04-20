@@ -69,6 +69,17 @@ const resolvedShareImageUrl = normalizeText(
     runtimeConfig.miniprogramShareImageUrl ||
     ""
 );
+const resolvedFonts =
+  runtimeConfig.fonts && typeof runtimeConfig.fonts === "object"
+    ? Object.keys(runtimeConfig.fonts).reduce((map, key) => {
+        const normalizedKey = normalizeText(key);
+        const normalizedValue = normalizeText(runtimeConfig.fonts[key]);
+        if (normalizedKey && normalizedValue) {
+          map[normalizedKey] = normalizedValue;
+        }
+        return map;
+      }, {})
+    : {};
 
 module.exports = {
   // CloudBase 环境 ID（来自 demo/photo/.env.local 的 CLOUDBASE_ID）
@@ -96,6 +107,9 @@ module.exports = {
   // 小程序分享卡片封面图（可选）
   // 支持本地路径（如 /images/share/default.png）或 HTTPS 地址
   shareImageUrl: resolvedShareImageUrl,
+
+  // 远程字体地址（由 app.js 通过 wx.loadFontFace 全局加载）
+  fonts: resolvedFonts,
 
   // 腾讯地图 Key（来自 demo/photo/.env.local 的 TMAP_KEY / NEXT_PUBLIC_TMAP_KEY）
   // 注意：若需在小程序里用 wx.request 调用 https://apis.map.qq.com/ws/*，

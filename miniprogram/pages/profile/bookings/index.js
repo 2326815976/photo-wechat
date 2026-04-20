@@ -57,10 +57,7 @@ const STATUS_CONFIG = {
 
 Page({
   data: {
-    safeTop: 0,
     serviceMissing: false,
-    hideAudit: false,
-    profileBookingsEnabled: true,
 
     loading: true,
     currentUserId: "",
@@ -81,16 +78,11 @@ Page({
     if (managedBlocked) {
       return;
     }
-    const blocked = await this.syncAuditAccess();
-    if (blocked) {
-      return;
-    }
 
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
-    const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
-    this.setData({ safeTop, serviceMissing });
+    this.setData({ serviceMissing });
 
     if (!serviceMissing) {
       this.loadBookings();
@@ -107,10 +99,6 @@ Page({
     this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
     const managedBlocked = await this.syncManagedAccess();
     if (managedBlocked) {
-      return;
-    }
-    const blocked = await this.syncAuditAccess();
-    if (blocked) {
       return;
     }
 
@@ -133,14 +121,7 @@ Page({
   noop() {},
 
   applyRuntimeConfig(runtimeConfig) {
-    const normalized = normalizeRuntimeConfig(runtimeConfig);
-    this.setData({
-      hideAudit: Boolean(normalized.hideAudit),
-      profileBookingsEnabled: Boolean(
-        normalized.featureFlags && normalized.featureFlags.showProfileBookings
-      ),
-    });
-    return normalized;
+    return normalizeRuntimeConfig(runtimeConfig);
   },
 
   async syncManagedAccess() {
@@ -149,33 +130,6 @@ Page({
       fallbackTab: "pages/profile/index",
     });
     return !result.allowed;
-  },
-
-  async syncAuditAccess() {
-    const app = typeof getApp === "function" ? getApp() : null;
-    if (app && typeof app.ensureAuditConfig === "function") {
-      try {
-        await app.ensureAuditConfig();
-      } catch (error) {
-        // ignore
-      }
-    }
-
-    const normalized = this.applyRuntimeConfig(
-      app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
-    );
-    if (normalized.featureFlags && normalized.featureFlags.showProfileBookings) {
-      return false;
-    }
-
-    this.setData({
-      loading: false,
-      bookings: [],
-    });
-    wx.switchTab({ url: "/pages/profile/index" });
-    return true;
   },
 
   clearActionNoticeTimer() {

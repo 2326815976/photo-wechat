@@ -1,17 +1,27 @@
 <page-meta page-style="{{(switchingFolderLoading || pendingFolderPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
-<view class="page">
-  <app-header
+<view wx:if="{{!pageScaffoldReady}}" class="page">
+  <view class="content">
+    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2">
+      <view class="admin-loading-card__orb">
+        <view class="admin-loading-card__spinner"></view>
+      </view>
+      <text class="admin-loading-card__title">拾光中...</text>
+      <text class="admin-loading-card__desc">正在加载页面</text>
+    </view>
+  </view>
+</view>
+
+<view wx:else>
+  <secondary-page-shell
     id="albumHeader"
+    shell-class="page"
     class="album-header-host"
     title="{{headerTitle}}"
-    subtitle="{{hideAudit ? '✨ 趁图片消失前，及时保存 ✨' : '✨ 趁魔法消失前，把美好定格 ✨'}}"
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
-    fallbackTab="{{hideAudit ? 'pages/gallery/index' : 'pages/album/index'}}"
-    preferFallback="{{hideAudit}}"
-  />
-
-  <view class="content">
+    subtitle="✨ 趁魔法消失前，把美好定格 ✨"
+    fallbackTab="pages/album/index"
+    preferFallback="{{false}}"
+    content-class="content"
+  >
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
@@ -185,7 +195,7 @@
 
             </view>
 
-            <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
+            <view class="photo-actions" wx:if="{{freezeEnabled}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}" loading="{{item._pinning}}" disabled="{{item._pinning}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -270,7 +280,7 @@
 
             </view>
 
-            <view class="photo-actions" wx:if="{{!hideAudit && freezeEnabled}}">
+            <view class="photo-actions" wx:if="{{freezeEnabled}}">
               <button class="pin-btn {{item.is_public ? 'pin-btn--active' : ''}}" hover-class="pin-btn--touch" catchtap="togglePin" data-id="{{item.id}}" loading="{{item._pinning}}" disabled="{{item._pinning}}">
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
@@ -300,10 +310,8 @@
       </view>
       </view>
     </view>
-  </view>
-
-  <view class="modal-mask motion-fade-in" wx:if="{{!hideAudit && freezeEnabled && confirmPhotoId}}" bindtap="closePinConfirm"></view>
-  <view class="confirm-modal motion-fade-in" wx:if="{{!hideAudit && freezeEnabled && confirmPhotoId}}">
+  <view class="modal-mask motion-fade-in" wx:if="{{freezeEnabled && confirmPhotoId}}" bindtap="closePinConfirm"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{freezeEnabled && confirmPhotoId}}">
     <view class="confirm-card motion-pop-in" catchtap="noop">
       <view class="confirm-icon-wrap">
         <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
@@ -407,6 +415,7 @@
       </scroll-view>
     </view>
   </view>
+  </secondary-page-shell>
 
   <view class="modal-mask motion-fade-in" wx:if="{{showDonationModal}}" bindtap="closeDonationModal"></view>
   <view class="confirm-modal motion-fade-in" wx:if="{{showDonationModal}}">

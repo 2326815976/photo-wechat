@@ -1,5 +1,9 @@
 ﻿const { requestJson } = require('../services/photo-api');
-const { getHomeRedirectPath, normalizeRuntimeConfig } = require('./runtime-config');
+const {
+  getHomeRedirectPath,
+  getManagedPageAccess,
+  normalizeRuntimeConfig,
+} = require('./runtime-config');
 
 let pageCenterAccessEndpointState = 'unknown';
 
@@ -19,9 +23,7 @@ function resolveCurrentRoutePath() {
 
 function resolveHomeFallbackTab(app, currentRoute) {
   const globalData = app && app.globalData ? app.globalData : {};
-  const runtimeConfig = normalizeRuntimeConfig(
-    globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
-  );
+  const runtimeConfig = normalizeRuntimeConfig(globalData.runtimeConfig);
   const normalizedCurrentRoute = normalizeMiniProgramPath(currentRoute);
   const homePath = normalizeMiniProgramPath(getHomeRedirectPath(runtimeConfig));
   if (homePath && homePath !== normalizedCurrentRoute) {
@@ -70,6 +72,55 @@ function isTransientPageAccessError(error) {
 
 function shouldFailOpenForPageAccess(error) {
   return isMissingPageAccessEndpointError(error) || isTransientPageAccessError(error);
+}
+
+function resolveLocalPageAccess(app, pageKey, presentationMode) {
+  const globalData = app && app.globalData ? app.globalData : {};
+  if (!Boolean(globalData.auditConfigReady)) {
+    return null;
+  }
+  const runtimeConfig = normalizeRuntimeConfig(globalData.runtimeConfig);
+  const managedAccess = getManagedPageAccess(runtimeConfig, pageKey);
+  if (!managedAccess) {
+    return null;
+  }
+
+  const publishState = String(managedAccess.publishState || '').trim().toLowerCase();
+  if (!publishState) {
+    return null;
+  }
+
+  if (presentationMode === 'preview') {
+    return null;
+  }
+
+  if (presentationMode === 'beta') {
+    if (publishState !== 'beta') {
+      return {
+        allowed: false,
+        reason: publishState === 'offline' ? 'offline' : 'beta_disabled',
+        data: managedAccess,
+        source: 'runtime_config',
+      };
+    }
+    return null;
+  }
+
+  if (publishState === 'online') {
+    return {
+      allowed: true,
+      reason: 'runtime_online',
+      data: managedAccess,
+      source: 'runtime_config',
+    };
+  }
+
+  return {
+    allowed: false,
+    reason: publishState === 'beta' ? 'beta_preview_only' : 'offline',
+    data: managedAccess,
+    source: 'runtime_config',
+  };
 }
 
 async function checkMiniProgramPageAccess(pageKey, presentationMode) {
@@ -144,6 +195,20 @@ async function guardMiniProgramPageAccess(options) {
   const previewDeniedRoute = String(current.previewDeniedRoute || '').trim() || '/pages/profile/beta/index';
   const currentRoute = resolveCurrentRoutePath();
   const fallbackTab = normalizeMiniProgramPath(current.fallbackTab || resolveHomeFallbackTab(app, currentRoute));
+  const localAccessResult = resolveLocalPageAccess(app, pageKey, presentationMode);
+
+  if (localAccessResult) {
+    if (localAccessResult.allowed) {
+      return localAccessResult;
+    }
+
+    if (isStandalone) {
+      relaunchToRoute(previewDeniedRoute);
+    } else {
+      redirectToFallback(app, { currentRoute, fallbackTab, previewDeniedRoute });
+    }
+    return localAccessResult;
+  }
 
   try {
     const payload = await checkMiniProgramPageAccess(pageKey, presentationMode);

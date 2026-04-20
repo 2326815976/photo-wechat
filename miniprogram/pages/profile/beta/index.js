@@ -13,7 +13,7 @@ const ROUTE_ALIAS_MAP = {
   "/gallery": "/pages/gallery/index",
   "/album": "/pages/album/index",
   "/extract": "/pages/album/index",
-  "/about": "/pages/profile/about/index",
+  "/about": "/pages/profile/index",
   "/profile": "/pages/profile/index",
   "/booking": "/pages/booking/index",
   "/admin": "/pages/admin/index",
@@ -259,7 +259,6 @@ async function enterFeatureRoute(featureId, routePathRaw) {
 Page({
   data: {
     safeTop: 0,
-    hideAudit: false,
     loading: true,
     isLoggedIn: false,
     codeInput: "",
@@ -269,9 +268,7 @@ Page({
   },
 
   applyRuntimeConfig(runtimeConfig) {
-    const normalized = normalizeRuntimeConfig(runtimeConfig);
-    this.setData({ hideAudit: Boolean(normalized.hideAudit) });
-    return normalized;
+    return normalizeRuntimeConfig(runtimeConfig);
   },
 
   onLoad() {
@@ -282,7 +279,7 @@ Page({
     this.setData({
       safeTop: Number(globalData.statusBarHeight || 0),
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyRuntimeConfig(globalData.runtimeConfig);
   },
 
   onShow() {
@@ -304,8 +301,8 @@ Page({
     const app = typeof getApp === "function" ? getApp() : null;
     this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig
+        : null
     );
 
     const accessResult = await guardMiniProgramPageAccess({
@@ -520,11 +517,6 @@ Page({
   },
 
   onGoLogin() {
-    if (this.data.hideAudit) {
-      this.redirectToProfileForWechatLogin();
-      return;
-    }
     wx.switchTab({ url: "/pages/profile/index" });
   },
 });
-

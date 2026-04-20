@@ -1,5 +1,6 @@
 {
+  "navigationBarTitleText": "编辑个人资料",
   "usingComponents": {
-    "app-header": "/components/app-header/index"
+    "secondary-page-shell": "/components/secondary-page-shell/index"
   }
 }

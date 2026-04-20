@@ -1,10 +1,5 @@
 <view class="page-center-panel">
   <view class="page-shell {{embedded ? 'page-shell--embedded' : ''}}">
-    <view class="panel-card intro-card">
-      <view class="page-title">{{channelTitle}}</view>
-      <text class="intro-desc">{{channelDesc}}</text>
-    </view>
-
     <view class="panel-card" wx:if="{{loading}}">
       <view class="empty-box">正在读取页面管理数据...</view>
     </view>

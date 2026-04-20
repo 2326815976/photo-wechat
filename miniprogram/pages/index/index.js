@@ -99,7 +99,6 @@ Page({
     tagbarStickyTop: 0,
 
     serviceMissing: false,
-    hideAudit: false,
     homeMode: "pose",
     homeRedirectPath: "pages/index/index",
     allowPoseBetaBypass: false,
@@ -154,7 +153,7 @@ Page({
   readRuntimeConfig() {
     const app = typeof getApp === "function" ? getApp() : null;
     const globalData = app && app.globalData ? app.globalData : {};
-    return normalizeRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    return normalizeRuntimeConfig(globalData.runtimeConfig || null);
   },
 
   applyRuntimeConfig(runtimeConfig, options) {
@@ -171,7 +170,6 @@ Page({
     }
 
     this.setData({
-      hideAudit: Boolean(normalized.hideAudit),
       homeMode: normalized.homeMode,
       homeRedirectPath: getHomeRedirectPath(normalized),
       allowPoseBetaBypass,

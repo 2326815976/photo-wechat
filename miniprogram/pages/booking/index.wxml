@@ -1,9 +1,8 @@
 <view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
-  <app-header
-  managedPageKey="booking"
+  <primary-page-shell
+    managedPageKey="booking"
     title="{{activeBooking ? '我的预约' : '约拍邀请'}}"
     subtitle="📝 写下你的约拍便利贴 📝"
-    safeTop="{{safeTop}}"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
@@ -324,5 +323,4 @@
       </view>
     </view>
   </view>
-  <app-bottom-nav show="{{hasBottomTabbar}}" currentPath="pages/booking/index" />
 </view>

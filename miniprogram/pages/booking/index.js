@@ -374,7 +374,7 @@ Page({
       minDate: getDateAfterDaysUTC8(1),
       maxDate: getDateAfterDaysUTC8(30),
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+    this.applyRuntimeConfig(globalData.runtimeConfig || null);
     this.applyPagePresentation();
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
@@ -401,8 +401,8 @@ Page({
     }
     this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig || null
+        : null
     );
 
     if (!this.data.serviceMissing) {
@@ -417,10 +417,9 @@ Page({
 
     this.syncTabBar("pages/booking/index");
     if (!this.data.serviceMissing) {
-      if (hasNewAppEntry && this._bookingPageBootstrapped && !this.data.loading) {
-        return;
-      }
-      await this.checkLoginAndLoad();
+      await this.checkLoginAndLoad({
+        silent: !hasNewAppEntry && this._bookingPageBootstrapped && !this.data.loading,
+      });
     }
   },
 
@@ -465,14 +464,19 @@ Page({
 
   noop() {},
 
-  async checkLoginAndLoad() {
-    this.setData({
-      loading: true,
+  async checkLoginAndLoad(options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const silent = Boolean(opts.silent) && this._bookingPageBootstrapped;
+    const nextState = {
       error: "",
       showSuccess: false,
       pageLoadingTitle: this.buildPageLoadingData(undefined).pageLoadingTitle,
       pageLoadingDescription: this.buildPageLoadingData(undefined).pageLoadingDescription,
-    });
+    };
+    if (!silent) {
+      nextState.loading = true;
+    }
+    this.setData(nextState);
 
     let user = null;
     try {

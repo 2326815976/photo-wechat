@@ -227,9 +227,8 @@ Page({
     activeLegalSections: [],
     activeLegalFooter: [],
     agreedToLegal: false,
-    hideAudit: false,
-    authMode: "phone_password",
-    phoneLoginEnabled: true,
+    authMode: "wechat_only",
+    phoneLoginEnabled: false,
     pageTitle: "注册",
     loginEntryVisible: true,
     loginEntryLabel: "登录",
@@ -249,14 +248,13 @@ Page({
     const loginEntryLabel =
       String((loginAccess && (loginAccess.navText || loginAccess.headerTitle)) || "").trim() || "登录";
     this.setData({
-      hideAudit: Boolean(normalized.hideAudit),
       authMode,
       phoneLoginEnabled,
       pageTitle,
       loginEntryVisible,
       loginEntryLabel,
     });
-    this.initLegalDocuments(Boolean(normalized.hideAudit));
+    this.initLegalDocuments();
     return normalized;
   },
 
@@ -273,7 +271,7 @@ Page({
 
     this.setData({ safeTop, serviceMissing });
     const runtimeConfig = this.applyRuntimeConfig(
-      globalData.runtimeConfig || { hideAudit: globalData.hideAudit }
+      globalData.runtimeConfig || null
     );
     const blocked = await this.guardManagedAccess();
     if (blocked) {
@@ -310,8 +308,8 @@ Page({
     }
     const normalized = this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig || null
+        : null
     );
     const blocked = await this.guardManagedAccess();
     if (blocked) {
@@ -361,10 +359,8 @@ Page({
     wx.redirectTo({ url: "/pages/login/index" });
   },
 
-  initLegalDocuments(hideAudit) {
-    const nextHideAudit =
-      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
-    const docs = getLegalDocuments({ hideAudit: nextHideAudit });
+  initLegalDocuments() {
+    const docs = getLegalDocuments();
     this.legalDocMap = {};
     docs.forEach((doc) => {
       const key = String((doc && doc.key) || "").trim();
@@ -382,19 +378,17 @@ Page({
     const defaultKey = hasActiveKey ? activeKey : (tabs.length > 0 ? String(tabs[0].key || "") : "");
     this.setData({ legalDocTabs: tabs });
     if (defaultKey) {
-      this.applyLegalDocument(defaultKey, nextHideAudit);
+      this.applyLegalDocument(defaultKey);
     }
   },
 
-  applyLegalDocument(key, hideAudit) {
+  applyLegalDocument(key) {
     const normalizedKey = String(key || "").trim();
     if (!normalizedKey) return false;
-    const nextHideAudit =
-      typeof hideAudit === "boolean" ? hideAudit : Boolean(this.data.hideAudit);
 
     const doc =
       (this.legalDocMap && this.legalDocMap[normalizedKey]) ||
-      getLegalDocumentByKey(normalizedKey, { hideAudit: nextHideAudit });
+      getLegalDocumentByKey(normalizedKey);
     if (!doc) return false;
 
     this.setData({

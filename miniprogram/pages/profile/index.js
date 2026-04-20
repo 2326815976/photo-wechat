@@ -7,8 +7,6 @@ const {
 } = require("../../services/photo-api");
 const { requestWechatUserProfile } = require("../../utils/wechat-profile");
 const { clearStoredCookie } = require("../../utils/auth");
-const { resolvePublicUrl } = require("../../utils/storage-url");
-const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const {
   getManagedPageAccess,
   normalizeRuntimeConfig,
@@ -21,19 +19,10 @@ const {
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
-const SHARE_TITLE = "拾光谣｜定格美好瞬间";
-
+const SHARE_TITLE = "拾光谣｜我的小天地";
 const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
-const DEFAULT_ABOUT = {
-  author_name: "",
-  phone: "",
-  wechat: "",
-  email: "",
-  donation_qr_code: "",
-  author_message: "",
-};
 
-const PROFILE_MANAGED_MENU_SPECS = [
+const PROFILE_MENU_SPECS = [
   {
     pageKey: "profile-edit",
     action: "goEditProfile",
@@ -41,7 +30,6 @@ const PROFILE_MANAGED_MENU_SPECS = [
     defaultTitle: "编辑个人资料",
     description: "修改用户名、手机号、微信号",
     iconSrc: "/images/icons/user-yellow.svg",
-    featureFlag: "profileEditEnabled",
   },
   {
     pageKey: "profile-bookings",
@@ -50,7 +38,6 @@ const PROFILE_MANAGED_MENU_SPECS = [
     defaultTitle: "我的预约记录",
     description: "查看所有约拍记录",
     iconSrc: "/images/icons/calendar-yellow.svg",
-    featureFlag: "profileBookingsEnabled",
   },
   {
     pageKey: "profile-beta",
@@ -71,15 +58,6 @@ const PROFILE_MANAGED_MENU_SPECS = [
     requiresPasswordUser: true,
   },
   {
-    pageKey: "about",
-    action: "goAbout",
-    defaultOrder: 140,
-    defaultTitle: "关于",
-    description: "查看作者联系方式与留言",
-    iconSrc: "/images/icons/question.svg",
-    hideWhenAdmin: true,
-  },
-  {
     pageKey: "profile-delete-account",
     action: "goDeleteAccount",
     defaultOrder: 160,
@@ -90,20 +68,14 @@ const PROFILE_MANAGED_MENU_SPECS = [
   },
 ];
 
-const GUEST_PROFILE_MENU_SPECS = [
+const GUEST_MENU_SPECS = [
   {
     action: "goWechatLogin",
     defaultTitle: "微信登录",
     buttonClass: "btn-primary",
     hoverClass: "btn-primary--active",
-    requiresWechatLogin: true,
   },
 ];
-
-function isWechatMiniProgramAccount(user) {
-  const email = String((user && user.email) || "").trim().toLowerCase();
-  return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
-}
 
 function toText(value) {
   return String(value || "").trim();
@@ -119,73 +91,20 @@ function toOptionalText(value) {
   return text;
 }
 
-function resolveDisplayUserName(user, preferGuestDisplayName) {
-  const fallbackName = preferGuestDisplayName ? "拾光者" : "用户";
+function isWechatMiniProgramAccount(user) {
+  const email = String((user && user.email) || "").trim().toLowerCase();
+  return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
+}
+
+function resolveDisplayUserName(user) {
   const name = toOptionalText(user && user.name);
   const phone = toOptionalText(user && user.phone);
-
-  if (!name) {
-    return phone || fallbackName;
-  }
-
-  if (preferGuestDisplayName && (name === "微信用户" || name === "用户")) {
-    return fallbackName;
-  }
-
-  return name;
+  return name || phone || "拾光者";
 }
 
-function toOptionalMessageText(value) {
-  const raw = String(value == null ? "" : value);
-  const text = raw.trim();
-  if (!text) return "";
-  const normalized = text.toLowerCase();
-  if (normalized === "null" || normalized === "undefined" || normalized === "nil" || normalized === "none") {
-    return "";
-  }
-  return raw.replace(/\r\n/g, "\n");
-}
-
-function normalizeDonationQrCode(value) {
-  const raw = toOptionalText(value);
-  if (!raw) return "";
-
-  const resolved = toOptionalText(resolvePublicUrl(raw));
-  if (!resolved) return "";
-
-  const normalized = resolved.toLowerCase();
-  if (
-    normalized === "/" ||
-    normalized === "./" ||
-    normalized.includes("[object object]") ||
-    normalized.endsWith("/null") ||
-    normalized.endsWith("/undefined")
-  ) {
-    return "";
-  }
-
-  return resolved;
-}
-
-function isMissingColumnError(error, columnName) {
-  const message = String((error && error.message) || "").toLowerCase();
-  const column = String(columnName || "").toLowerCase();
-  if (!message || !column) return false;
-  return (
-    message.includes(column) &&
-    (message.includes("unknown column") ||
-      message.includes("does not exist") ||
-      (message.includes("column") && message.includes("not found")))
-  );
-}
-
-function wxLogin() {
-  return new Promise((resolve, reject) => {
-    wx.login({
-      success: (res) => resolve(res),
-      fail: (error) => reject(error),
-    });
-  });
+function resolveAvatarText(name) {
+  const text = toOptionalText(name);
+  return text ? text.slice(0, 1) : "?";
 }
 
 function parseRegisterDate(value) {
@@ -213,9 +132,38 @@ function formatRegisterDateText(value) {
   return `注册日期：${year}-${month}-${day}`;
 }
 
+function wxLogin() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success: (res) => resolve(res),
+      fail: (error) => reject(error),
+    });
+  });
+}
+
+function extractAuthUserFromPayload(payload) {
+  let current = payload;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    if (current.user && typeof current.user === "object") return current.user;
+    if (
+      current.session &&
+      typeof current.session === "object" &&
+      current.session.user &&
+      typeof current.session.user === "object"
+    ) {
+      return current.session.user;
+    }
+    const next = current.data;
+    if (!next || typeof next !== "object" || next === current) break;
+    current = next;
+  }
+  return null;
+}
+
 function buildManagedProfileMenuItems(state, runtimeConfig) {
   const currentState = state && typeof state === "object" ? state : {};
-  return PROFILE_MANAGED_MENU_SPECS.reduce((list, spec, index) => {
+  return PROFILE_MENU_SPECS.reduce((list, spec, index) => {
     const access = getManagedPageAccess(runtimeConfig, spec.pageKey);
     if (!access || String(access.publishState || "").trim() !== "online") {
       return list;
@@ -227,9 +175,6 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
       return list;
     }
     if (spec.requiresWechatLogin && !Boolean(currentState.isWechatLogin)) {
-      return list;
-    }
-    if (spec.hideWhenAdmin && Boolean(currentState.isAdmin)) {
       return list;
     }
 
@@ -265,15 +210,14 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
 
 function buildManagedGuestProfileMenuItems(state) {
   const currentState = state && typeof state === "object" ? state : {};
-  return GUEST_PROFILE_MENU_SPECS.reduce((list, spec) => {
-    if (spec.requiresWechatLogin && !Boolean(currentState.wechatLoginEnabled)) {
+  return GUEST_MENU_SPECS.reduce((list, spec) => {
+    if (!Boolean(currentState.wechatLoginEnabled)) {
       return list;
     }
     const title = String(spec.defaultTitle || "").trim();
     if (!title) {
       return list;
     }
-
     list.push({
       key: spec.action,
       action: spec.action,
@@ -285,47 +229,13 @@ function buildManagedGuestProfileMenuItems(state) {
   }, []);
 }
 
-function extractAuthUserFromPayload(payload) {
-  let current = payload;
-  for (let depth = 0; depth < 4; depth += 1) {
-    if (!current || typeof current !== "object") break;
-    if (current.user && typeof current.user === "object") return current.user;
-    if (
-      current.session &&
-      typeof current.session === "object" &&
-      current.session.user &&
-      typeof current.session.user === "object"
-    ) {
-      return current.session.user;
-    }
-    const next = current.data;
-    if (!next || typeof next !== "object" || next === current) break;
-    current = next;
-  }
-  return null;
-}
-
 Page({
   data: {
     safeTop: 0,
     serviceMissing: false,
-    hideAudit: false,
-    authMode: "phone_password",
-    guestProfileMode: "login",
-    phoneLoginEnabled: true,
-    wechatLoginEnabled: false,
-    profileEditEnabled: true,
-    profileBookingsEnabled: true,
-    donationQrCodeEnabled: true,
-    showAuditAboutMode: false,
-    auditWechatSubmitting: false,
-    showAuditLegalModal: false,
-    auditLegalDocTabs: [],
-    auditActiveLegalKey: "",
-    auditActiveLegalTitle: "",
-    auditActiveLegalVersion: "",
-    auditActiveLegalSections: [],
-    auditActiveLegalFooter: [],
+    backendReady: false,
+    backendReconnecting: false,
+    wechatLoginEnabled: true,
 
     loading: true,
     pageLoadingTitle: "拾光中...",
@@ -334,19 +244,13 @@ Page({
     isWechatLogin: false,
     isAdmin: false,
     userRole: "",
-
     userName: "",
+    userAvatarText: "?",
     userPhone: "",
     userRegisterDateText: "",
     canChangePassword: false,
     profileMenuItems: [],
-    guestMenuItems: [],
-
-    aboutLoading: true,
-    aboutError: "",
-    savingDonationQr: false,
-    hasDonationQrCode: false,
-    about: Object.assign({}, DEFAULT_ABOUT),
+    guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
     pagePresentationMode: "tabbar",
     pageFallbackRoute: "",
     pageFallbackTab: "pages/index/index",
@@ -355,17 +259,14 @@ Page({
 
   buildPageLoadingData(runtimeConfig, nextState) {
     const currentState = nextState && typeof nextState === "object" ? nextState : {};
-    const isLoggedIn = Object.prototype.hasOwnProperty.call(currentState, "isLoggedIn")
-      ? Boolean(currentState.isLoggedIn)
-      : Boolean(this.data.isLoggedIn);
-    const showAuditAboutMode = Object.prototype.hasOwnProperty.call(currentState, "showAuditAboutMode")
-      ? Boolean(currentState.showAuditAboutMode)
-      : Boolean(this.data.showAuditAboutMode);
     const loadingCopy = buildManagedPageLoadingCopy(runtimeConfig, {
       pagePath: "pages/profile/index",
       pageKey: "profile",
-      isLoggedIn,
-      fallbackTitle: showAuditAboutMode ? "关于我" : "我的小天地",
+      isLoggedIn:
+        Object.prototype.hasOwnProperty.call(currentState, "isLoggedIn")
+          ? Boolean(currentState.isLoggedIn)
+          : Boolean(this.data.isLoggedIn),
+      fallbackTitle: "我的小天地",
     });
 
     return {
@@ -375,57 +276,45 @@ Page({
     };
   },
 
-  applyRuntimeConfig(runtimeConfig) {
+  buildGuestState(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
-    const authMode = String(normalized.authMode || "phone_password");
-    const guestProfileMode = String(normalized.guestProfileMode || "login");
-    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
-    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
-    const nextShowAuditAboutMode =
-      guestProfileMode === "about" && !Boolean(this.data && this.data.isLoggedIn);
-    const enableGuestWechatEntry =
-      nextShowAuditAboutMode && wechatLoginEnabled && !phoneLoginEnabled;
-    const loadingData = this.buildPageLoadingData(runtimeConfig, {
-      isLoggedIn: Boolean(this.data && this.data.isLoggedIn),
-      showAuditAboutMode: nextShowAuditAboutMode,
-    });
-    const nextState = Object.assign({}, this.data, {
-      hideAudit: Boolean(normalized.hideAudit),
-      authMode,
-      guestProfileMode,
-      phoneLoginEnabled,
-      wechatLoginEnabled,
-      profileEditEnabled: Boolean(
-        normalized.featureFlags && normalized.featureFlags.showProfileEdit
-      ),
-      profileBookingsEnabled: Boolean(
-        normalized.featureFlags && normalized.featureFlags.showProfileBookings
-      ),
-      donationQrCodeEnabled: Boolean(
-        normalized.featureFlags && normalized.featureFlags.showDonationQrCode
-      ),
-      showAuditAboutMode: nextShowAuditAboutMode,
-    });
-
-    this.setData({
-      hideAudit: nextState.hideAudit,
-      authMode,
-      guestProfileMode,
-      phoneLoginEnabled,
-      wechatLoginEnabled,
-      profileEditEnabled: nextState.profileEditEnabled,
-      profileBookingsEnabled: nextState.profileBookingsEnabled,
-      donationQrCodeEnabled: nextState.donationQrCodeEnabled,
-      showAuditAboutMode: nextShowAuditAboutMode,
-      showAuditLegalModal: enableGuestWechatEntry
-        ? Boolean(this.data.showAuditLegalModal)
-        : false,
+    const loadingData = this.buildPageLoadingData(normalized, { isLoggedIn: false });
+    return {
+      loading: false,
+      isLoggedIn: false,
+      isWechatLogin: false,
+      isAdmin: false,
+      userRole: "",
+      userName: "",
+      userAvatarText: "?",
+      userPhone: "",
+      userRegisterDateText: "",
+      canChangePassword: false,
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
-      profileMenuItems: buildManagedProfileMenuItems(nextState, normalized),
-      guestMenuItems: buildManagedGuestProfileMenuItems(nextState, normalized),
-    });
-    this.initAuditLegalDocuments(enableGuestWechatEntry);
+      profileMenuItems: [],
+      guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+    };
+  },
+
+  applyRuntimeConfig(runtimeConfig) {
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
+    const loadingData = this.buildPageLoadingData(normalized);
+    const nextState = {
+      wechatLoginEnabled: true,
+      pageLoadingTitle: loadingData.pageLoadingTitle,
+      pageLoadingDescription: loadingData.pageLoadingDescription,
+      guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+    };
+
+    if (this.data.isLoggedIn) {
+      nextState.profileMenuItems = buildManagedProfileMenuItems(
+        Object.assign({}, this.data, nextState),
+        normalized
+      );
+    }
+
+    this.setData(nextState);
     return normalized;
   },
 
@@ -435,28 +324,47 @@ Page({
   },
 
   onLoad() {
-    this._profilePageBootstrapped = false;
+    this._profileBootstrapped = false;
     this._lastSeenAppEnterSeq = 0;
-    const app = getApp();
+    const app = typeof getApp === "function" ? getApp() : null;
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const backendReady = serviceMissing ? true : Boolean(globalData.backendReady);
+    const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
+
     this.setData({
       safeTop,
       serviceMissing,
+      backendReady,
+      backendReconnecting,
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
+
+    this.applyRuntimeConfig(globalData.runtimeConfig);
     this.applyPagePresentation();
 
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
+      this._unsubscribeRuntimeConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
         this.applyRuntimeConfig(runtimeConfig);
-        this.refreshCurrentModeData();
       });
     }
     this._unsubscribePagePresentation = subscribePagePresentation(app, this, "pages/profile/index");
 
-    this.refreshCurrentModeData();
+    if (app && typeof app.subscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+        const ready = Boolean(status && status.backendReady);
+        const reconnecting = !ready && Boolean(status && status.backendReconnecting);
+        this.setData({
+          backendReady: ready,
+          backendReconnecting: reconnecting,
+        });
+      });
+    }
+
+    if (!serviceMissing && !backendReady && app && typeof app.ensureBackendReady === "function") {
+      this.setData({ loading: true });
+      void app.ensureBackendReady();
+    }
   },
 
   async onShow() {
@@ -465,6 +373,7 @@ Page({
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
     const hasNewAppEntry = appEnterSeq > lastSeenAppEnterSeq;
     this._lastSeenAppEnterSeq = Math.max(appEnterSeq, lastSeenAppEnterSeq);
+
     if (app && typeof app.ensureAuditConfig === "function") {
       try {
         await app.ensureAuditConfig();
@@ -472,11 +381,13 @@ Page({
         // ignore
       }
     }
+
     this.applyRuntimeConfig(
       app && app.globalData
-        ? app.globalData.runtimeConfig || { hideAudit: app.globalData.hideAudit }
-        : { hideAudit: false }
+        ? app.globalData.runtimeConfig
+        : null
     );
+
     const presentationState = this.applyPagePresentation();
     if (!this.data.serviceMissing) {
       const accessResult = await guardMiniProgramPageAccess({
@@ -489,25 +400,67 @@ Page({
     }
 
     this.syncTabBar("pages/profile/index");
-    if (hasNewAppEntry && this._profilePageBootstrapped && !this.data.loading) {
+
+    if (this.data.serviceMissing) {
+      this.setData(this.buildGuestState(app && app.globalData ? app.globalData.runtimeConfig : null));
       return;
     }
-    this.refreshCurrentModeData();
+
+    if (app && typeof app.ensureBackendReady === "function") {
+      if (!this.data.backendReady) {
+        this.setData(
+          this._profileBootstrapped
+            ? {
+                backendReconnecting: true,
+              }
+            : {
+                loading: true,
+                backendReconnecting: true,
+              }
+        );
+      }
+      try {
+        await app.ensureBackendReady();
+      } catch (error) {
+        // ignore
+      }
+    }
+
+    const nextBackendReady = Boolean(app && app.globalData && app.globalData.backendReady);
+    const nextBackendReconnecting = !nextBackendReady && Boolean(
+      app && app.globalData && app.globalData.backendReconnecting
+    );
+    this.setData({
+      backendReady: nextBackendReady,
+      backendReconnecting: nextBackendReconnecting,
+    });
+
+    this.loadUser({
+      silent:
+        !hasNewAppEntry &&
+        this._profileBootstrapped &&
+        !this.data.loading &&
+        !nextBackendReconnecting,
+    });
   },
 
   onUnload() {
-    if (typeof this._unsubscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig();
+    if (this._wechatLoginRefreshTimer) {
+      clearTimeout(this._wechatLoginRefreshTimer);
+      this._wechatLoginRefreshTimer = null;
     }
-    this._unsubscribeAuditConfig = null;
-    if (this._auditLoginRefreshTimer) {
-      clearTimeout(this._auditLoginRefreshTimer);
-      this._auditLoginRefreshTimer = null;
+    if (typeof this._unsubscribeRuntimeConfig === "function") {
+      this._unsubscribeRuntimeConfig();
     }
+    this._unsubscribeRuntimeConfig = null;
     if (typeof this._unsubscribePagePresentation === "function") {
       this._unsubscribePagePresentation();
     }
     this._unsubscribePagePresentation = null;
+    if (typeof this._unsubscribeBackendStatus === "function") {
+      this._unsubscribeBackendStatus();
+    }
+    this._unsubscribeBackendStatus = null;
   },
 
   syncTabBar(selectedPath) {
@@ -528,138 +481,24 @@ Page({
     }
   },
 
-  refreshCurrentModeData() {
-    if (this.data.serviceMissing) {
-      this.setData({ loading: false, aboutLoading: false });
-      return;
+  scheduleWechatLoginStateRefresh() {
+    if (this._wechatLoginRefreshTimer) {
+      clearTimeout(this._wechatLoginRefreshTimer);
     }
-    this.loadUser();
-  },
-
-  initAuditLegalDocuments(enabled) {
-    const nextEnabled =
-      typeof enabled === "boolean"
-        ? enabled
-        : Boolean(this.data.showAuditAboutMode && this.data.wechatLoginEnabled && !this.data.phoneLoginEnabled);
-    if (!nextEnabled) {
-      this.auditLegalDocMap = {};
-      this.setData({
-        auditLegalDocTabs: [],
-        showAuditLegalModal: false,
-        auditActiveLegalKey: "",
-        auditActiveLegalTitle: "",
-        auditActiveLegalVersion: "",
-        auditActiveLegalSections: [],
-        auditActiveLegalFooter: [],
-      });
-      return;
-    }
-
-    const docs = getLegalDocuments({ hideAudit: Boolean(this.data.hideAudit) });
-    this.auditLegalDocMap = {};
-    docs.forEach((doc) => {
-      const key = String((doc && doc.key) || "").trim();
-      if (!key) return;
-      this.auditLegalDocMap[key] = doc;
-    });
-
-    const tabs = docs.map((doc) => ({
-      key: String((doc && doc.key) || ""),
-      title: String((doc && doc.title) || ""),
-      shortTitle: String((doc && doc.shortTitle) || (doc && doc.title) || ""),
-    }));
-    const activeKey = String(this.data.auditActiveLegalKey || "").trim();
-    const hasActiveKey = tabs.some((tab) => String((tab && tab.key) || "") === activeKey);
-    const defaultKey = hasActiveKey ? activeKey : tabs.length > 0 ? String(tabs[0].key || "") : "";
-    this.setData({ auditLegalDocTabs: tabs });
-    if (defaultKey) {
-      this.applyAuditLegalDocument(defaultKey, true);
-    }
-  },
-
-  applyAuditLegalDocument(key, enabled) {
-    const normalizedKey = String(key || "").trim();
-    if (!normalizedKey) return false;
-    const nextEnabled =
-      typeof enabled === "boolean"
-        ? enabled
-        : Boolean(this.data.showAuditAboutMode && this.data.wechatLoginEnabled && !this.data.phoneLoginEnabled);
-    if (!nextEnabled) return false;
-
-    const doc =
-      (this.auditLegalDocMap && this.auditLegalDocMap[normalizedKey]) ||
-      getLegalDocumentByKey(normalizedKey, { hideAudit: Boolean(this.data.hideAudit) });
-    if (!doc) return false;
-
-    this.setData({
-      auditActiveLegalKey: String(doc.key || normalizedKey),
-      auditActiveLegalTitle: String(doc.title || ""),
-      auditActiveLegalVersion: String(doc.versionLine || ""),
-      auditActiveLegalSections: Array.isArray(doc.sections) ? doc.sections : [],
-      auditActiveLegalFooter: Array.isArray(doc.footer) ? doc.footer : [],
-    });
-    return true;
-  },
-
-  onOpenAuditWechatLogin() {
-    if (
-      !this.data.showAuditAboutMode ||
-      !this.data.wechatLoginEnabled ||
-      this.data.phoneLoginEnabled ||
-      this.data.serviceMissing
-    ) {
-      return;
-    }
-    if (this.data.auditWechatSubmitting) return;
-    this.initAuditLegalDocuments(true);
-    this.applyAuditLegalDocument("terms", true);
-    this.setData({ showAuditLegalModal: true });
-  },
-
-  onSwitchAuditLegalDoc(e) {
-    const key =
-      e && e.currentTarget && e.currentTarget.dataset
-        ? String(e.currentTarget.dataset.docKey || "")
-        : "";
-    this.applyAuditLegalDocument(key, true);
-  },
-
-  onCloseAuditLegalModal() {
-    if (!this.data.showAuditLegalModal) return;
-    this.setData({ showAuditLegalModal: false });
-  },
-
-  onRejectAuditWechatLogin() {
-    this.setData({
-      showAuditLegalModal: false,
-      auditWechatSubmitting: false,
-    });
-  },
-
-  onAgreeAuditWechatLogin() {
-    this.setData({ showAuditLegalModal: false });
-    this.submitAuditWechatLogin();
-  },
-
-  onStopPropagation() {},
-
-  scheduleAuditLoginStateRefresh() {
-    if (this._auditLoginRefreshTimer) {
-      clearTimeout(this._auditLoginRefreshTimer);
-      this._auditLoginRefreshTimer = null;
-    }
-    this._auditLoginRefreshTimer = setTimeout(() => {
-      this._auditLoginRefreshTimer = null;
-      this.loadUser();
+    this._wechatLoginRefreshTimer = setTimeout(() => {
+      this._wechatLoginRefreshTimer = null;
+      this.loadUser({ silent: true });
     }, 360);
   },
 
   async submitWechatLogin() {
-    if (!this.data.wechatLoginEnabled || this.data.serviceMissing) {
+    if (this.data.serviceMissing) {
+      wx.showToast({ title: "当前服务配置不完整", icon: "none" });
       return;
     }
-    if (this.data.auditWechatSubmitting) return;
-    this.setData({ auditWechatSubmitting: true });
+    if (this._wechatSubmitting) return;
+
+    this._wechatSubmitting = true;
     try {
       const [loginRes, profile] = await Promise.all([
         wxLogin(),
@@ -678,46 +517,43 @@ Page({
         return;
       }
 
-      const preferGuestDisplayName = this.data.guestProfileMode === "about";
+      const runtimeConfig =
+        typeof getApp === "function" && getApp() && getApp().globalData
+          ? getApp().globalData.runtimeConfig
+          : null;
+      const normalized = normalizeRuntimeConfig(runtimeConfig);
       const userRole = String((user && user.role) || "").trim();
-      const userPhone = String((user && user.phone) || "").trim();
-      const defaultName = resolveDisplayUserName(user, preferGuestDisplayName);
-      const userRegisterDateText =
-        formatRegisterDateText(user && (user.created_at || user.createdAt)) ||
-        this.data.userRegisterDateText ||
-        "";
       const isAdmin = userRole === "admin";
+      const canChangePassword = !isWechatMiniProgramAccount(user);
+      const userName = resolveDisplayUserName(user);
 
       this.setData({
         loading: false,
         isLoggedIn: true,
         isWechatLogin: true,
         isAdmin,
-        userRole,
-        userName: defaultName,
-        userPhone,
-        userRegisterDateText,
-        canChangePassword: !isWechatMiniProgramAccount(user),
-        showAuditAboutMode: false,
-        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: true, showAuditAboutMode: false }).pageLoadingTitle,
-        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: true, showAuditAboutMode: false }).pageLoadingDescription,
+        userRole: isAdmin ? "admin" : "user",
+        userName,
+        userAvatarText: resolveAvatarText(userName),
+        userPhone: String((user && user.phone) || "").trim(),
+        userRegisterDateText:
+          formatRegisterDateText(user && (user.created_at || user.createdAt)) || this.data.userRegisterDateText,
+        canChangePassword,
+        pageLoadingTitle: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingTitle,
+        pageLoadingDescription: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingDescription,
         profileMenuItems: buildManagedProfileMenuItems(
           Object.assign({}, this.data, {
             isLoggedIn: true,
+            isWechatLogin: true,
             isAdmin,
-            canChangePassword: !isWechatMiniProgramAccount(user),
-            showAuditAboutMode: false,
+            userRole: isAdmin ? "admin" : "user",
+            canChangePassword,
           }),
-          typeof getApp === "function" && getApp() && getApp().globalData
-            ? getApp().globalData.runtimeConfig || { hideAudit: getApp().globalData.hideAudit }
-            : { hideAudit: false }
+          normalized
         ),
       });
       this.refreshTabBarLoginState();
-
-      // 微信登录后延迟做一次会话态校准，确保管理员入口与昵称等信息最终一致。
-      this.scheduleAuditLoginStateRefresh();
-
+      this.scheduleWechatLoginStateRefresh();
       wx.showToast({ title: "登录成功", icon: "none" });
     } catch (error) {
       const message = String((error && error.message) || "");
@@ -727,104 +563,68 @@ Page({
         wx.showToast({ title: "后端未部署微信登录接口", icon: "none" });
       } else if (message.includes("云托管服务名称未配置")) {
         wx.showToast({ title: "请先配置云托管服务", icon: "none" });
-      } else if (message.includes("服务：") && message.includes("环境：")) {
-        wx.showToast({ title: "云托管调用失败，请检查配置", icon: "none" });
       } else if (message.includes("未配置")) {
         wx.showToast({ title: "服务端暂未开启微信登录", icon: "none" });
       } else {
         wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
       }
     } finally {
-      this.setData({ auditWechatSubmitting: false });
+      this._wechatSubmitting = false;
     }
   },
 
-  async submitAuditWechatLogin() {
-    if (
-      !this.data.showAuditAboutMode ||
-      !this.data.wechatLoginEnabled ||
-      this.data.phoneLoginEnabled ||
-      this.data.serviceMissing
-    ) {
-      return;
-    }
-    await this.submitWechatLogin();
-  },
+  async loadUser(options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const silent = Boolean(opts.silent) && this._profileBootstrapped;
+    const runtimeConfig =
+      typeof getApp === "function" && getApp() && getApp().globalData
+        ? getApp().globalData.runtimeConfig
+        : null;
+    const normalized = normalizeRuntimeConfig(runtimeConfig);
 
-  async loadUser() {
-    this.setData({
-      loading: true,
-      pageLoadingTitle: this.buildPageLoadingData(undefined).pageLoadingTitle,
-      pageLoadingDescription: this.buildPageLoadingData(undefined).pageLoadingDescription,
-    });
+    if (!silent) {
+      this.setData({
+        loading: true,
+        pageLoadingTitle: this.buildPageLoadingData(normalized).pageLoadingTitle,
+        pageLoadingDescription: this.buildPageLoadingData(normalized).pageLoadingDescription,
+      });
+    }
+
     try {
       const session = await getSession();
       const user = extractSessionUser(session);
       if (!user || !user.id) {
-        const showGuestAboutMode = this.data.guestProfileMode === "about";
-        this.setData({
-          loading: false,
-          isLoggedIn: false,
-          isWechatLogin: false,
-          isAdmin: false,
-          userRole: "",
-          userName: "",
-          userPhone: "",
-          userRegisterDateText: "",
-          canChangePassword: false,
-          showAuditAboutMode: showGuestAboutMode,
-          aboutLoading: showGuestAboutMode,
-          aboutError: "",
-          pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingTitle,
-          pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingDescription,
-          profileMenuItems: buildManagedProfileMenuItems(
-            Object.assign({}, this.data, {
-              isLoggedIn: false,
-              isAdmin: false,
-              canChangePassword: false,
-              showAuditAboutMode: showGuestAboutMode,
-            }),
-            typeof getApp === "function" && getApp() && getApp().globalData
-              ? getApp().globalData.runtimeConfig || { hideAudit: getApp().globalData.hideAudit }
-              : { hideAudit: false }
-          ),
-        });
+        this.setData(this.buildGuestState(normalized));
         this.refreshTabBarLoginState();
-        if (showGuestAboutMode) {
-          this.loadAbout();
-        }
         return;
       }
 
-      const preferGuestDisplayName = this.data.guestProfileMode === "about";
-      let userName = resolveDisplayUserName(user, preferGuestDisplayName);
+      let userName = resolveDisplayUserName(user);
       let userPhone = String((user && user.phone) || "").trim();
       let userRegisterDateText = formatRegisterDateText(user && (user.created_at || user.createdAt));
-      const userRole = String((user && user.role) || "").trim();
+      const isWechatLogin = isWechatMiniProgramAccount(user);
+      const rawUserRole = String((user && user.role) || "").trim();
       let profileRole = "";
-      let isAdmin = false;
 
-      // 尝试从 profiles 获取更友好的昵称
       try {
-        const r = await dbQuery({
+        const result = await dbQuery({
           table: "profiles",
           action: "select",
           columns: "name,phone,role",
           filters: [{ column: "id", operator: "eq", value: user.id }],
           maybeSingle: true,
         });
-
-        const profile = r ? r.data : null;
+        const profile = result ? result.data : null;
         if (profile && profile.name) {
           userName = String(profile.name);
         }
         if (profile && profile.phone) {
           userPhone = String(profile.phone);
         }
-        if (profile) {
-          profileRole = String((profile && profile.role) || "").trim();
+        if (profile && profile.role) {
+          profileRole = String(profile.role).trim();
         }
-      } catch (e) {
+      } catch (error) {
         // ignore
       }
 
@@ -844,182 +644,50 @@ Page({
         }
       }
 
-      if (preferGuestDisplayName) {
-        const normalizedName = String(userName || "").trim();
-        if (!normalizedName || normalizedName === "微信用户" || normalizedName === "用户") {
-          userName = "拾光者";
-        }
-      }
-
-      isAdmin = userRole === "admin" && profileRole === "admin";
-
-      this.setData({
+      const isAdmin = rawUserRole === "admin" && profileRole === "admin";
+      const canChangePassword = !isWechatLogin;
+      const nextState = {
         loading: false,
         isLoggedIn: true,
-        isWechatLogin: isWechatMiniProgramAccount(user),
-        userRole: isAdmin ? "admin" : "user",
+        isWechatLogin,
         isAdmin,
+        userRole: isAdmin ? "admin" : "user",
         userName,
+        userAvatarText: resolveAvatarText(userName),
         userPhone,
         userRegisterDateText,
-        canChangePassword: !isWechatMiniProgramAccount(user),
-        showAuditAboutMode: false,
-        aboutLoading: false,
-        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: true, showAuditAboutMode: false }).pageLoadingTitle,
-        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: true, showAuditAboutMode: false }).pageLoadingDescription,
-        profileMenuItems: buildManagedProfileMenuItems(
-          Object.assign({}, this.data, {
-            isLoggedIn: true,
-            isAdmin,
-            canChangePassword: !isWechatMiniProgramAccount(user),
-            showAuditAboutMode: false,
-          }),
-          typeof getApp === "function" && getApp() && getApp().globalData
-            ? getApp().globalData.runtimeConfig || { hideAudit: getApp().globalData.hideAudit }
-            : { hideAudit: false }
-        ),
-      });
+        canChangePassword,
+        pageLoadingTitle: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingTitle,
+        pageLoadingDescription: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingDescription,
+      };
+
+      this.setData(
+        Object.assign({}, nextState, {
+          profileMenuItems: buildManagedProfileMenuItems(
+            Object.assign({}, this.data, nextState),
+            normalized
+          ),
+          guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+        })
+      );
       this.refreshTabBarLoginState();
-    } catch (e) {
-      const showGuestAboutMode = this.data.guestProfileMode === "about";
-      this.setData({
-        loading: false,
-        isLoggedIn: false,
-        isWechatLogin: false,
-        isAdmin: false,
-        userRole: "",
-        userName: "",
-        userPhone: "",
-        userRegisterDateText: "",
-        canChangePassword: false,
-        showAuditAboutMode: showGuestAboutMode,
-        aboutLoading: showGuestAboutMode,
-        aboutError: "",
-        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingTitle,
-        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingDescription,
-        profileMenuItems: buildManagedProfileMenuItems(
-          Object.assign({}, this.data, {
-            isLoggedIn: false,
-            isAdmin: false,
-            canChangePassword: false,
-            showAuditAboutMode: showGuestAboutMode,
-          }),
-          typeof getApp === "function" && getApp() && getApp().globalData
-            ? getApp().globalData.runtimeConfig || { hideAudit: getApp().globalData.hideAudit }
-            : { hideAudit: false }
-        ),
-      });
-      this.refreshTabBarLoginState();
-      if (showGuestAboutMode) {
-        this.loadAbout();
-      }
-    } finally {
-      this._profilePageBootstrapped = true;
-    }
-  },
-
-  async loadAbout() {
-    if (!this.data.showAuditAboutMode) {
-      this.setData({ aboutLoading: false });
-      return;
-    }
-
-    this.setData({ aboutLoading: true, aboutError: "" });
-    try {
-      let result = await dbQuery({
-        table: "about_settings",
-        action: "select",
-        columns: "author_name,phone,wechat,email,donation_qr_code,author_message",
-        orders: [
-          { column: "updated_at", ascending: false },
-          { column: "id", ascending: false },
-        ],
-        limit: 1,
-        maybeSingle: true,
-      });
-      if (result && result.error && isMissingColumnError(result.error, "updated_at")) {
-        result = await dbQuery({
-          table: "about_settings",
-          action: "select",
-          columns: "author_name,phone,wechat,email,donation_qr_code,author_message",
-          orders: [{ column: "id", ascending: false }],
-          limit: 1,
-          maybeSingle: true,
-        });
-      }
-
-      if (result && result.error) {
-        this.setData({
-          aboutLoading: false,
-          aboutError: `加载失败：${String(result.error.message || "请稍后重试")}`,
-          hasDonationQrCode: false,
-          about: Object.assign({}, DEFAULT_ABOUT),
-        });
-        return;
-      }
-
-      const row = result && result.data ? result.data : null;
-      if (!row) {
-        this.setData({
-          aboutLoading: false,
-          hasDonationQrCode: false,
-          about: Object.assign({}, DEFAULT_ABOUT),
-        });
-        return;
-      }
-
-      const donationQrCode = normalizeDonationQrCode(row.donation_qr_code);
-      this.setData({
-        aboutLoading: false,
-        hasDonationQrCode: Boolean(donationQrCode),
-        about: {
-          author_name: toOptionalText(row.author_name),
-          phone: toOptionalText(row.phone),
-          wechat: toOptionalText(row.wechat),
-          email: toOptionalText(row.email),
-          donation_qr_code: donationQrCode,
-          author_message: toOptionalMessageText(row.author_message),
-        },
-      });
     } catch (error) {
-      this.setData({
-        aboutLoading: false,
-        aboutError: `加载失败：${String((error && error.message) || "请稍后重试")}`,
-        hasDonationQrCode: false,
-        about: Object.assign({}, DEFAULT_ABOUT),
-      });
+      this.setData(this.buildGuestState(normalized));
+      this.refreshTabBarLoginState();
+    } finally {
+      this._profileBootstrapped = true;
     }
   },
 
   goWechatLogin() {
-    if (!this.data.wechatLoginEnabled) {
-      wx.showToast({ title: "当前未开放微信登录", icon: "none" });
-      return;
-    }
-    if (this.data.serviceMissing) {
-      wx.showToast({ title: "当前服务配置不完整", icon: "none" });
-      return;
-    }
-    if (this.data.showAuditAboutMode && !this.data.phoneLoginEnabled) {
-      this.onOpenAuditWechatLogin();
-      return;
-    }
     void this.submitWechatLogin();
   },
 
   goEditProfile() {
-    if (!this.data.profileEditEnabled) {
-      wx.showToast({ title: "当前未开放资料编辑", icon: "none" });
-      return;
-    }
     wx.navigateTo({ url: "/pages/profile/edit/index" });
   },
 
   goBookings() {
-    if (!this.data.profileBookingsEnabled) {
-      wx.showToast({ title: "该功能正在开发中", icon: "none" });
-      return;
-    }
     wx.navigateTo({ url: "/pages/profile/bookings/index" });
   },
 
@@ -1033,7 +701,7 @@ Page({
     wx.navigateTo({
       url: "/pages/profile/beta/index",
       fail: () => {
-        wx.showToast({ title: "进入功能内测失败，请重试", icon: "none" });
+        wx.showToast({ title: "进入内测功能失败，请重试", icon: "none" });
       },
       complete: () => {
         this._navigatingToBeta = false;
@@ -1049,10 +717,6 @@ Page({
     wx.navigateTo({ url: "/pages/admin/index" });
   },
 
-  goAbout() {
-    wx.navigateTo({ url: "/pages/profile/about/index" });
-  },
-
   onProfileMenuTap(e) {
     const dataset = e && e.currentTarget ? e.currentTarget.dataset : {};
     const action = toText(dataset && dataset.action);
@@ -1062,158 +726,20 @@ Page({
     }
   },
 
-  onCopyField(e) {
-    const dataset = e && e.currentTarget ? e.currentTarget.dataset : {};
-    const value = toText(dataset && dataset.value);
-    const label = toText(dataset && dataset.label) || "内容";
-    if (!value) return;
-
-    wx.setClipboardData({
-      data: value,
-      success: () => {
-        wx.showToast({ title: `${label}已复制`, icon: "none" });
-      },
-      fail: () => {
-        wx.showToast({ title: "复制失败，请手动复制", icon: "none" });
-      },
-    });
-  },
-
-  onPreviewDonationQr() {
-    const url = toOptionalText(this.data.about && this.data.about.donation_qr_code);
-    if (!url) return;
-    wx.previewImage({
-      current: url,
-      urls: [url],
-      fail: () => {
-        wx.showToast({ title: "预览失败，请稍后重试", icon: "none" });
-      },
-    });
-  },
-
-  onDonationQrLoadError() {
-    if (!this.data.hasDonationQrCode) return;
-    this.setData({
-      hasDonationQrCode: false,
-      "about.donation_qr_code": "",
-    });
-  },
-
-  async ensureAlbumWritePermission() {
-    try {
-      const setting = await wx.getSetting();
-      const granted =
-        setting && setting.authSetting ? setting.authSetting["scope.writePhotosAlbum"] : false;
-      if (granted) return true;
-      await wx.authorize({ scope: "scope.writePhotosAlbum" });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  },
-
-  async resolveImageLocalPath(url) {
-    const target = toText(url);
-    if (!target) {
-      throw new Error("缺少赞赏码地址");
-    }
-
-    try {
-      const info = await wx.getImageInfo({ src: target });
-      const localPath = toText(info && info.path);
-      if (localPath) {
-        return localPath;
-      }
-    } catch (error) {
-      // ignore，进入 downloadFile 兜底
-    }
-
-    const download = await wx.downloadFile({ url: target, timeout: 60000 });
-    if (!download || download.statusCode !== 200 || !download.tempFilePath) {
-      throw new Error("下载赞赏码失败");
-    }
-    return download.tempFilePath;
-  },
-
-  async saveDonationQrToAlbum(url) {
-    const localPath = await this.resolveImageLocalPath(url);
-    await wx.saveImageToPhotosAlbum({ filePath: localPath });
-  },
-
-  async onSaveDonationQr() {
-    if (this.data.savingDonationQr) return;
-    const url = toOptionalText(this.data.about && this.data.about.donation_qr_code);
-    if (!url) {
-      wx.showToast({ title: "暂无可保存的赞赏码", icon: "none" });
-      return;
-    }
-
-    const granted = await this.ensureAlbumWritePermission();
-    if (!granted) {
-      wx.showModal({
-        title: "需要相册权限",
-        content: "请在小程序设置中开启“保存到相册”权限后重试。",
-        showCancel: false,
-      });
-      return;
-    }
-
-    this.setData({ savingDonationQr: true });
-    wx.showLoading({ title: "保存中..." });
-    try {
-      await this.saveDonationQrToAlbum(url);
-      wx.showToast({ title: "赞赏码已保存", icon: "success" });
-    } catch (error) {
-      wx.showToast({ title: "保存失败，请稍后重试", icon: "none" });
-    } finally {
-      try {
-        wx.hideLoading();
-      } catch (_) {
-        // ignore
-      }
-      this.setData({ savingDonationQr: false });
-    }
-  },
-
   async logout() {
     try {
       await logout();
-    } catch (e) {
+    } catch (error) {
       // ignore
     } finally {
-      const showGuestAboutMode = this.data.guestProfileMode === "about";
       clearStoredCookie();
-      this.setData({
-        isLoggedIn: false,
-        isWechatLogin: false,
-        isAdmin: false,
-        userRole: "",
-        userName: "",
-        userPhone: "",
-        userRegisterDateText: "",
-        canChangePassword: false,
-        showAuditAboutMode: showGuestAboutMode,
-        aboutLoading: showGuestAboutMode,
-        aboutError: "",
-        pageLoadingTitle: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingTitle,
-        pageLoadingDescription: this.buildPageLoadingData(undefined, { isLoggedIn: false, showAuditAboutMode: showGuestAboutMode }).pageLoadingDescription,
-        profileMenuItems: buildManagedProfileMenuItems(
-          Object.assign({}, this.data, {
-            isLoggedIn: false,
-            isAdmin: false,
-            canChangePassword: false,
-            showAuditAboutMode: showGuestAboutMode,
-          }),
-          typeof getApp === "function" && getApp() && getApp().globalData
-            ? getApp().globalData.runtimeConfig || { hideAudit: getApp().globalData.hideAudit }
-            : { hideAudit: false }
-        ),
-      });
+      const runtimeConfig =
+        typeof getApp === "function" && getApp() && getApp().globalData
+          ? getApp().globalData.runtimeConfig
+          : null;
+      this.setData(this.buildGuestState(runtimeConfig));
       this.refreshTabBarLoginState();
       wx.showToast({ title: "已退出登录", icon: "none" });
-      if (showGuestAboutMode) {
-        this.loadAbout();
-      }
       wx.switchTab({ url: "/pages/profile/index" });
     }
   },

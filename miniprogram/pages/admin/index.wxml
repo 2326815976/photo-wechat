@@ -718,17 +718,6 @@
                     >
                       删除订单
                     </button>
-
-                    <button
-                      class="album-toggle-btn {{item.enable_freeze ? 'album-toggle-btn--freeze-on' : 'album-toggle-btn--off'}}"
-                      data-id="{{item.id}}"
-                      bindtap="onToggleAlbumFreeze"
-                      hover-class="album-toggle-btn--active"
-                      disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
-                    >
-                      <image class="album-toggle-btn__icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                      <text class="album-toggle-btn__text">定格 {{item.enable_freeze ? "开启" : "关闭"}}</text>
-                    </button>
                   </view>
                 </view>
               </view>
@@ -1201,7 +1190,13 @@
 
             <block wx:elif="{{posePanelTab === 'tags'}}">
               <view class="pose-tags-toolbar">
-                <block wx:if="{{!poseTagSelectionMode}}">
+                <view class="pose-tags-toolbar__meta">
+                  <text class="pose-tags-toolbar__title">共 {{poseTagStats.length}} 个标签</text>
+                  <text class="pose-tags-toolbar__desc" wx:if="{{poseTagSelectionMode}}">已选择 {{poseTagSelectedCount}} 个标签</text>
+                  <text class="pose-tags-toolbar__desc" wx:else>已使用 {{poseTagUsedCount}} 个标签</text>
+                </view>
+
+                <view class="pose-tags-toolbar__actions" wx:if="{{!poseTagSelectionMode}}">
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--ghost"
                     bindtap="onRefreshPoseSection"
@@ -1221,9 +1216,9 @@
                   >
                     新增标签
                   </button>
-                </block>
+                </view>
 
-                <block wx:if="{{poseTagSelectionMode}}">
+                <view class="pose-tags-toolbar__actions pose-tags-toolbar__actions--selection" wx:if="{{poseTagSelectionMode}}">
                   <button
                     class="pose-toolbar-btn pose-toolbar-btn--ghost"
                     bindtap="onSelectAllPoseTags"
@@ -1245,7 +1240,7 @@
                   >
                     取消
                   </button>
-                </block>
+                </view>
               </view>
 
               <view class="pose-inline-error" wx:if="{{poseTagsError && poseTagsReady}}">
@@ -1309,50 +1304,53 @@
                       </view>
                     </view>
 
-                    <view class="pose-tag-card__quick-actions" wx:if="{{!poseTagSelectionMode}}">
+                    <view class="pose-tag-card__actions" wx:if="{{!poseTagSelectionMode}}">
                       <view
-                        class="pose-tag-quick-btn pose-tag-quick-btn--edit {{item.virtual || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-quick-btn--disabled' : ''}}"
+                        class="pose-tag-action-btn pose-tag-action-btn--edit {{item.virtual || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"
                         data-name="{{item.name}}"
                         data-virtual="{{item.virtual}}"
                         catchtap="onOpenPoseTagEditModal"
                       >
-                        <text class="pose-tag-quick-btn__icon">✎</text>
+                        <text class="pose-tag-action-btn__text">编辑</text>
                       </view>
                       <view
-                        class="pose-tag-quick-btn pose-tag-quick-btn--delete {{item.virtual || poseTagDeletingId === item.id || poseTagBatchDeleting || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-quick-btn--disabled' : ''}}"
+                        class="pose-tag-action-btn pose-tag-action-btn--delete {{item.virtual || poseTagDeletingId === item.id || poseTagBatchDeleting || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
                         data-id="{{item.id}}"
                         data-name="{{item.name}}"
                         data-virtual="{{item.virtual}}"
                         catchtap="onAskDeletePoseTag"
                       >
-                        <text class="pose-tag-quick-btn__icon">{{poseTagDeletingId === item.id ? "…" : "🗑️"}}</text>
+                        <text class="pose-tag-action-btn__text">{{poseTagDeletingId === item.id ? "删除中" : "删除"}}</text>
                       </view>
                     </view>
                   </view>
 
                   <view class="pose-tag-card__sort-row" wx:if="{{!poseTagSelectionMode}}">
                     <view class="pose-tag-sort-controls">
-                      <view
-                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveTop || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
-                        data-id="{{item.id}}"
-                        catchtap="onMovePoseTagTop"
-                      >
-                        置顶
-                      </view>
-                      <view
-                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveUp || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
-                        data-id="{{item.id}}"
-                        catchtap="onMovePoseTagUp"
-                      >
-                        上移
-                      </view>
-                      <view
-                        class="pose-tag-sort-btn {{item.virtual || !item.canMoveDown || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
-                        data-id="{{item.id}}"
-                        catchtap="onMovePoseTagDown"
-                      >
-                        下移
+                      <text class="pose-tag-sort-controls__label">排序</text>
+                      <view class="pose-tag-sort-controls__actions">
+                        <view
+                          class="pose-tag-action-btn pose-tag-action-btn--move {{item.virtual || !item.canMoveTop || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                          data-id="{{item.id}}"
+                          catchtap="onMovePoseTagTop"
+                        >
+                          置顶
+                        </view>
+                        <view
+                          class="pose-tag-action-btn pose-tag-action-btn--move {{item.virtual || !item.canMoveUp || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                          data-id="{{item.id}}"
+                          catchtap="onMovePoseTagUp"
+                        >
+                          上移
+                        </view>
+                        <view
+                          class="pose-tag-action-btn pose-tag-action-btn--move {{item.virtual || !item.canMoveDown || poseTagBatchDeleting || poseTagDeletingId !== 0 || poseTagUpdating || poseTagSortingId !== 0 ? 'pose-tag-action-btn--disabled' : ''}}"
+                          data-id="{{item.id}}"
+                          catchtap="onMovePoseTagDown"
+                        >
+                          下移
+                        </view>
                       </view>
                     </view>
                   </view>
@@ -1441,11 +1439,11 @@
         </block>
 
         <block wx:if="{{activeSection === 'webPages'}}">
-          <page-center-panel class="motion-fade-up" channel="web" embedded="{{true}}" />
+          <page-center-panel channel="web" embedded="{{true}}" />
         </block>
 
         <block wx:if="{{activeSection === 'miniprogramPages'}}">
-          <page-center-panel class="motion-fade-up" channel="miniprogram" embedded="{{true}}" />
+          <page-center-panel channel="miniprogram" embedded="{{true}}" />
         </block>
 
         <block wx:if="{{activeSection === 'albums'}}">
@@ -1474,7 +1472,7 @@
                   hover-class="booking-pill-btn--primary-active"
                   disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
                 >
-                  + 空间
+                  + 新增空间
                 </button>
               </view>
 
@@ -1521,7 +1519,7 @@
               </view>
             </scroll-view>
 
-            <view class="booking-search-row">
+            <view class="booking-search-row album-search-row">
               <view class="booking-search-box">
                 <image class="booking-search-box__icon" src="/images/icons/search-gray.svg" mode="aspectFit" />
                 <input
@@ -3088,34 +3086,6 @@
                 <image class="album-create-remove-icon" src="/images/icons/x-white.svg" mode="aspectFit" />
               </view>
             </view>
-          </view>
-        </view>
-
-        <view class="album-create-summary">
-          <text class="album-create-summary__title">配置摘要</text>
-          <view class="album-create-summary__row">
-            <text>访问密钥</text>
-            <text>{{albumCreateAutoKey ? "自动生成" : "手动输入"}}</text>
-          </view>
-          <view class="album-create-summary__row">
-            <text>欢迎信方式</text>
-            <text>{{albumCreateWelcomeLetterMode === 'envelope' ? "拆信封欢迎信" : (albumCreateWelcomeLetterMode === 'stamp' ? "右下角印章欢迎信" : "无欢迎信")}}</text>
-          </view>
-          <view class="album-create-summary__row">
-            <text>定格功能</text>
-            <text>{{albumCreateEnableFreeze ? "开启" : "关闭"}}</text>
-          </view>
-          <view class="album-create-summary__row">
-            <text>打赏功能</text>
-            <text>{{albumCreateEnableTipping ? "开启" : "关闭"}}</text>
-          </view>
-          <view class="album-create-summary__row">
-            <text>赞赏码</text>
-            <text>{{albumCreateEnableTipping ? (albumCreateDonationQrPreview ? "已选择" : "未上传") : "未启用"}}</text>
-          </view>
-          <view class="album-create-summary__row">
-            <text>有效期</text>
-            <text>{{albumCreateExpiryMode === 'days' ? (albumCreateExpiryDays + " 天") : ("至" + albumCreateExpiryDate)}}</text>
           </view>
         </view>
 

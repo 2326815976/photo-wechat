@@ -1,6 +1,5 @@
 const { requestJson } = require("../../../utils/cloudrun");
 const { clearStoredCookie } = require("../../../utils/auth");
-const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../../utils/runtime-config");
 const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
 function readPayloadMessage(payload, fallback) {
@@ -57,10 +56,7 @@ function readPayloadWarning(payload) {
 
 Page({
   data: {
-    safeTop: 0,
     serviceMissing: false,
-    hideAudit: false,
-    managedTitle: "删除账户",
 
     showConfirm: false,
     isDeleting: false,
@@ -69,33 +65,13 @@ Page({
     postDeleteWarning: "",
   },
 
-  applyRuntimeConfig(runtimeConfig) {
-    const normalized = normalizeRuntimeConfig(runtimeConfig);
-    const access = getManagedPageAccess(normalized, "profile-delete-account");
-    this.setData({
-      hideAudit: Boolean(normalized.hideAudit),
-      managedTitle:
-        String((access && (access.headerTitle || access.navText)) || "").trim() || "删除账户",
-    });
-    return normalized;
-  },
-
   async onLoad() {
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
-    const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
     this.setData({
-      safeTop,
       serviceMissing,
     });
-    this.applyRuntimeConfig(globalData.runtimeConfig || { hideAudit: globalData.hideAudit });
-
-    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
-      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
-        this.applyRuntimeConfig(runtimeConfig);
-      });
-    }
     await this.guardManagedAccess();
   },
 
@@ -111,21 +87,7 @@ Page({
     return !result.allowed;
   },
 
-  onUnload() {
-    if (typeof this._unsubscribeAuditConfig === "function") {
-      this._unsubscribeAuditConfig();
-    }
-    this._unsubscribeAuditConfig = null;
-  },
-
-  goBack() {
-    wx.navigateBack({
-      delta: 1,
-      fail: () => {
-        wx.switchTab({ url: "/pages/profile/index" });
-      },
-    });
-  },
+  onUnload() {},
 
   openConfirm() {
     this.setData({ showConfirm: true });
@@ -158,8 +120,8 @@ Page({
         postDeleteWarning: warning,
       });
       setTimeout(() => {
-        wx.reLaunch({ url: "/pages/index/index" });
-      }, 3000);
+        wx.switchTab({ url: "/pages/profile/index" });
+      }, 2600);
     } catch (e) {
       this.setData({ error: "系统错误，请稍后重试" });
     } finally {

@@ -1,13 +1,14 @@
-﻿<view class="page">
-  <app-header
+<view>
+  <secondary-page-shell
+    shell-class="page"
     managedPageKey="profile-bookings"
     title="我的预约记录"
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
+    subtitle=""
     fallbackTab="pages/profile/index"
-  />
-
-  <view class="content">
+    content-class="content"
+    useScrollView="{{true}}"
+    enableFlex="{{true}}"
+  >
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
@@ -109,9 +110,8 @@
         </view>
       </view>
     </view>
-  </view>
+  </secondary-page-shell>
 
-  <!-- 删除确认弹窗 -->
   <view class="modal-mask motion-fade-in" wx:if="{{showDeleteConfirmId}}" bindtap="closeDeleteConfirm"></view>
   <view class="modal motion-fade-in" wx:if="{{showDeleteConfirmId}}">
     <view class="modal-card motion-pop-in" catchtap="noop">
@@ -129,4 +129,3 @@
     </view>
   </view>
 </view>
-

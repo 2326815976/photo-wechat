@@ -2,6 +2,7 @@
 const {
   buildRuntimeConfigPreset,
   getDisplayedTabBarItems,
+  isTabBarPagePath,
   normalizeRuntimeConfig,
 } = require('../../utils/runtime-config');
 const {
@@ -75,8 +76,10 @@ Component({
     selectedPath: '',
     visible: false,
     isLoggedIn: false,
+    runtimeConfigReady: false,
     presentationMode: 'tabbar',
     hasBottomTabbar: true,
+    useOfficialCustomTabBar: false,
     runtimeConfig: buildRuntimeConfigPreset('standard'),
     list: hydrateTabBarItems(buildRuntimeConfigPreset('standard'), false),
   },
@@ -92,8 +95,26 @@ Component({
     attached() {
       const app = typeof getApp === 'function' ? getApp() : null;
       const globalData = app && app.globalData ? app.globalData : {};
-      const runtimeConfig = globalData.runtimeConfig || buildRuntimeConfigPreset('standard');
-      this.applyRuntimeConfig(runtimeConfig);
+      const auditConfigReady = Boolean(globalData.auditConfigReady);
+      const currentPages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+      const currentPage = Array.isArray(currentPages) && currentPages.length > 0
+        ? currentPages[currentPages.length - 1]
+        : null;
+      const useOfficialCustomTabBar = Boolean(
+        currentPage && typeof currentPage.getTabBar === 'function' && currentPage.getTabBar()
+      );
+
+      this.setData({ useOfficialCustomTabBar });
+
+      if (!auditConfigReady) {
+        this.setData({ visible: false });
+        if (app && typeof app.ensureAuditConfig === 'function') {
+          app.ensureAuditConfig().catch(() => {});
+        }
+      } else {
+        const runtimeConfig = globalData.runtimeConfig || buildRuntimeConfigPreset('standard');
+        this.applyRuntimeConfig(runtimeConfig);
+      }
 
       if (app && typeof app.subscribeMiniProgramRuntimeConfig === 'function') {
         this._unsubscribeRuntimeConfig = app.subscribeMiniProgramRuntimeConfig((nextRuntimeConfig) => {
@@ -109,10 +130,21 @@ Component({
         this.applyPresentation(app.getPagePresentation());
       }
 
+      if (app && typeof app.subscribeBackendStatus === 'function') {
+        this._unsubscribeBackendStatus = app.subscribeBackendStatus((status) => {
+          if (status && status.backendReady) {
+            this.refreshLoginState();
+          }
+        });
+      }
+
       this.refreshLoginState();
-      this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+      if (auditConfigReady) {
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+      }
     },
     detached() {
+      this.releaseSwitchLock();
       if (typeof this._unsubscribeRuntimeConfig === 'function') {
         this._unsubscribeRuntimeConfig();
       }
@@ -121,40 +153,71 @@ Component({
         this._unsubscribePresentation();
       }
       this._unsubscribePresentation = null;
+      if (typeof this._unsubscribeBackendStatus === 'function') {
+        this._unsubscribeBackendStatus();
+      }
+      this._unsubscribeBackendStatus = null;
     },
   },
   pageLifetimes: {
     show() {
+      this.releaseSwitchLock();
+      const currentPages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+      const currentPage = Array.isArray(currentPages) && currentPages.length > 0
+        ? currentPages[currentPages.length - 1]
+        : null;
+      const useOfficialCustomTabBar = Boolean(
+        currentPage && typeof currentPage.getTabBar === 'function' && currentPage.getTabBar()
+      );
+      this.setData({
+        useOfficialCustomTabBar,
+        selectedPath: resolveCurrentRouteFromStack(),
+      });
       this.refreshLoginState();
       this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
     },
   },
   methods: {
+    releaseSwitchLock() {
+      if (this._switchLockTimer) {
+        clearTimeout(this._switchLockTimer);
+      }
+      this._switchLockTimer = null;
+      this._switchingPath = '';
+    },
+
     applyList(list) {
       const nextList = Array.isArray(list) ? list : [];
-      const currentPath =
-        normalizeMiniProgramRoutePath(this.properties.currentPath) ||
-        normalizeMiniProgramRoutePath(this.data.selectedPath) ||
-        resolveCurrentRouteFromStack();
+      const pendingPath = normalizeMiniProgramRoutePath(this._switchingPath);
+      const selectedPath = normalizeMiniProgramRoutePath(this.data.selectedPath);
+      const currentRoute = resolveCurrentRouteFromStack();
+      const propertyPath = normalizeMiniProgramRoutePath(this.properties.currentPath);
+      const currentPath = pendingPath || currentRoute || selectedPath || propertyPath;
       let selectedIndex = currentPath
         ? nextList.findIndex((item) => item.pagePath === currentPath)
         : -1;
+
+      if (selectedIndex < 0 && selectedPath) {
+        selectedIndex = nextList.findIndex((item) => item.pagePath === selectedPath);
+      }
 
       if (selectedIndex < 0) {
         const selected = Number(this.data.selected);
         selectedIndex = Number.isFinite(selected) && selected >= 0 && selected < nextList.length ? selected : 0;
       }
 
-      const selectedPath = nextList[selectedIndex]
+      const nextSelectedPath = nextList[selectedIndex]
         ? String(nextList[selectedIndex].pagePath || '')
         : currentPath;
 
       this.setData({
         list: nextList,
         selected: selectedIndex < 0 ? 0 : selectedIndex,
-        selectedPath,
+        selectedPath: nextSelectedPath,
         visible:
+          !Boolean(this.data.useOfficialCustomTabBar) &&
           Boolean(this.properties.show) &&
+          Boolean(this.data.runtimeConfigReady) &&
           Boolean(this.data.hasBottomTabbar) &&
           nextList.length > 0,
       });
@@ -173,12 +236,15 @@ Component({
     applyRuntimeConfig(runtimeConfig) {
       const normalized = normalizeRuntimeConfig(runtimeConfig);
       const nextList = hydrateTabBarItems(normalized, this.data.isLoggedIn);
-      this.setData({ runtimeConfig: normalized });
+      this.setData({ runtimeConfig: normalized, runtimeConfigReady: true });
       this.applyList(nextList);
     },
 
     applyLoginState(isLoggedIn) {
       const nextLoggedIn = Boolean(isLoggedIn);
+      if (nextLoggedIn === Boolean(this.data.isLoggedIn)) {
+        return;
+      }
       const normalized = normalizeRuntimeConfig(this.data.runtimeConfig);
       const nextList = hydrateTabBarItems(normalized, nextLoggedIn);
       this.setData({ isLoggedIn: nextLoggedIn });
@@ -186,11 +252,24 @@ Component({
     },
 
     async refreshLoginState() {
+      const app = typeof getApp === 'function' ? getApp() : null;
+      const globalData = app && app.globalData ? app.globalData : {};
+      if (globalData.cloudRunService && !globalData.backendReady) {
+        return;
+      }
+
       try {
         const session = await getSession();
         const user = extractSessionUser(session);
         this.applyLoginState(Boolean(user && user.id));
       } catch (error) {
+        const errorCode = String((error && error.code) || '').trim();
+        if (
+          errorCode === 'TRANSIENT_BACKEND' ||
+          (globalData.cloudRunService && globalData.backendReconnecting)
+        ) {
+          return;
+        }
         this.applyLoginState(false);
       }
     },
@@ -202,17 +281,60 @@ Component({
       if (!path) return;
 
       const currentPath =
-        normalizeMiniProgramRoutePath(this.properties.currentPath) || resolveCurrentRouteFromStack();
+        resolveCurrentRouteFromStack() ||
+        normalizeMiniProgramRoutePath(this.properties.currentPath);
       if (currentPath === path) {
+        this.releaseSwitchLock();
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
         return;
       }
 
-      this.setData({ selectedPath: path });
+      if (this._switchingPath) {
+        return;
+      }
+
+      const list = Array.isArray(this.data.list) ? this.data.list : [];
+      const index = list.findIndex((item) => item.pagePath === path);
+
+      this._switchingPath = path;
+      this._switchLockTimer = setTimeout(() => {
+        this.releaseSwitchLock();
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+      }, 900);
+
+      if (index >= 0) {
+        this.setData({ selected: index, selectedPath: path });
+      } else {
+        this.setData({ selectedPath: path });
+      }
       const app = typeof getApp === 'function' ? getApp() : null;
       if (app && typeof app.resetPagePresentation === 'function') {
         app.resetPagePresentation();
       }
-      wx.reLaunch({ url: `/${path}` });
+
+      const revertSelection = () => {
+        const fallbackIndex = list.findIndex((item) => item.pagePath === currentPath);
+        this.releaseSwitchLock();
+        if (fallbackIndex >= 0) {
+          this.setData({ selected: fallbackIndex, selectedPath: currentPath });
+        } else {
+          this.setData({ selectedPath: currentPath });
+        }
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+      };
+
+      if (isTabBarPagePath(path, this.data.runtimeConfig)) {
+        wx.switchTab({
+          url: `/${path}`,
+          fail: revertSelection,
+        });
+        return;
+      }
+
+      wx.reLaunch({
+        url: `/${path}`,
+        fail: revertSelection,
+      });
     },
   },
 });

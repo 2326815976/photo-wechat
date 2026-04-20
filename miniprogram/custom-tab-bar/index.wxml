@@ -1,3 +1,13 @@
+<view class="tab-bootstrap-mask" wx:if="{{!runtimeConfigReady}}">
+  <view class="tab-bootstrap-mask__card">
+    <view class="tab-bootstrap-mask__orb">
+      <view class="tab-bootstrap-mask__spinner"></view>
+    </view>
+    <text class="tab-bootstrap-mask__title">正在同步页面配置</text>
+    <text class="tab-bootstrap-mask__desc">菜单准备完成后，再显示当前页面内容</text>
+  </view>
+</view>
+
 <view class="tab-bar" wx:if="{{visible}}">
   <view class="tab-inner">
     <view
@@ -7,7 +17,7 @@
       wx:for="{{list}}"
       wx:key="pagePath"
       data-path="{{item.pagePath}}"
-      bindtap="switchTab"
+      catchtap="switchTab"
     >
       <view class="tab-glow" wx:if="{{selectedPath === item.pagePath}}"></view>
       <view class="tab-icon-wrap {{selectedPath === item.pagePath ? 'tab-icon-wrap--active' : ''}}">

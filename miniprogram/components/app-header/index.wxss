@@ -5,23 +5,24 @@
   right: 0;
   z-index: 900;
   background: rgba(255, 251, 240, 0.95);
-  /* Web: backdrop-blur-md（12px） */
   backdrop-filter: blur(12px);
   border-bottom: 4rpx dashed rgba(93, 64, 55, 0.15);
   box-shadow: 0 4rpx 24rpx rgba(93, 64, 55, 0.08);
 }
 
 .header-inner {
-  /* Web: px-4 py-3 */
   padding: 24rpx 32rpx;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx; /* gap-2 */
+  gap: 16rpx;
   box-sizing: border-box;
 }
 
-/* 返回 + 标题（无副标题）时，贴近 Web 端的简洁页头布局 */
+.header-inner--with-tag {
+  align-items: flex-start;
+}
+
 .header-inner--simple {
   justify-content: flex-start;
   gap: 24rpx;
@@ -33,18 +34,16 @@
 
 .header-inner--simple .title {
   font-size: 48rpx;
-  font-weight: 700; /* Web: font-bold */
+  font-weight: 700;
   font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
   line-height: 1;
 }
 
-/* Web: 带返回 + 带副标题的页头使用 py-2 */
 .header-inner--back-sub {
   padding-top: 16rpx;
   padding-bottom: 16rpx;
 }
 
-/* 首页样式：左右布局 */
 .header-inner--home {
   justify-content: space-between;
 }
@@ -61,7 +60,7 @@
   width: 64rpx;
   height: 64rpx;
   border-radius: 999rpx;
-  background: rgba(255, 200, 87, 0.20);
+  background: rgba(255, 200, 87, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,7 +68,7 @@
 }
 
 .back-btn--active {
-  background: rgba(255, 200, 87, 0.30);
+  background: rgba(255, 200, 87, 0.3);
 }
 
 .back-icon {
@@ -82,7 +81,10 @@
   min-width: 0;
 }
 
-/* 首页标题：左对齐 */
+.header-inner--with-tag .title-wrap {
+  padding-top: 2rpx;
+}
+
 .title-wrap--home {
   flex: 1;
   min-width: 0;
@@ -100,7 +102,6 @@
   font-family: "ZQKNNY", "YouYuan", "幼圆", "Microsoft YaHei", sans-serif;
 }
 
-/* 首页大标题 */
 .title--home {
   font-size: 40rpx;
   font-weight: 700;
@@ -110,14 +111,21 @@
 
 .tag {
   flex: none;
-  /* Web: px-2.5 py-0.5 */
   padding: 4rpx 20rpx;
-  background: rgba(255, 200, 87, 0.30);
+  background: rgba(255, 200, 87, 0.3);
   border-radius: 999rpx;
   transform: rotate(-1deg);
 }
 
-/* 首页副标题标签 */
+.header-inner--with-tag .tag {
+  min-height: 36rpx;
+  padding: 0 20rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
 .tag--home {
   padding: 4rpx 20rpx;
   transform: rotate(-1deg);
@@ -131,11 +139,17 @@
   white-space: nowrap;
 }
 
+.header-inner--with-tag .tag-text {
+  display: block;
+  line-height: 1;
+}
+
 @keyframes home-header-in {
   0% {
     opacity: 0;
     transform: translateY(-20rpx);
   }
+
   100% {
     opacity: 1;
     transform: translateY(0);
