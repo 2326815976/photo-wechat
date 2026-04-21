@@ -362,6 +362,12 @@
   transform: translateY(-2rpx);
 }
 
+.card--paging-skeleton {
+  background: rgba(255, 255, 255, 0.88);
+  border: 2rpx solid rgba(93, 64, 55, 0.06);
+  box-shadow: 0 8rpx 22rpx rgba(93, 64, 55, 0.08);
+}
+
 .img-wrap {
   position: relative;
   overflow: hidden;
@@ -382,6 +388,29 @@
   width: 100%;
   overflow: hidden;
   background: linear-gradient(135deg, #f8f2e6, #efe5d2);
+}
+
+.img-box--paging-skeleton {
+  background: linear-gradient(135deg, rgba(255, 251, 240, 0.98) 0%, rgba(255, 247, 233, 0.98) 100%);
+}
+
+.paging-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 248, 232, 0.92) 52%, rgba(255, 244, 224, 0.96) 100%);
+}
+
+.paging-skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  width: 42%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.52) 48%, rgba(255, 255, 255, 0) 100%);
+  animation: paging-skeleton-shimmer 1.45s ease-in-out infinite;
 }
 
 .img {
@@ -775,12 +804,61 @@
   gap: 8rpx;
 }
 
+.meta--paging-skeleton {
+  gap: 0;
+}
+
 .meta-row {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   min-height: 24rpx;
+}
+
+.meta-row--paging-skeleton {
+  gap: 12rpx;
+}
+
+.meta-line {
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgba(93, 64, 55, 0.08) 0%, rgba(93, 64, 55, 0.16) 50%, rgba(93, 64, 55, 0.08) 100%);
+  background-size: 220% 100%;
+  animation: paging-skeleton-line 1.6s ease-in-out infinite;
+}
+
+.meta-line--wide {
+  flex: 1;
+  height: 20rpx;
+}
+
+.meta-line--short {
+  width: 92rpx;
+  height: 20rpx;
+}
+
+@keyframes paging-skeleton-shimmer {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes paging-skeleton-line {
+  0% {
+    background-position: 0% 50%;
+    opacity: 0.72;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 1;
+  }
+  100% {
+    background-position: 0% 50%;
+    opacity: 0.72;
+  }
 }
 
 .location-spacer {

@@ -231,7 +231,7 @@ Component({
 
     applyPresentation(presentation) {
       const pagePath = normalizeMiniProgramRoutePath(this.properties.currentPath) || resolveCurrentRouteFromStack();
-      const state = resolvePagePresentationState(presentation, pagePath);
+      const state = resolvePagePresentationState(presentation, pagePath, this.data.runtimeConfig);
       this.setData({
         presentationMode: state.mode,
         hasBottomTabbar: Boolean(state.hasBottomTabbar),
@@ -243,6 +243,12 @@ Component({
       const normalized = normalizeRuntimeConfig(runtimeConfig);
       const nextList = hydrateTabBarItems(normalized, this.data.isLoggedIn);
       this.setData({ runtimeConfig: normalized, runtimeConfigReady: true });
+
+      const app = typeof getApp === 'function' ? getApp() : null;
+      if (app && typeof app.getPagePresentation === 'function') {
+        this.applyPresentation(app.getPagePresentation());
+        return;
+      }
       this.applyList(nextList);
     },
 
@@ -359,3 +365,4 @@ Component({
     },
   },
 });
+

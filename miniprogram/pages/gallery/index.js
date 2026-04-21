@@ -16,6 +16,7 @@ const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
 } = require("../../utils/stable-waterfall");
+const { createPagingSkeletonItems } = require("../../utils/paging-skeleton");
 const {
   STORY_OPENING_DURATION_MS,
   STORY_CLOSING_DURATION_MS,
@@ -34,6 +35,7 @@ const GALLERY_LOAD_AHEAD_PX = 260;
 const GALLERY_VIEWPORT_FILL_BUFFER_PX = 48;
 const GALLERY_INITIAL_AUTOFILL_MAX_BATCHES = 2;
 const GALLERY_SWITCH_OVERLAY_TRACK_COUNT = 6;
+const GALLERY_PAGING_SKELETON_COUNT = 8;
 const GALLERY_PAGE_READY_DELAY_MS = 120;
 const GALLERY_TAG_GUIDE_TRIGGER_DELAY_MS = 120;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
@@ -683,6 +685,8 @@ Page({
     photos: [],
     left: [],
     right: [],
+    pagingSkeletonLeft: [],
+    pagingSkeletonRight: [],
     sortMode: "time_desc",
     filterMode: "all",
     filterDateStart: "",
@@ -960,6 +964,10 @@ Page({
   syncTabBar(selectedPath) {
     if (typeof this.getTabBar !== "function") return;
     const tab = this.getTabBar();
+    if (tab && typeof tab.syncForPage === "function") {
+      tab.syncForPage(selectedPath);
+      return;
+    }
     if (tab && typeof tab.setData === "function") {
       tab.setData({
         selectedPath: String(selectedPath || "").trim().replace(/^\/+/, ""),
@@ -1393,6 +1401,8 @@ Page({
       photos: [],
       left: [],
       right: [],
+      pagingSkeletonLeft: [],
+      pagingSkeletonRight: [],
     });
   },
 
@@ -1673,6 +1683,46 @@ Page({
     );
   },
 
+  clearPagingSkeletons() {
+    if (
+      (!Array.isArray(this.data.pagingSkeletonLeft) || this.data.pagingSkeletonLeft.length === 0) &&
+      (!Array.isArray(this.data.pagingSkeletonRight) || this.data.pagingSkeletonRight.length === 0)
+    ) {
+      return;
+    }
+
+    this.setData({
+      pagingSkeletonLeft: [],
+      pagingSkeletonRight: [],
+    });
+  },
+
+  showPagingSkeletons(count) {
+    const safeCount = Math.max(0, Number(count || 0));
+    if (!(safeCount > 0)) {
+      this.clearPagingSkeletons();
+      return;
+    }
+
+    const baseLeft = resolveGalleryPhotoListRatios(this.data.left || [], this.photoRatioMap);
+    const baseRight = resolveGalleryPhotoListRatios(this.data.right || [], this.photoRatioMap);
+    const skeletons = createPagingSkeletonItems(safeCount, {
+      prefix: "gallery",
+      seed: Number(this.galleryLoadTicket || 0),
+    });
+    const columns = this.buildColumnsFromPhotos(skeletons, {
+      left: baseLeft,
+      right: baseRight,
+      leftHeight: this.calculatePhotoListHeight(baseLeft),
+      rightHeight: this.calculatePhotoListHeight(baseRight),
+    });
+
+    this.setData({
+      pagingSkeletonLeft: columns.left.slice(baseLeft.length),
+      pagingSkeletonRight: columns.right.slice(baseRight.length),
+    });
+  },
+
   canAppendResolvedPhotoList(nextList) {
     const currentList = Array.isArray(this.data.photos) ? this.data.photos : [];
     const resolvedNextList = Array.isArray(nextList) ? nextList : [];
@@ -1942,8 +1992,6 @@ Page({
     if (currentRatio > 0 && Math.abs(currentRatio - ratio) < 0.08) {
       return;
     }
-
-    this.scheduleRelayout();
   },
 
   onPhotoError(e) {
@@ -2151,6 +2199,7 @@ Page({
         this.setData({ loading: true });
       }
     } else {
+      this.showPagingSkeletons(GALLERY_PAGING_SKELETON_COUNT);
       this.setData({ loadingMore: true });
     }
 
@@ -2281,6 +2330,8 @@ Page({
         loading: false,
         switchingFolderLoading: shouldKeepSwitchOverlay,
         loadingMore: false,
+        pagingSkeletonLeft: [],
+        pagingSkeletonRight: [],
       };
       if (pageNo === 1) {
         nextState.initialContentReady = true;

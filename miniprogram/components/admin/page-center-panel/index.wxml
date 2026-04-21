@@ -197,12 +197,15 @@
                         <text class="code-pill code-pill--{{item.lifecycleKey}}">{{item.lifecycleLabel}}</text>
                         <text class="code-pill code-pill--compat" wx:if="{{item.readOnly}}">旧体系兼容</text>
                       </view>
-                      <text class="code-card__code">{{item.betaCode}}</text>
+                      <view class="code-card__code-row">
+                        <text class="code-card__code">{{item.betaCode}}</text>
+                        <button class="mini-btn code-card__copy-btn" bindtap="onCopyBetaCode" data-beta-code="{{item.betaCode}}">复制</button>
+                      </view>
                       <text class="code-card__hint" wx:if="{{item.readOnly && item.manageHint}}">{{item.manageHint}}</text>
                     </view>
-                    <view class="inline-actions inline-actions--compact code-card__actions">
-                      <button class="mini-btn" bindtap="onEditBetaCode" data-page-key="{{dialogRow.pageKey}}" data-code-id="{{item.id}}">{{item.editActionText}}</button>
-                      <button class="mini-btn mini-btn--danger" bindtap="onDestroyBetaCode" data-page-key="{{dialogRow.pageKey}}" data-code-id="{{item.id}}" data-beta-name="{{item.betaName}}" disabled="{{savingKey ? true : false}}">删除</button>
+                    <view class="code-card__actions">
+                      <button class="mini-btn code-card__action-btn" bindtap="onEditBetaCode" data-page-key="{{dialogRow.pageKey}}" data-code-id="{{item.id}}">{{item.editActionText}}</button>
+                      <button class="mini-btn mini-btn--danger code-card__action-btn" bindtap="onDestroyBetaCode" data-page-key="{{dialogRow.pageKey}}" data-code-id="{{item.id}}" data-beta-name="{{item.betaName}}" disabled="{{savingKey ? true : false}}">删除</button>
                     </view>
                   </view>
                 </view>
@@ -231,20 +234,31 @@
 
               <text class="helper-text" wx:if="{{dialogRow.supportsSecondaryOrder}}">这里的顺序会同步到登录后的「我的」页；只有登录后菜单会参与这里的排序。</text>
 
-              <view class="online-actions {{(!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder) ? '' : 'online-actions--single'}}">
-                <view class="online-actions__item" wx:if="{{!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder}}">
-                  <button class="mini-btn online-actions__btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="up" data-scope="{{dialogRow.supportsSecondaryOrder ? 'profile-authenticated-secondary' : 'primary-nav'}}" disabled="{{savingKey ? true : (dialogRow.supportsSecondaryOrder ? dialogRow.secondaryNavRank <= 1 : (dialogRow.forcedHomeEntry || dialogRow.navRank <= 1))}}">前移</button>
-                </view>
-                <view class="online-actions__item" wx:if="{{!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder}}">
-                  <button class="mini-btn online-actions__btn online-actions__move-btn" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="down" data-scope="{{dialogRow.supportsSecondaryOrder ? 'profile-authenticated-secondary' : 'primary-nav'}}" disabled="{{savingKey ? true : (dialogRow.supportsSecondaryOrder ? (!dialogRow.secondaryNavRank || dialogRow.secondaryNavRank >= dialogRow.secondaryNavTotal) : (dialogRow.forcedHomeEntry || !dialogRow.navRank || dialogRow.navRank >= dialogRow.navTotal))}}">后移</button>
-                </view>
-                <view class="online-actions__item">
-                  <button class="mini-btn mini-btn--strong online-actions__btn online-actions__save-btn" bindtap="onDialogSubmit" data-action="online" disabled="{{(savingKey ? true : false) || (!dialogRow.isSecondaryPage && !dialogRow.navSupported)}}">{{dialogRow.isSecondaryPage ? '保存并显示' : '保存'}}</button>
-                </view>
+              <view class="online-actions {{(!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder) ? 'online-actions--triple' : 'online-actions--single'}}">
+                <button wx:if="{{!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder}}" class="mini-btn online-actions__btn online-actions__btn--secondary" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="up" data-scope="{{dialogRow.supportsSecondaryOrder ? 'profile-authenticated-secondary' : 'primary-nav'}}" disabled="{{savingKey ? true : (dialogRow.supportsSecondaryOrder ? dialogRow.secondaryNavRank <= 1 : (dialogRow.forcedHomeEntry || dialogRow.navRank <= 1))}}">前移</button>
+                <button wx:if="{{!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder}}" class="mini-btn online-actions__btn online-actions__btn--secondary" bindtap="onMoveNav" data-page-key="{{dialogRow.pageKey}}" data-direction="down" data-scope="{{dialogRow.supportsSecondaryOrder ? 'profile-authenticated-secondary' : 'primary-nav'}}" disabled="{{savingKey ? true : (dialogRow.supportsSecondaryOrder ? (!dialogRow.secondaryNavRank || dialogRow.secondaryNavRank >= dialogRow.secondaryNavTotal) : (dialogRow.forcedHomeEntry || !dialogRow.navRank || dialogRow.navRank >= dialogRow.navTotal))}}">后移</button>
+                <button class="mini-btn mini-btn--strong online-actions__btn online-actions__btn--primary" bindtap="onDialogSubmit" data-action="online" disabled="{{(savingKey ? true : false) || (!dialogRow.isSecondaryPage && !dialogRow.navSupported)}}">{{dialogRow.isSecondaryPage ? '保存并显示' : '保存'}}</button>
               </view>
             </view>
 
           </block>
+        </view>
+      </view>
+    </view>
+
+    <view class="confirm-mask motion-fade-in" wx:if="{{betaDeleteConfirm}}" bindtap="cancelDestroyBetaCode"></view>
+    <view class="confirm-modal motion-fade-in" wx:if="{{betaDeleteConfirm}}">
+      <view class="confirm-card motion-pop-in" catchtap="noop">
+        <view class="confirm-icon-wrap">
+          <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+        </view>
+        <text class="confirm-title">删除内测码？</text>
+        <text class="confirm-text">删除后该内测码会立即失效，且无法继续使用。</text>
+        <text class="confirm-tip">当前内测码：{{betaDeleteConfirm.betaName || '未命名内测码'}}</text>
+
+        <view class="confirm-actions">
+          <button class="confirm-btn confirm-btn--ghost" bindtap="cancelDestroyBetaCode" disabled="{{savingKey === ('destroy:' + betaDeleteConfirm.codeId)}}">再想想</button>
+          <button class="confirm-btn confirm-btn--danger" bindtap="confirmDestroyBetaCode" disabled="{{savingKey === ('destroy:' + betaDeleteConfirm.codeId)}}">{{savingKey === ('destroy:' + betaDeleteConfirm.codeId) ? '删除中...' : '确认删除'}}</button>
         </view>
       </view>
     </view>

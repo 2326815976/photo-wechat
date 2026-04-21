@@ -250,6 +250,9 @@ function normalizeTabBarItems(input) {
     const rawKey = toText(row.key);
     const matchedByKey = rawKey ? TAB_KEY_MAP[rawKey] : null;
     const option = matchedByPath || matchedByKey || null;
+    if (!option || !option.pagePath) {
+      return;
+    }
     const resolvedPagePath = pagePath || (option && option.pagePath) || '';
     if (!resolvedPagePath || seen.has(resolvedPagePath)) {
       return;
@@ -261,7 +264,7 @@ function normalizeTabBarItems(input) {
       ? ((option && option.defaultText) || '我的')
       : toText(row.text) || (option && option.defaultText) || '页面';
     const guestText = isProfileTab
-      ? ((option && option.defaultGuestText) || text)
+      ? text
       : toText(row.guestText) ||
         toText(row.guest_label) ||
         (option && option.defaultGuestText) ||

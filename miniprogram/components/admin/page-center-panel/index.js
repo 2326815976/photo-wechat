@@ -37,6 +37,7 @@ const SECONDARY_PAGE_PARENT_MAP = new Map([
   ["profile-edit", "profile"],
   ["profile-bookings", "profile"],
   ["profile-beta", "profile"],
+  ["about", "profile"],
   ["profile-change-password", "profile"],
   ["profile-delete-account", "profile"],
   ["album-detail", "album"],
@@ -45,11 +46,16 @@ const PROFILE_GUEST_SECONDARY_PAGE_KEYS = new Set([
   "login",
   "register",
 ]);
-const MINIPROGRAM_HIDDEN_PAGE_KEYS = new Set(["login", "register"]);
+const MINIPROGRAM_HIDDEN_PAGE_KEYS = new Set([
+  "login",
+  "register",
+  "profile-change-password",
+]);
 const PROFILE_AUTHENTICATED_SECONDARY_PAGE_KEYS = new Set([
   "profile-edit",
   "profile-bookings",
   "profile-beta",
+  "about",
   "profile-change-password",
   "profile-delete-account",
 ]);
@@ -1233,6 +1239,7 @@ Component({
     dialogMode: "",
     dialogPageKey: "",
     dialogRow: null,
+    betaDeleteConfirm: null,
     channelTitle: CHANNEL_META.web.title,
     channelBadge: CHANNEL_META.web.badge,
     channelDesc: CHANNEL_META.web.desc,
@@ -1384,7 +1391,37 @@ Component({
   },
 
   closeActionDialog() {
-    this.setData({ dialogMode: "", dialogPageKey: "", dialogRow: null });
+    this.setData({ dialogMode: "", dialogPageKey: "", dialogRow: null, betaDeleteConfirm: null });
+  },
+
+  cancelDestroyBetaCode() {
+    const current = this.data.betaDeleteConfirm;
+    if (!current) return;
+    if (this.data.savingKey === `destroy:${normalizeText(current.codeId)}`) return;
+    this.setData({ betaDeleteConfirm: null });
+  },
+
+  async confirmDestroyBetaCode() {
+    const current = this.data.betaDeleteConfirm;
+    const codeId = normalizeText(current && current.codeId);
+    if (!codeId) return;
+    this.setData({ savingKey: `destroy:${codeId}` });
+    try {
+      const response = await requestJson(`/api/admin/page-center/beta-codes/${encodeURIComponent(codeId)}`, {
+        method: "DELETE",
+        timeout: 10000,
+      });
+      if (response && response.error) {
+        throw new Error(String(response.error || "???????"));
+      }
+      this.setData({ betaDeleteConfirm: null });
+      await this.loadOverview();
+      this.showNotice("success", normalizeText(response && response.message) || "??????");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "???????"));
+    } finally {
+      this.setData({ savingKey: "" });
+    }
   },
 
   updateRow(pageKey, updater) {
@@ -1950,6 +1987,20 @@ Component({
     );
   },
 
+  onCopyBetaCode(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const betaCode = normalizeText(dataset.betaCode);
+    if (!betaCode) {
+      this.showNotice("error", "暂无可复制的内测码");
+      return;
+    }
+    wx.setClipboardData({
+      data: betaCode,
+      success: () => this.showNotice("success", "内测码已复制"),
+      fail: () => this.showNotice("error", "复制内测码失败，请重试"),
+    });
+  },
+
   async onSaveBetaCode(e) {
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const pageKey = normalizeText(dataset.pageKey);
@@ -1994,44 +2045,23 @@ Component({
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const pageKey = normalizeText(dataset.pageKey);
     const codeId = normalizeText(dataset.codeId);
-    const betaName = normalizeText(dataset.betaName) || "该内测码";
+    const betaName = normalizeText(dataset.betaName) || "????";
     if (!codeId) return;
     const row = this.findRow(pageKey);
     const code = row && Array.isArray(row.betaCodesVisible)
       ? row.betaCodesVisible.find((item) => item.id === codeId)
       : null;
     if (code && code.readOnly) {
-      this.showNotice("info", code.manageHint || "旧体系兼容码在这里仅支持查看，不支持删除。");
+      this.showNotice("info", code.manageHint || "?????????????????????");
       return;
     }
-    const confirmed = await new Promise((resolve) => {
-      wx.showModal({
-        title: "确认删除",
-        content: `确认删除“${betaName}”？\n\n删除后该内测码将立即失效，且无法继续使用。`,
-        confirmText: "确认删除",
-        confirmColor: "#A34C4C",
-        cancelText: "取消",
-        success: (res) => resolve(Boolean(res && res.confirm)),
-        fail: () => resolve(false),
-      });
+    this.setData({
+      betaDeleteConfirm: {
+        pageKey,
+        codeId,
+        betaName,
+      },
     });
-    if (!confirmed) return;
-    this.setData({ savingKey: `destroy:${codeId}` });
-    try {
-      const response = await requestJson(`/api/admin/page-center/beta-codes/${encodeURIComponent(codeId)}`, {
-        method: "DELETE",
-        timeout: 10000,
-      });
-      if (response && response.error) {
-        throw new Error(String(response.error || "删除内测码失败"));
-      }
-      await this.loadOverview();
-      this.showNotice("success", normalizeText(response && response.message) || "内测码已删除");
-    } catch (error) {
-      this.showNotice("error", readErrorMessage(error, "删除内测码失败"));
-    } finally {
-      this.setData({ savingKey: "" });
-    }
   },
 
   async viewPage(pageKey) {

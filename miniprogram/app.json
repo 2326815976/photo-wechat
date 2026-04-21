@@ -12,7 +12,7 @@
     "pages/register/index",
     "pages/profile/edit/index",
     "pages/profile/bookings/index",
-    "pages/profile/change-password/index",
+    "pages/profile/about/index",
     "pages/profile/delete-account/index"
   ],
   "subpackages": [

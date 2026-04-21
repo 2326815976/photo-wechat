@@ -1,6 +1,6 @@
 <page-meta page-style="{{(switchingFolderLoading || pendingFolderPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
 <view wx:if="{{!pageScaffoldReady}}" class="page">
-  <view class="content">
+  <view class="page-loading-shell page-loading-shell--full">
     <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2">
       <view class="admin-loading-card__orb">
         <view class="admin-loading-card__spinner"></view>
@@ -29,12 +29,14 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:if="{{loading && !album}}">
-      <view class="admin-loading-card__orb">
-        <view class="admin-loading-card__spinner"></view>
+    <view class="page-loading-shell page-loading-shell--with-header" wx:if="{{loading && !album}}">
+      <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2">
+        <view class="admin-loading-card__orb">
+          <view class="admin-loading-card__spinner"></view>
+        </view>
+        <text class="admin-loading-card__title">拾光中...</text>
+        <text class="admin-loading-card__desc">正在加载页面</text>
       </view>
-      <text class="admin-loading-card__title">拾光中...</text>
-      <text class="admin-loading-card__desc">正在加载页面</text>
     </view>
 
     <view wx:if="{{album}}">
@@ -110,7 +112,7 @@
       </view>
 
       <view class="gallery-content-shell">
-        <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingFolderPhotoIds.length > 0}}" catchtouchmove="noop">
+        <view class="album-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingFolderPhotoIds.length > 0}}" catchtouchmove="noop" style="top: {{folderSwitchOverlayTopPx}}px;">
           <view class="admin-loading-card admin-loading-card--compact">
             <view class="admin-loading-card__orb">
               <view class="admin-loading-card__spinner"></view>
@@ -122,7 +124,7 @@
 
       <view class="grid {{rightPhotos.length === 0 ? 'grid--single' : ''}} motion-fade-up motion-delay-4" wx:if="{{photos.length > 0}}">
         <view class="grid-col album-grid-col album-grid-col--left">
-          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
+          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}}" wx:for="{{leftPhotos}}" wx:key="id" style="animation-delay: {{140 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap {{item.story_visible ? 'photo-img-wrap--story-open' : ''}}" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_visible && item.has_story}}">
                 <view class="photo-story-panel {{item.story_phase === 'closing' ? 'photo-story-panel--closing' : item.story_phase === 'opening' ? 'photo-story-panel--opening' : ''}}" data-id="{{item.id}}" catchtap="toggleStory">
@@ -204,10 +206,20 @@
               </button>
             </view>
           </view>
+          <view class="photo-card photo-card--paging-skeleton" wx:for="{{pagingSkeletonLeftPhotos}}" wx:key="id">
+            <view class="photo-img-wrap">
+              <view class="photo-img-box photo-img-box--paging-skeleton" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                <view class="paging-skeleton-shimmer"></view>
+              </view>
+            </view>
+            <view class="photo-actions photo-actions--paging-skeleton">
+              <view class="paging-meta-line paging-meta-line--wide"></view>
+            </view>
+          </view>
         </view>
 
         <view class="grid-col album-grid-col album-grid-col--right">
-          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}} motion-fade-up" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
+          <view class="photo-card {{item.story_highlight ? 'photo-card--story-highlight' : ''}}" wx:for="{{rightPhotos}}" wx:key="id" style="animation-delay: {{160 + (index % 8) * 30}}ms;">
             <view class="photo-img-wrap {{item.story_visible ? 'photo-img-wrap--story-open' : ''}}" data-id="{{item.id}}" bindtap="openPhotoFullscreen">
               <block wx:if="{{item.story_visible && item.has_story}}">
                 <view class="photo-story-panel {{item.story_phase === 'closing' ? 'photo-story-panel--closing' : item.story_phase === 'opening' ? 'photo-story-panel--opening' : ''}}" data-id="{{item.id}}" catchtap="toggleStory">
@@ -287,6 +299,16 @@
                 <image class="pin-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
                 <text>{{item.is_public ? '已定格' : '定格'}}</text>
               </button>
+            </view>
+          </view>
+          <view class="photo-card photo-card--paging-skeleton" wx:for="{{pagingSkeletonRightPhotos}}" wx:key="id">
+            <view class="photo-img-wrap">
+              <view class="photo-img-box photo-img-box--paging-skeleton" style="padding-top: {{item.__media_padding_top || '133.3333%'}};">
+                <view class="paging-skeleton-shimmer"></view>
+              </view>
+            </view>
+            <view class="photo-actions photo-actions--paging-skeleton">
+              <view class="paging-meta-line paging-meta-line--wide"></view>
             </view>
           </view>
         </view>

@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "关于",
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
+}

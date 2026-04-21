@@ -906,6 +906,28 @@ button::after {
   overflow-x: auto;
 }
 
+.pose-tabs-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.pose-tabs-bar .pose-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.pose-tabs-bar__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10rpx;
+  flex-wrap: nowrap;
+}
+
 .pose-tab-item {
   position: relative;
   flex: none;
@@ -1004,6 +1026,13 @@ button::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.pose-toolbar-btn--compact {
+  min-width: 112rpx;
+  height: 56rpx;
+  padding: 0 18rpx !important;
+  font-size: 20rpx;
 }
 
 .pose-toolbar-btn--ghost {
@@ -1919,6 +1948,18 @@ button::after {
   justify-content: flex-start;
   flex-wrap: wrap;
   gap: 12rpx;
+}
+
+.pose-tags-toolbar__actions--pair {
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.pose-tags-toolbar__actions--pair .pose-toolbar-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto !important;
+  padding: 0 12rpx !important;
 }
 
 .pose-tags-toolbar__actions--selection {

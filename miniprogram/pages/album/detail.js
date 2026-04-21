@@ -9,6 +9,7 @@ const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
 } = require("../../utils/stable-waterfall");
+const { createPagingSkeletonItems } = require("../../utils/paging-skeleton");
 const {
   STORY_OPENING_DURATION_MS,
   STORY_CLOSING_DURATION_MS,
@@ -22,6 +23,7 @@ const {
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const ALBUM_SWITCH_OVERLAY_TRACK_COUNT = 6;
+const ALBUM_PAGING_SKELETON_COUNT = 8;
 const SHARE_TITLE = "「拾光谣」相册分享";
 
 function parseDateTimeUTC8(value) {
@@ -357,25 +359,49 @@ const FOLDER_GUIDE_SEEN_KEY = "album_folder_tabs_guide_seen_v1";
 const PHOTO_PAGE_SIZE = 20;
 const PHOTO_BULK_PAGE_SIZE = 100;
 
-function computeToolbarStickyTop(safeTop) {
-  let windowWidth = 375;
+function readWindowWidth() {
   try {
     if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
       const info = wx.getWindowInfo();
-      windowWidth = Number(info && info.windowWidth) || windowWidth;
-    } else if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
-      const info = wx.getSystemInfoSync();
-      windowWidth = Number(info && info.windowWidth) || windowWidth;
+      const windowWidth = Number(info && info.windowWidth);
+      if (Number.isFinite(windowWidth) && windowWidth > 0) {
+        return windowWidth;
+      }
     }
   } catch (error) {
     // ignore
   }
 
-  const unit = Math.max(windowWidth, 320) / 750;
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      const windowWidth = Number(info && info.windowWidth);
+      if (Number.isFinite(windowWidth) && windowWidth > 0) {
+        return windowWidth;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  return 375;
+}
+
+function convertRpxToPx(value) {
+  const windowWidth = Math.max(readWindowWidth(), 320);
+  return Math.round((Number(value || 0) * windowWidth) / 750);
+}
+
+function computeToolbarStickyTop(safeTop) {
+  const unit = Math.max(readWindowWidth(), 320) / 750;
   const headerInnerHeight = 96 * unit; // app-header back-sub 高度
   // 与页头无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝。
   const top = Number(safeTop || 0) + headerInnerHeight - 1;
   return Math.max(0, Math.round(top));
+}
+
+function computeAlbumSwitchOverlayTop(safeTop) {
+  return computeToolbarStickyTop(safeTop) + convertRpxToPx(92);
 }
 
 function splitWaterfallColumns(list, options) {
@@ -524,6 +550,7 @@ Page({
   data: {
     safeTop: 0,
     toolbarStickyTop: 0,
+    folderSwitchOverlayTopPx: 0,
     serviceMissing: false,
     backendReady: false,
     backendReconnecting: false,
@@ -559,6 +586,8 @@ Page({
     photos: [],
     leftPhotos: [],
     rightPhotos: [],
+    pagingSkeletonLeftPhotos: [],
+    pagingSkeletonRightPhotos: [],
 
     selectedPhotoMap: {},
     selectedCount: 0,
@@ -603,6 +632,7 @@ Page({
   fullPhotosByFolder: null,
   _lastAlbumAutoLoadAt: 0,
   _windowHeight: 0,
+  loadingNextPhotoPage: false,
 
   async onLoad(options) {
     const app = getApp();
@@ -659,6 +689,7 @@ Page({
     this.setData({
       safeTop,
       toolbarStickyTop: computeToolbarStickyTop(safeTop),
+      folderSwitchOverlayTopPx: computeAlbumSwitchOverlayTop(safeTop),
       serviceMissing,
       backendReady,
       backendReconnecting,
@@ -831,9 +862,20 @@ Page({
   },
 
   syncToolbarStickyTop() {
-    const fallbackTop = computeToolbarStickyTop(this.data.safeTop);
-    if (Math.abs(fallbackTop - Number(this.data.toolbarStickyTop || 0)) >= 1) {
-      this.setData({ toolbarStickyTop: fallbackTop });
+    const safeTop = Number(this.data.safeTop || 0);
+    const nextToolbarStickyTop = computeToolbarStickyTop(safeTop);
+    const nextFolderSwitchOverlayTopPx = computeAlbumSwitchOverlayTop(safeTop);
+    const nextData = {};
+
+    if (Math.abs(nextToolbarStickyTop - Number(this.data.toolbarStickyTop || 0)) >= 1) {
+      nextData.toolbarStickyTop = nextToolbarStickyTop;
+    }
+    if (Math.abs(nextFolderSwitchOverlayTopPx - Number(this.data.folderSwitchOverlayTopPx || 0)) >= 1) {
+      nextData.folderSwitchOverlayTopPx = nextFolderSwitchOverlayTopPx;
+    }
+
+    if (Object.keys(nextData).length > 0) {
+      this.setData(nextData);
     }
   },
 
@@ -996,6 +1038,48 @@ Page({
     );
   },
 
+  clearPagingSkeletons() {
+    if (
+      (!Array.isArray(this.data.pagingSkeletonLeftPhotos) || this.data.pagingSkeletonLeftPhotos.length === 0) &&
+      (!Array.isArray(this.data.pagingSkeletonRightPhotos) || this.data.pagingSkeletonRightPhotos.length === 0)
+    ) {
+      return;
+    }
+
+    this.setData({
+      pagingSkeletonLeftPhotos: [],
+      pagingSkeletonRightPhotos: [],
+    });
+  },
+
+  showPagingSkeletons(count) {
+    const safeCount = Math.max(0, Number(count || 0));
+    if (!(safeCount > 0)) {
+      this.clearPagingSkeletons();
+      return;
+    }
+
+    const baseLeft = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
+    const baseRight = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
+    const skeletons = createPagingSkeletonItems(safeCount, {
+      prefix: "album",
+      seed: Number(this.photoLoadTicket || 0),
+    });
+    const columns = splitWaterfallColumns(skeletons, {
+      left: baseLeft,
+      right: baseRight,
+      leftHeight: this.calculateWaterfallHeight(baseLeft),
+      rightHeight: this.calculateWaterfallHeight(baseRight),
+      ratioMap: this.photoRatioMap,
+      columnMap: this.photoColumnMap,
+    });
+
+    this.setData({
+      pagingSkeletonLeftPhotos: columns.left.slice(baseLeft.length),
+      pagingSkeletonRightPhotos: columns.right.slice(baseRight.length),
+    });
+  },
+
   scheduleRelayout() {
     if (this.relayoutTimer) return;
     this.relayoutTimer = setTimeout(() => {
@@ -1071,8 +1155,6 @@ Page({
     if (currentRatio > 0 && Math.abs(currentRatio - ratio) < 0.08) {
       return;
     }
-
-    this.scheduleRelayout();
   },
 
   onPhotoError(e) {
@@ -1570,7 +1652,13 @@ Page({
   },
 
   async loadAlbum() {
-    this.setData({ loading: true, loadingMore: false });
+    this.loadingNextPhotoPage = false;
+    this.setData({
+      loading: true,
+      loadingMore: false,
+      pagingSkeletonLeftPhotos: [],
+      pagingSkeletonRightPhotos: [],
+    });
     const loadTicket = this.photoLoadTicket + 1;
     this.photoLoadTicket = loadTicket;
     this.useLegacyPhotoPaging = false;
@@ -1828,18 +1916,37 @@ Page({
       this.clearCachedFullPhotosForFolder(targetFolderId);
     }
 
+    if (!reset && this.loadingNextPhotoPage) return false;
     if (!reset && this.data.loadingMore) return false;
     if (!reset && !this.data.hasMore) return false;
 
     if (this.useLegacyPhotoPaging) {
-      return this.loadPhotoPageLegacy(targetFolderId, nextPageNo, { reset, silent });
+      if (!reset) {
+        this.loadingNextPhotoPage = true;
+        this.showPagingSkeletons(ALBUM_PAGING_SKELETON_COUNT);
+      }
+      try {
+        return await this.loadPhotoPageLegacy(targetFolderId, nextPageNo, { reset, silent });
+      } finally {
+        if (!reset) {
+          this.loadingNextPhotoPage = false;
+          this.clearPagingSkeletons();
+        }
+      }
     }
 
     if (reset) {
       if (!silent) {
-        this.setData({ loading: true, loadingMore: false });
+        this.setData({
+          loading: true,
+          loadingMore: false,
+          pagingSkeletonLeftPhotos: [],
+          pagingSkeletonRightPhotos: [],
+        });
       }
     } else {
+      this.loadingNextPhotoPage = true;
+      this.showPagingSkeletons(ALBUM_PAGING_SKELETON_COUNT);
       this.setData({ loadingMore: true });
     }
 
@@ -1941,13 +2048,22 @@ Page({
         wx.showToast({ title: "加载失败", icon: "none" });
       }
     } finally {
+      if (!reset) {
+        this.loadingNextPhotoPage = false;
+      }
       if (ticket === this.photoLoadTicket) {
         const shouldPlayWaveOnVisible =
           !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
         const shouldKeepSwitchOverlay = reset && silent
           ? Boolean(Array.isArray(nextPendingFolderPhotoIds) && nextPendingFolderPhotoIds.length > 0)
           : false;
-        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: shouldKeepSwitchOverlay }, () => {
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          switchingFolderLoading: shouldKeepSwitchOverlay,
+          pagingSkeletonLeftPhotos: [],
+          pagingSkeletonRightPhotos: [],
+        }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {
@@ -1976,9 +2092,16 @@ Page({
 
     if (reset) {
       if (!silent) {
-        this.setData({ loading: true, loadingMore: false });
+        this.setData({
+          loading: true,
+          loadingMore: false,
+          pagingSkeletonLeftPhotos: [],
+          pagingSkeletonRightPhotos: [],
+        });
       }
     } else {
+      this.loadingNextPhotoPage = true;
+      this.showPagingSkeletons(ALBUM_PAGING_SKELETON_COUNT);
       this.setData({ loadingMore: true });
     }
 
@@ -2062,13 +2185,22 @@ Page({
         wx.showToast({ title: "加载失败", icon: "none" });
       }
     } finally {
+      if (!reset) {
+        this.loadingNextPhotoPage = false;
+      }
       if (ticket === this.photoLoadTicket) {
         const shouldPlayWaveOnVisible =
           !skipWave && reset && nextPageNo === 1 && targetFolderId === ROOT_FOLDER_ID;
         const shouldKeepSwitchOverlay = reset && silent
           ? Boolean(Array.isArray(nextPendingFolderPhotoIds) && nextPendingFolderPhotoIds.length > 0)
           : false;
-        this.setData({ loading: false, loadingMore: false, switchingFolderLoading: shouldKeepSwitchOverlay }, () => {
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          switchingFolderLoading: shouldKeepSwitchOverlay,
+          pagingSkeletonLeftPhotos: [],
+          pagingSkeletonRightPhotos: [],
+        }, () => {
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {

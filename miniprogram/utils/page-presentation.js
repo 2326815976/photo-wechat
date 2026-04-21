@@ -1,4 +1,6 @@
-﻿function normalizeMiniProgramRoutePath(value) {
+﻿const { isTabBarPagePath } = require("./runtime-config");
+
+function normalizeMiniProgramRoutePath(value) {
   return String(value || "")
     .trim()
     .split("?")[0]
@@ -44,6 +46,11 @@ function readPagePresentationFromApp(app) {
   return normalizePagePresentation(globalData.pagePresentation);
 }
 
+function readRuntimeConfigFromApp(app) {
+  const globalData = app && app.globalData ? app.globalData : {};
+  return globalData.runtimeConfig || null;
+}
+
 function readPreviewPresentationFromPage(page, pagePath) {
   const options = page && page.options && typeof page.options === "object" ? page.options : {};
   const rawMode = String(options.presentation || "").trim().toLowerCase();
@@ -72,9 +79,10 @@ function readPreviewPresentationFromPage(page, pagePath) {
   });
 }
 
-function resolvePagePresentationState(input, pagePath) {
+function resolvePagePresentationState(input, pagePath, runtimeConfig) {
   const presentation = normalizePagePresentation(input);
   const currentPagePath = normalizeMiniProgramRoutePath(pagePath);
+  const isRegisteredTabBarPage = isTabBarPagePath(currentPagePath, runtimeConfig);
   const matchesCurrentPage = Boolean(
     presentation.routePath && currentPagePath && presentation.routePath === currentPagePath
   );
@@ -91,7 +99,7 @@ function resolvePagePresentationState(input, pagePath) {
     isBeta,
     showBack: isStandalone,
     preferFallback: isStandalone,
-    hasBottomTabbar: !isStandalone,
+    hasBottomTabbar: !isStandalone && isRegisteredTabBarPage,
     pageFallbackRoute: presentation.fallbackRoute,
     pageFallbackTab: presentation.fallbackTab,
     pageKey: isStandalone ? presentation.pageKey : "",
@@ -109,7 +117,7 @@ function resolveEffectivePresentation(page, app, pagePath, input) {
 
 function applyPagePresentationToPage(page, app, pagePath) {
   const presentation = readPreviewPresentationFromPage(page, pagePath) || readPagePresentationFromApp(app);
-  const state = resolvePagePresentationState(presentation, pagePath);
+  const state = resolvePagePresentationState(presentation, pagePath, readRuntimeConfigFromApp(app));
   if (page && typeof page.setData === "function") {
     page.setData({
       pagePresentationMode: state.mode,
@@ -134,7 +142,11 @@ function subscribePagePresentation(app, page, pagePath) {
   return app.subscribePagePresentation((presentation) => {
     const effectivePresentation =
       readPreviewPresentationFromPage(page, pagePath) || normalizePagePresentation(presentation);
-    const state = resolvePagePresentationState(effectivePresentation, pagePath);
+    const state = resolvePagePresentationState(
+      effectivePresentation,
+      pagePath,
+      readRuntimeConfigFromApp(app)
+    );
     if (page && typeof page.setData === "function") {
       page.setData({
         pagePresentationMode: state.mode,

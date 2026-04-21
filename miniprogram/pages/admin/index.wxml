@@ -1114,22 +1114,54 @@
               <text class="pose-header__desc">管理拍照姿势库和标签</text>
             </view>
 
-            <view class="pose-tabs">
-              <view
-                class="pose-tab-item {{posePanelTab === 'poses' ? 'pose-tab-item--active' : ''}}"
-                data-key="poses"
-                bindtap="onPosePanelTabChange"
-              >
-                <text class="pose-tab-item__text">摆姿列表</text>
-                <view class="pose-tab-item__line" wx:if="{{posePanelTab === 'poses'}}"></view>
+            <view class="pose-tabs-bar">
+              <view class="pose-tabs">
+                <view
+                  class="pose-tab-item {{posePanelTab === 'poses' ? 'pose-tab-item--active' : ''}}"
+                  data-key="poses"
+                  bindtap="onPosePanelTabChange"
+                >
+                  <text class="pose-tab-item__text">摆姿列表</text>
+                  <view class="pose-tab-item__line" wx:if="{{posePanelTab === 'poses'}}"></view>
+                </view>
+                <view
+                  class="pose-tab-item {{posePanelTab === 'tags' ? 'pose-tab-item--active' : ''}}"
+                  data-key="tags"
+                  bindtap="onPosePanelTabChange"
+                >
+                  <text class="pose-tab-item__text">标签管理</text>
+                  <view class="pose-tab-item__line" wx:if="{{posePanelTab === 'tags'}}"></view>
+                </view>
               </view>
-              <view
-                class="pose-tab-item {{posePanelTab === 'tags' ? 'pose-tab-item--active' : ''}}"
-                data-key="tags"
-                bindtap="onPosePanelTabChange"
-              >
-                <text class="pose-tab-item__text">标签管理</text>
-                <view class="pose-tab-item__line" wx:if="{{posePanelTab === 'tags'}}"></view>
+
+              <view class="pose-tabs-bar__actions" wx:if="{{posePanelTab === 'poses' && !poseSelectionMode}}">
+                <button
+                  class="pose-toolbar-btn pose-toolbar-btn--danger pose-toolbar-btn--compact"
+                  bindtap="onEnterPoseSelectionMode"
+                >
+                  批量删除
+                </button>
+                <button
+                  class="pose-toolbar-btn pose-toolbar-btn--primary pose-toolbar-btn--compact"
+                  bindtap="onOpenPoseCreateModal"
+                >
+                  新增摆姿
+                </button>
+              </view>
+
+              <view class="pose-tabs-bar__actions" wx:if="{{posePanelTab === 'tags' && !poseTagSelectionMode}}">
+                <button
+                  class="pose-toolbar-btn pose-toolbar-btn--danger pose-toolbar-btn--compact"
+                  bindtap="onEnterPoseTagSelectionMode"
+                >
+                  批量删除
+                </button>
+                <button
+                  class="pose-toolbar-btn pose-toolbar-btn--primary pose-toolbar-btn--compact"
+                  bindtap="onOpenPoseTagModal"
+                >
+                  新增标签
+                </button>
               </view>
             </view>
 
@@ -1149,28 +1181,6 @@
                     </view>
                   </view>
                 </scroll-view>
-
-                <view class="pose-toolbar-actions" wx:if="{{!poseSelectionMode}}">
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
-                    bindtap="onRefreshPoseSection"
-                    disabled="{{loading || posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing || poseCreating || poseBatchDeleting}}"
-                  >
-                    {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
-                  </button>
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--danger"
-                    bindtap="onEnterPoseSelectionMode"
-                  >
-                    批量删除
-                  </button>
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--primary"
-                    bindtap="onOpenPoseCreateModal"
-                  >
-                    新增摆姿
-                  </button>
-                </view>
 
                 <view class="pose-toolbar-actions" wx:if="{{poseSelectionMode}}">
                   <button
@@ -1297,28 +1307,6 @@
                   <text class="pose-tags-toolbar__title">共 {{poseTagStats.length}} 个标签</text>
                   <text class="pose-tags-toolbar__desc" wx:if="{{poseTagSelectionMode}}">已选择 {{poseTagSelectedCount}} 个标签</text>
                   <text class="pose-tags-toolbar__desc" wx:else>已使用 {{poseTagUsedCount}} 个标签</text>
-                </view>
-
-                <view class="pose-tags-toolbar__actions" wx:if="{{!poseTagSelectionMode}}">
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
-                    bindtap="onRefreshPoseSection"
-                    disabled="{{loading || posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing || poseTagCreating || poseTagUpdating || poseTagBatchDeleting || poseTagSortingId !== 0}}"
-                  >
-                    {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
-                  </button>
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--danger"
-                    bindtap="onEnterPoseTagSelectionMode"
-                  >
-                    批量删除
-                  </button>
-                  <button
-                    class="pose-toolbar-btn pose-toolbar-btn--primary"
-                    bindtap="onOpenPoseTagModal"
-                  >
-                    新增标签
-                  </button>
                 </view>
 
                 <view class="pose-tags-toolbar__actions pose-tags-toolbar__actions--selection" wx:if="{{poseTagSelectionMode}}">

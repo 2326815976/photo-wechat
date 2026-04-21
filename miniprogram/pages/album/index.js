@@ -361,6 +361,10 @@ Page({
   syncTabBar(selectedPath) {
     if (typeof this.getTabBar !== "function") return;
     const tab = this.getTabBar();
+    if (tab && typeof tab.syncForPage === "function") {
+      tab.syncForPage(selectedPath);
+      return;
+    }
     if (tab && typeof tab.setData === "function") {
       tab.setData({
         selectedPath: String(selectedPath || "").trim().replace(/^\/+/, ""),

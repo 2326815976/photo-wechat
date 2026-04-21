@@ -2,7 +2,7 @@
   <primary-page-shell
     managedPageKey="profile"
     title="我的小天地"
-    subtitle="📒 管理你的拾光小秘密 📒"
+    subtitle="管理你的拾光小秘密"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"

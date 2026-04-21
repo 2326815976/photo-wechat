@@ -22,6 +22,7 @@ const SHARE_TITLE_BY_ROUTE = {
   "pages/album/index": "拾光谣｜相册提取",
   "pages/album/detail": "「拾光谣」相册分享",
   "pages/profile/index": "拾光谣｜定格美好瞬间",
+  "pages/profile/about/index": "拾光谣｜关于",
 };
 
 function decodeUrlQueryComponent(value) {

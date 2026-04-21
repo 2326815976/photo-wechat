@@ -2,6 +2,7 @@
 const {
   buildRuntimeConfigPreset,
   getDisplayedTabBarItems,
+  isTabBarPagePath,
   normalizeRuntimeConfig,
 } = require("../utils/runtime-config");
 const {
@@ -200,7 +201,7 @@ Component({
         currentRoute = "";
       }
 
-      const state = resolvePagePresentationState(presentation, currentRoute);
+      const state = resolvePagePresentationState(presentation, currentRoute, this.data.runtimeConfig);
       this.setData({
         presentationMode: state.mode,
         hasBottomTabbar: Boolean(state.hasBottomTabbar),
@@ -215,7 +216,14 @@ Component({
       this.setData({
         runtimeConfig: normalized,
         runtimeConfigReady: true,
+        list: nextList,
       });
+
+      const app = typeof getApp === "function" ? getApp() : null;
+      if (app && typeof app.getPagePresentation === "function") {
+        this.applyPresentation(app.getPagePresentation());
+        return;
+      }
       this.applyList(nextList);
     },
 
@@ -253,6 +261,27 @@ Component({
         }
         this.applyLoginState(false);
       }
+    },
+
+    syncForPage(pagePath) {
+      const normalizedPagePath = normalizeMiniProgramRoutePath(pagePath);
+      if (!normalizedPagePath) {
+        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
+        return;
+      }
+
+      const normalizedRuntimeConfig = normalizeRuntimeConfig(this.data.runtimeConfig);
+      const nextList = hydrateTabBarItems(normalizedRuntimeConfig, this.data.isLoggedIn);
+      const nextHasBottomTabbar = isTabBarPagePath(normalizedPagePath, normalizedRuntimeConfig);
+
+      this.setData({
+        runtimeConfig: normalizedRuntimeConfig,
+        runtimeConfigReady: true,
+        hasBottomTabbar: nextHasBottomTabbar,
+        selectedPath: normalizedPagePath,
+        list: nextList,
+      });
+      this.applyList(nextList);
     },
 
     switchTab(e) {
@@ -326,3 +355,4 @@ Component({
     },
   },
 });
+

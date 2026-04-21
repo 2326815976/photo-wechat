@@ -86,6 +86,7 @@
   height: 44rpx;
   padding: 0 8rpx;
   font-size: 18rpx;
+  overflow: hidden;
 }
 
 .toolbar-actions--normal .toolbar-btn__icon {
@@ -225,6 +226,8 @@
   font-weight: 600;
   line-height: 42rpx;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   box-sizing: border-box;
 }
 
@@ -523,21 +526,29 @@
 
 .photo-card__sort-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: stretch;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   gap: 8rpx;
   padding: 0 12rpx 12rpx;
   background: #fffbf0;
+  min-width: 0;
 }
 
 .photo-card__sort-btn {
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 38rpx;
   height: 38rpx;
-  padding: 0 12rpx;
+  padding: 0 6rpx;
   border-radius: 999rpx;
   border: 2rpx solid rgba(93, 64, 55, 0.18);
   background: #ffffff;
   color: #5d4037;
-  font-size: 18rpx;
+  font-size: 17rpx;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .photo-card__sort-btn--disabled {

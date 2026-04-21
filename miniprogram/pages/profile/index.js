@@ -55,13 +55,12 @@ const PROFILE_MENU_SPECS = [
     requiresWechatLogin: true,
   },
   {
-    pageKey: "profile-change-password",
-    action: "goChangePassword",
-    defaultOrder: 150,
-    defaultTitle: "修改密码",
-    description: "更新账户安全信息",
-    iconSrc: "/images/icons/lock-yellow.svg",
-    requiresPasswordUser: true,
+    pageKey: "about",
+    action: "goAbout",
+    defaultOrder: 140,
+    defaultTitle: "关于",
+    description: "查看作者介绍、联系方式",
+    iconSrc: "/images/icons/message-square-yellow.svg",
   },
   {
     pageKey: "profile-delete-account",
@@ -494,6 +493,10 @@ Page({
   syncTabBar(selectedPath) {
     if (typeof this.getTabBar !== "function") return;
     const tab = this.getTabBar();
+    if (tab && typeof tab.syncForPage === "function") {
+      tab.syncForPage(selectedPath);
+      return;
+    }
     if (tab && typeof tab.setData === "function") {
       tab.setData({
         selectedPath: String(selectedPath || "").trim().replace(/^\/+/, ""),
@@ -800,10 +803,6 @@ Page({
     wx.navigateTo({ url: "/pages/profile/bookings/index" });
   },
 
-  goChangePassword() {
-    wx.navigateTo({ url: "/pages/profile/change-password/index" });
-  },
-
   goBetaFeatures() {
     if (this._navigatingToBeta) return;
     this._navigatingToBeta = true;
@@ -820,6 +819,10 @@ Page({
 
   goDeleteAccount() {
     wx.navigateTo({ url: "/pages/profile/delete-account/index" });
+  },
+
+  goAbout() {
+    wx.navigateTo({ url: "/pages/profile/about/index" });
   },
 
   goAdmin() {

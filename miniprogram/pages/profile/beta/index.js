@@ -14,7 +14,7 @@ const ROUTE_ALIAS_MAP = {
   "/gallery": "/pages/gallery/index",
   "/album": "/pages/album/index",
   "/extract": "/pages/album/index",
-  "/about": "/pages/profile/index",
+  "/about": "/pages/profile/about/index",
   "/profile": "/pages/profile/index",
   "/booking": "/pages/booking/index",
   "/admin": "/pages/admin/index",

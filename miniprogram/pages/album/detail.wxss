@@ -15,6 +15,23 @@
   background-image: none;
 }
 
+.page-loading-shell {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 24rpx calc(48rpx + env(safe-area-inset-bottom));
+}
+
+.page-loading-shell--full {
+  min-height: 100vh;
+}
+
+.page-loading-shell--with-header {
+  min-height: calc(100vh - 220rpx - env(safe-area-inset-bottom));
+}
+
 /* 重置小程序 button 默认样式，避免与 Web 对标样式出现偏差 */
 button {
   margin: 0;
@@ -440,9 +457,11 @@ button::after {
 }
 
 .album-overlay-loading {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 920;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -453,18 +472,6 @@ button::after {
   background: rgba(255, 251, 240, 0.78);
   -webkit-backdrop-filter: blur(8rpx);
   backdrop-filter: blur(8rpx);
-}
-
-.album-overlay-loading__ring {
-  width: 168rpx;
-  height: 168rpx;
-}
-
-.album-overlay-loading__text {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6rpx;
 }
 
 .grid--single {
@@ -503,6 +510,12 @@ button::after {
   transform: translateY(-2rpx);
 }
 
+.photo-card--paging-skeleton {
+  background: rgba(255, 255, 255, 0.88);
+  border: 2rpx solid rgba(93, 64, 55, 0.06);
+  box-shadow: 0 8rpx 22rpx rgba(93, 64, 55, 0.08);
+}
+
 .photo-img-wrap {
   position: relative;
   overflow: hidden;
@@ -518,6 +531,29 @@ button::after {
   width: 100%;
   overflow: hidden;
   background: linear-gradient(135deg, #f8f2e6, #efe5d2);
+}
+
+.photo-img-box--paging-skeleton {
+  background: linear-gradient(135deg, rgba(255, 251, 240, 0.98) 0%, rgba(255, 247, 233, 0.98) 100%);
+}
+
+.paging-skeleton-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 248, 232, 0.92) 52%, rgba(255, 244, 224, 0.96) 100%);
+}
+
+.paging-skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -42%;
+  width: 42%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.52) 48%, rgba(255, 255, 255, 0) 100%);
+  animation: paging-skeleton-shimmer 1.45s ease-in-out infinite;
 }
 
 .photo-img-stage {
@@ -1005,6 +1041,22 @@ button::after {
   padding: 12rpx 12rpx 14rpx;
   display: flex;
   justify-content: center;
+}
+
+.photo-actions--paging-skeleton {
+  justify-content: flex-start;
+}
+
+.paging-meta-line {
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgba(93, 64, 55, 0.08) 0%, rgba(93, 64, 55, 0.16) 50%, rgba(93, 64, 55, 0.08) 100%);
+  background-size: 220% 100%;
+  animation: paging-skeleton-line 1.6s ease-in-out infinite;
+}
+
+.paging-meta-line--wide {
+  width: 132rpx;
+  height: 22rpx;
 }
 
 .pin-btn {
@@ -1776,4 +1828,28 @@ button::after {
   border-radius: 18rpx;
   margin-bottom: 16rpx;
   background: #ffffff;
+}
+
+@keyframes paging-skeleton-shimmer {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+@keyframes paging-skeleton-line {
+  0% {
+    background-position: 0% 50%;
+    opacity: 0.72;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 1;
+  }
+  100% {
+    background-position: 0% 50%;
+    opacity: 0.72;
+  }
 }
