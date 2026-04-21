@@ -74,6 +74,17 @@ function shouldFailOpenForPageAccess(error) {
   return isMissingPageAccessEndpointError(error) || isTransientPageAccessError(error);
 }
 
+function isLegacyPageAccessPayload(payload) {
+  const reason = String((payload && payload.reason) || '').trim().toLowerCase();
+  const source = String((payload && payload.source) || '').trim().toLowerCase();
+  return (
+    reason.startsWith('legacy_') ||
+    source.startsWith('legacy_') ||
+    source === 'legacy_compatible' ||
+    source === 'page_center_with_legacy'
+  );
+}
+
 function resolveLocalPageAccess(app, pageKey, presentationMode) {
   const globalData = app && app.globalData ? app.globalData : {};
   if (!Boolean(globalData.auditConfigReady)) {
@@ -125,7 +136,10 @@ function resolveLocalPageAccess(app, pageKey, presentationMode) {
 
 async function checkMiniProgramPageAccess(pageKey, presentationMode) {
   if (pageCenterAccessEndpointState === 'unsupported') {
-    return { allowed: true, reason: 'access_endpoint_unavailable' };
+    return {
+      allowed: presentationMode === 'tabbar',
+      reason: 'access_endpoint_unavailable',
+    };
   }
 
   const params = [
@@ -212,6 +226,14 @@ async function guardMiniProgramPageAccess(options) {
 
   try {
     const payload = await checkMiniProgramPageAccess(pageKey, presentationMode);
+    if (payload && payload.allowed === true && isLegacyPageAccessPayload(payload)) {
+      if (isStandalone) {
+        relaunchToRoute(previewDeniedRoute);
+      } else {
+        redirectToFallback(app, { currentRoute, fallbackTab, previewDeniedRoute });
+      }
+      return { allowed: false, reason: 'legacy_beta_disabled' };
+    }
     if (payload && payload.allowed === true) {
       return { allowed: true, reason: String(payload.reason || 'allowed'), data: payload.data || null };
     }
@@ -224,7 +246,7 @@ async function guardMiniProgramPageAccess(options) {
     }
     return { allowed: false, reason };
   } catch (error) {
-    if (shouldFailOpenForPageAccess(error)) {
+    if (shouldFailOpenForPageAccess(error) && !isStandalone) {
       const missingEndpoint = isMissingPageAccessEndpointError(error);
       if (missingEndpoint) {
         pageCenterAccessEndpointState = 'unsupported';
@@ -244,6 +266,19 @@ async function guardMiniProgramPageAccess(options) {
         allowed: true,
         reason: missingEndpoint ? 'access_endpoint_unavailable' : 'access_check_transient_failure',
         data: null,
+      };
+    }
+
+    if (shouldFailOpenForPageAccess(error) && isStandalone) {
+      const missingEndpoint = isMissingPageAccessEndpointError(error);
+      if (missingEndpoint) {
+        pageCenterAccessEndpointState = 'unsupported';
+      }
+      relaunchToRoute(previewDeniedRoute);
+      return {
+        allowed: false,
+        reason: missingEndpoint ? 'access_endpoint_unavailable' : 'access_check_transient_failure',
+        error: error && error.message ? String(error.message) : '请求失败',
       };
     }
 

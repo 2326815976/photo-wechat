@@ -11,17 +11,19 @@
   </view>
 </view>
 
-<view wx:else>
-  <secondary-page-shell
+<view wx:if="{{pageScaffoldReady}}" class="page">
+  <app-header
     id="albumHeader"
-    shell-class="page"
     class="album-header-host"
     title="{{headerTitle}}"
     subtitle="✨ 趁魔法消失前，把美好定格 ✨"
+    safeTop="{{safeTop}}"
+    showBack="{{true}}"
     fallbackTab="pages/album/index"
     preferFallback="{{false}}"
-    content-class="content"
-  >
+  />
+
+  <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
@@ -310,6 +312,7 @@
       </view>
       </view>
     </view>
+  </view>
   <view class="modal-mask motion-fade-in" wx:if="{{freezeEnabled && confirmPhotoId}}" bindtap="closePinConfirm"></view>
   <view class="confirm-modal motion-fade-in" wx:if="{{freezeEnabled && confirmPhotoId}}">
     <view class="confirm-card motion-pop-in" catchtap="noop">
@@ -415,7 +418,6 @@
       </scroll-view>
     </view>
   </view>
-  </secondary-page-shell>
 
   <view class="modal-mask motion-fade-in" wx:if="{{showDonationModal}}" bindtap="closeDonationModal"></view>
   <view class="confirm-modal motion-fade-in" wx:if="{{showDonationModal}}">
@@ -423,7 +425,14 @@
       <text class="donation-title">感谢你的心意</text>
       <text class="donation-desc">长按二维码保存后，可在微信扫码赞赏</text>
       <image class="donation-qr" src="{{album.donation_qr_code_url}}" mode="widthFix" show-menu-by-longpress="{{true}}" />
-      <button class="letter-btn" hover-class="letter-btn--active" bindtap="closeDonationModal">我知道了</button>
+      <button
+        class="letter-btn {{donationSaving ? 'letter-btn--disabled' : ''}}"
+        hover-class="letter-btn--active"
+        bindtap="handleSaveDonationQr"
+        disabled="{{donationSaving}}"
+      >
+        {{donationSaving ? '保存中...' : '保存赞赏码'}}
+      </button>
     </view>
   </view>
 

@@ -52,17 +52,13 @@
       </view>
 
       <view class="gallery-content-shell">
-        <view class="gallery-overlay-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingSwitchPhotoIds.length > 0}}" catchtouchmove="noop">
-          <view class="loading-ring gallery-overlay-loading__ring">
-            <view class="ring ring--outer"></view>
-            <view class="ring ring--inner"></view>
-            <view class="ring-center">
-              <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+        <view class="gallery-switch-loading motion-fade-in" wx:if="{{switchingFolderLoading || pendingSwitchPhotoIds.length > 0}}" catchtouchmove="noop" style="top: {{tagSwitchOverlayTopPx}}px;">
+          <view class="admin-loading-card admin-loading-card--compact">
+            <view class="admin-loading-card__orb">
+              <view class="admin-loading-card__spinner"></view>
             </view>
-          </view>
-          <view class="loading-text">
-            <text class="loading-title">{{pageLoadingTitle}}</text>
-            <text class="loading-desc">{{tagSwitchLoadingDescription}}</text>
+            <text class="admin-loading-card__title">拾光中...</text>
+            <text class="admin-loading-card__desc">正在加载页面</text>
           </view>
         </view>
 
@@ -205,7 +201,7 @@
         </view>
       </view>
 
-      <view class="empty motion-fade-up motion-delay-3" wx:if="{{!loading && left.length === 0 && right.length === 0}}">
+      <view class="empty motion-fade-up motion-delay-3" wx:if="{{!(switchingFolderLoading || pendingSwitchPhotoIds.length > 0) && !loading && left.length === 0 && right.length === 0}}">
         <text class="empty-text">暂无照片</text>
       </view>
 
@@ -213,7 +209,7 @@
         <view class="small-spinner"></view>
         <text class="more-text">拾光中...</text>
       </view>
-      <view class="end" wx:if="{{!hasMore && (left.length + right.length) > 0}}">
+      <view class="end" wx:if="{{!(switchingFolderLoading || pendingSwitchPhotoIds.length > 0) && !hasMore && (left.length + right.length) > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
       </view>
     </view>

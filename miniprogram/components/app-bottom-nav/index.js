@@ -10,6 +10,8 @@ const {
   resolvePagePresentationState,
 } = require('../../utils/page-presentation');
 
+const TAB_SWITCH_TIMEOUT_MS = 3000;
+
 const ICON_PATH_MAP = {
   home: {
     normal: '/images/tab/house.svg',
@@ -162,6 +164,10 @@ Component({
   pageLifetimes: {
     show() {
       this.releaseSwitchLock();
+      const app = typeof getApp === 'function' ? getApp() : null;
+      if (app && typeof app.getPagePresentation === 'function') {
+        this.applyPresentation(app.getPagePresentation());
+      }
       const currentPages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
       const currentPage = Array.isArray(currentPages) && currentPages.length > 0
         ? currentPages[currentPages.length - 1]
@@ -297,10 +303,6 @@ Component({
       const index = list.findIndex((item) => item.pagePath === path);
 
       this._switchingPath = path;
-      this._switchLockTimer = setTimeout(() => {
-        this.releaseSwitchLock();
-        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
-      }, 900);
 
       if (index >= 0) {
         this.setData({ selected: index, selectedPath: path });
@@ -309,7 +311,10 @@ Component({
       }
       const app = typeof getApp === 'function' ? getApp() : null;
       if (app && typeof app.resetPagePresentation === 'function') {
-        app.resetPagePresentation();
+        app.resetPagePresentation({ silent: true });
+        if (typeof app.getPagePresentation === 'function') {
+          this.applyPresentation(app.getPagePresentation());
+        }
       }
 
       const revertSelection = () => {
@@ -323,9 +328,22 @@ Component({
         this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
       };
 
+      this._switchLockTimer = setTimeout(() => {
+        if (String(this._switchingPath || '') !== path) return;
+        const activePath = resolveCurrentRouteFromStack();
+        if (activePath === path) {
+          this.releaseSwitchLock();
+          return;
+        }
+        revertSelection();
+      }, TAB_SWITCH_TIMEOUT_MS);
+
       if (isTabBarPagePath(path, this.data.runtimeConfig)) {
         wx.switchTab({
           url: `/${path}`,
+          success: () => {
+            this.releaseSwitchLock();
+          },
           fail: revertSelection,
         });
         return;
@@ -333,6 +351,9 @@ Component({
 
       wx.reLaunch({
         url: `/${path}`,
+        success: () => {
+          this.releaseSwitchLock();
+        },
         fail: revertSelection,
       });
     },

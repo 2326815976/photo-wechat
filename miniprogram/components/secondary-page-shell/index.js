@@ -9,14 +9,17 @@ function normalizeMiniProgramRoutePath(value) {
     .replace(/\/+$/, "");
 }
 
-function resolveCurrentRouteFromStack() {
-  try {
-    const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
-    const currentPage = Array.isArray(pages) && pages.length > 0 ? pages[pages.length - 1] : null;
-    return normalizeMiniProgramRoutePath(currentPage && currentPage.route);
-  } catch (error) {
+function normalizeMiniProgramRouteUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
     return "";
   }
+  const [path, query = ""] = raw.split("?");
+  const normalizedPath = normalizeMiniProgramRoutePath(path);
+  if (!normalizedPath) {
+    return "";
+  }
+  return `/${normalizedPath}${query ? `?${query}` : ""}`;
 }
 
 Component({
@@ -133,15 +136,10 @@ Component({
 
     syncShellState() {
       const nextSafeTop = resolveShellSafeTop();
-      const currentRoute = resolveCurrentRouteFromStack();
       const normalizedFallbackTab =
         normalizeMiniProgramRoutePath(this.properties.fallbackTab) || "pages/index/index";
-      const shouldPreferProfileFallback =
-        normalizedFallbackTab === "pages/profile/index" && currentRoute !== "pages/profile/index";
-      const nextFallbackTab = shouldPreferProfileFallback
-        ? "pages/profile/index"
-        : normalizedFallbackTab;
-      const nextPreferFallback = Boolean(this.properties.preferFallback || shouldPreferProfileFallback);
+      const nextFallbackTab = normalizedFallbackTab;
+      const nextPreferFallback = Boolean(this.properties.preferFallback);
 
       if (
         nextSafeTop === this.data.resolvedSafeTop &&
@@ -158,33 +156,48 @@ Component({
       });
     },
 
-    openFallbackRoute() {
-      const fallbackRoute = String(this.properties.fallbackRoute || "").trim();
-      if (fallbackRoute) {
-        wx.reLaunch({ url: fallbackRoute });
-        return true;
+    openFallbackTab() {
+      wx.switchTab({ url: `/${this.data.resolvedFallbackTab}` });
+    },
+
+    openFallbackRoute(onFail) {
+      const fallbackRoute = normalizeMiniProgramRouteUrl(this.properties.fallbackRoute);
+      if (!fallbackRoute) {
+        return false;
       }
-      return false;
+      wx.reLaunch({
+        url: fallbackRoute,
+        fail: (error) => {
+          if (typeof onFail === "function") {
+            onFail(error);
+          }
+        },
+      });
+      return true;
+    },
+
+    shouldPreferExplicitFallback() {
+      return Boolean(normalizeMiniProgramRouteUrl(this.properties.fallbackRoute));
     },
 
     onBack() {
       this.triggerEvent("back");
 
-      if (this.data.resolvedPreferFallback) {
-        if (this.openFallbackRoute()) {
+      if (this.data.resolvedPreferFallback || this.shouldPreferExplicitFallback()) {
+        if (this.openFallbackRoute(() => this.openFallbackTab())) {
           return;
         }
-        wx.switchTab({ url: `/${this.data.resolvedFallbackTab}` });
+        this.openFallbackTab();
         return;
       }
 
       wx.navigateBack({
         delta: 1,
         fail: () => {
-          if (this.openFallbackRoute()) {
+          if (this.openFallbackRoute(() => this.openFallbackTab())) {
             return;
           }
-          wx.switchTab({ url: `/${this.data.resolvedFallbackTab}` });
+          this.openFallbackTab();
         },
       });
     },

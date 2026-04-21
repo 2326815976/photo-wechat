@@ -87,10 +87,16 @@ const MAX_RELEASE_FILE_SIZE = 100 * 1024 * 1024;
 const ALBUM_COVER_TARGET_SIZE = 900 * 1024;
 const ALBUM_COVER_MAX_LONG_EDGE = 1920;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
-const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const ADMIN_GALLERY_UPLOAD_DRAFT_KEY = "admin_gallery_upload_draft_v1";
 const ADMIN_GALLERY_UPLOAD_DRAFT_TTL_MS = 30 * 60 * 1000;
 const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
+const ABOUT_MESSAGE_FONT_SIZE_RPX = 24;
+const ABOUT_MESSAGE_LINE_HEIGHT = 1.45;
+const ABOUT_MESSAGE_VERTICAL_PADDING_RPX = 12;
+const ABOUT_MESSAGE_ESTIMATED_CHARS_PER_LINE = 18;
+const ABOUT_MESSAGE_BASE_HEIGHT_RPX = Math.round(
+  ABOUT_MESSAGE_FONT_SIZE_RPX * ABOUT_MESSAGE_LINE_HEIGHT + ABOUT_MESSAGE_VERTICAL_PADDING_RPX
+);
 function resolveAppPublicUrl() {
   return FIXED_PUBLIC_ORIGIN;
 }
@@ -1037,8 +1043,69 @@ function sanitizeAboutSettings(input) {
 }
 
 function buildAboutSettingsPatch(input) {
+  const aboutSettings = sanitizeAboutSettings(input);
   return {
-    aboutSettings: sanitizeAboutSettings(input),
+    aboutSettings,
+    aboutMessageHeightRpx: estimateAboutMessageHeightRpx(aboutSettings.author_message),
+  };
+}
+
+function normalizeAboutMessageHeightRpx(value) {
+  const numeric = Math.round(Number(value) || 0);
+  return Math.max(ABOUT_MESSAGE_BASE_HEIGHT_RPX, numeric);
+}
+
+function estimateAboutMessageHeightByLineCount(lineCount) {
+  const nextLineCount = Math.max(1, Number(lineCount) || 1);
+  const lineHeightRpx = Math.round(ABOUT_MESSAGE_FONT_SIZE_RPX * ABOUT_MESSAGE_LINE_HEIGHT);
+  return normalizeAboutMessageHeightRpx(
+    ABOUT_MESSAGE_VERTICAL_PADDING_RPX + nextLineCount * lineHeightRpx
+  );
+}
+
+function estimateAboutMessageHeightRpx(value) {
+  const text = String(value || "");
+  if (!text) {
+    return ABOUT_MESSAGE_BASE_HEIGHT_RPX;
+  }
+  const lineCount = text.split(/\r?\n/).reduce((total, line) => {
+    const lineLength = Math.max(1, String(line || "").length);
+    return total + Math.max(1, Math.ceil(lineLength / ABOUT_MESSAGE_ESTIMATED_CHARS_PER_LINE));
+  }, 0);
+  return estimateAboutMessageHeightByLineCount(lineCount);
+}
+
+function normalizePositiveIdList(values) {
+  const source = Array.isArray(values) ? values : [];
+  const idSet = new Set();
+  source.forEach((item) => {
+    const id = Number(item || 0);
+    if (id > 0) {
+      idSet.add(id);
+    }
+  });
+  return Array.from(idSet.values());
+}
+
+function buildSelectableListState(rows, selectedIds) {
+  const list = Array.isArray(rows) ? rows : [];
+  const listIdSet = new Set(
+    list
+      .map((item) => Number(item && item.id))
+      .filter((id) => id > 0)
+  );
+  const nextSelectedIds = normalizePositiveIdList(selectedIds).filter((id) => listIdSet.has(id));
+  const selectedSet = new Set(nextSelectedIds);
+  return {
+    rows: list.map((item) =>
+      Object.assign({}, item, {
+        selected: selectedSet.has(Number(item && item.id)),
+      })
+    ),
+    selectedIds: nextSelectedIds,
+    selectedCount: nextSelectedIds.length,
+    totalCount: list.length,
+    allSelected: list.length > 0 && nextSelectedIds.length === list.length,
   };
 }
 
@@ -1552,6 +1619,11 @@ Page({
     bookingTypeDeleteConfirmOpen: false,
     bookingTypeDeletingTargetId: 0,
     bookingTypeDeletingTargetName: "",
+    bookingTypeSelectionMode: false,
+    bookingTypeSelectedIds: [],
+    bookingTypeSelectedCount: 0,
+    bookingTypeAllSelected: false,
+    bookingTypeBatchDeleting: false,
 
     cityForm: {
       id: 0,
@@ -1578,11 +1650,17 @@ Page({
     cityDeleteConfirmOpen: false,
     cityDeletingTargetId: 0,
     cityDeletingTargetName: "",
+    citySelectionMode: false,
+    citySelectedIds: [],
+    citySelectedCount: 0,
+    cityAllSelected: false,
+    cityBatchDeleting: false,
 
     aboutLoading: false,
     aboutSaving: false,
     aboutDonationUploading: false,
     aboutDonationModalOpen: false,
+    aboutMessageHeightRpx: ABOUT_MESSAGE_BASE_HEIGHT_RPX,
     aboutSettings: {
       id: 0,
       author_name: "",
@@ -1956,9 +2034,6 @@ Page({
     patch.releaseDeleteTargetId = 0;
     patch.releaseDeleteTargetVersion = "";
     patch.releaseDeleteTargetPlatform = "";
-    if (key === "beta") {
-      patch.betaPanelTab = "versions";
-    }
     if (key !== "gallery") {
       patch.galleryAlbumFilterId = "";
       patch.galleryAlbumFilterTitle = "";
@@ -2066,18 +2141,16 @@ Page({
     if (key !== "about") {
       patch.aboutDonationModalOpen = false;
     }
-    if (key !== "beta") {
-      patch.betaRouteModalOpen = false;
-      patch.betaRouteDeleteConfirmOpen = false;
-      patch.betaRouteDeletingId = 0;
-      patch.betaRouteDeletingTitle = "";
-      patch.betaRoutePresetOpen = false;
-      patch.betaVersionModalOpen = false;
-      patch.betaVersionRouteOpen = false;
-      patch.betaVersionDeleteConfirmOpen = false;
-      patch.betaVersionDeletingId = "";
-      patch.betaVersionDeletingName = "";
-    }
+    patch.betaRouteModalOpen = false;
+    patch.betaRouteDeleteConfirmOpen = false;
+    patch.betaRouteDeletingId = 0;
+    patch.betaRouteDeletingTitle = "";
+    patch.betaRoutePresetOpen = false;
+    patch.betaVersionModalOpen = false;
+    patch.betaVersionRouteOpen = false;
+    patch.betaVersionDeleteConfirmOpen = false;
+    patch.betaVersionDeletingId = "";
+    patch.betaVersionDeletingName = "";
     this.syncSectionMeta(key);
     this.closeMobileMenu();
     if (Object.keys(patch).length) {
@@ -2086,19 +2159,11 @@ Page({
           void this.loadAboutSettings().catch((error) => {
             this.showNotice("error", readErrorMessage(error, "加载关于信息失败"));
           });
-        } else if (key === "beta") {
-          void Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]).catch((error) => {
-            this.showNotice("error", readErrorMessage(error, "加载内测数据失败"));
-          });
         }
       });
     } else if (key === "about") {
       void this.loadAboutSettings().catch((error) => {
         this.showNotice("error", readErrorMessage(error, "加载关于信息失败"));
-      });
-    } else if (key === "beta") {
-      void Promise.all([this.loadBetaRoutes(), this.loadBetaVersions()]).catch((error) => {
-        this.showNotice("error", readErrorMessage(error, "加载内测数据失败"));
       });
     }
   },
@@ -2329,8 +2394,6 @@ Page({
         this.loadReleases(),
         this.loadAboutSettings(),
         this.loadRecentBookings({ throwOnError: false }),
-        this.loadBetaRoutes().catch(() => {}),
-        this.loadBetaVersions().catch(() => {}),
       ]);
     } catch (error) {
       const message = readErrorMessage(error, "管理后台加载失败");
@@ -2629,15 +2692,20 @@ Page({
         .filter((item) => item.id > 0);
 
       const bookingTypeActiveCount = list.filter((item) => Boolean(item.is_active)).length;
+      const selectionState = buildSelectableListState(list, this.data.bookingTypeSelectedIds);
       this._bookingTypesLoadedOnce = true;
       this.setData({
         bookingTypesLoading: false,
         bookingTypesRefreshing: false,
         bookingTypesError: "",
         bookingTypesReady: true,
-        bookingTypes: list,
+        bookingTypes: selectionState.rows,
         bookingTypeActiveCount,
         bookingTypeInactiveCount: Math.max(0, list.length - bookingTypeActiveCount),
+        bookingTypeSelectedIds: selectionState.selectedIds,
+        bookingTypeSelectedCount: selectionState.selectedCount,
+        bookingTypeAllSelected: selectionState.allSelected,
+        bookingTypeSelectionMode: selectionState.totalCount > 0 ? Boolean(this.data.bookingTypeSelectionMode) : false,
       });
       return list;
     } catch (error) {
@@ -2652,6 +2720,10 @@ Page({
         patch.bookingTypes = [];
         patch.bookingTypeActiveCount = 0;
         patch.bookingTypeInactiveCount = 0;
+        patch.bookingTypeSelectionMode = false;
+        patch.bookingTypeSelectedIds = [];
+        patch.bookingTypeSelectedCount = 0;
+        patch.bookingTypeAllSelected = false;
       }
       this.setData(patch);
       if (shouldShowNotice) {
@@ -2720,16 +2792,21 @@ Page({
         const longitude = Number(item && item.longitude);
         return Number.isFinite(latitude) && Number.isFinite(longitude);
       }).length;
+      const selectionState = buildSelectableListState(list, this.data.citySelectedIds);
       this._citiesLoadedOnce = true;
       this.setData({
         citiesLoading: false,
         citiesRefreshing: false,
         citiesError: "",
         citiesReady: true,
-        allowedCities: list,
+        allowedCities: selectionState.rows,
         cityActiveCount,
         cityInactiveCount: Math.max(0, list.length - cityActiveCount),
         cityLocatedCount,
+        citySelectedIds: selectionState.selectedIds,
+        citySelectedCount: selectionState.selectedCount,
+        cityAllSelected: selectionState.allSelected,
+        citySelectionMode: selectionState.totalCount > 0 ? Boolean(this.data.citySelectionMode) : false,
       });
       return list;
     } catch (error) {
@@ -2745,6 +2822,10 @@ Page({
         patch.cityActiveCount = 0;
         patch.cityInactiveCount = 0;
         patch.cityLocatedCount = 0;
+        patch.citySelectionMode = false;
+        patch.citySelectedIds = [];
+        patch.citySelectedCount = 0;
+        patch.cityAllSelected = false;
       }
       this.setData(patch);
       if (shouldShowNotice) {
@@ -2790,6 +2871,18 @@ Page({
     const value = e && e.detail ? e.detail.value : "";
     const nextSettings = Object.assign({}, this.data.aboutSettings || {}, { [field]: value });
     this.setData(buildAboutSettingsPatch(nextSettings));
+  },
+
+  onAboutMessageLineChange(e) {
+    const detail = e && e.detail ? e.detail : {};
+    const heightRpx = Number(detail.heightRpx);
+    const lineCount = Number(detail.lineCount || 0);
+    const nextHeight =
+      Number.isFinite(heightRpx) && heightRpx > 0
+        ? normalizeAboutMessageHeightRpx(heightRpx)
+        : estimateAboutMessageHeightByLineCount(lineCount);
+    if (nextHeight === Number(this.data.aboutMessageHeightRpx || 0)) return;
+    this.setData({ aboutMessageHeightRpx: nextHeight });
   },
 
   onOpenAboutDonationModal() {
@@ -5164,7 +5257,8 @@ Page({
         this.data.bookingTypesRefreshing ||
         this.data.bookingTypeSaving ||
         this.data.bookingTypeTogglingId !== 0 ||
-        this.data.bookingTypeDeletingId !== 0
+        this.data.bookingTypeDeletingId !== 0 ||
+        this.data.bookingTypeBatchDeleting
       ) {
         return;
       }
@@ -5174,7 +5268,8 @@ Page({
         this.data.citiesRefreshing ||
         this.data.citySaving ||
         this.data.cityTogglingId !== 0 ||
-        this.data.cityDeletingId !== 0
+        this.data.cityDeletingId !== 0 ||
+        this.data.cityBatchDeleting
       ) {
         return;
       }
@@ -5411,8 +5506,6 @@ Page({
           this.loadReleases(),
           this.loadAboutSettings(),
           this.loadRecentBookings(),
-          this.loadBetaRoutes().catch(() => {}),
-          this.loadBetaVersions().catch(() => {}),
         ].map((task) =>
           Promise.resolve(task)
             .then(() => ({ ok: true, error: null }))
@@ -7706,7 +7799,7 @@ Page({
         ? Number(e.currentTarget.dataset.id || 0)
         : 0;
     if (!id) return;
-    if (this.data.bookingTypeTogglingId || this.data.bookingTypeDeletingId || this.data.bookingTypeSaving) return;
+    if (this.data.bookingTypeTogglingId || this.data.bookingTypeDeletingId || this.data.bookingTypeSaving || this.data.bookingTypeBatchDeleting) return;
 
     const target = (this.data.bookingTypes || []).find((item) => item.id === id) || null;
     if (!target) return;
@@ -7727,13 +7820,139 @@ Page({
     this.onOpenBookingTypeDeleteConfirm(e);
   },
 
+  onEnterBookingTypeSelectionMode() {
+    if (
+      this.data.bookingTypesLoading ||
+      this.data.bookingTypesRefreshing ||
+      this.data.bookingTypeSaving ||
+      this.data.bookingTypeDeletingId !== 0 ||
+      this.data.bookingTypeTogglingId !== 0 ||
+      this.data.bookingTypeBatchDeleting ||
+      !Array.isArray(this.data.bookingTypes) ||
+      !this.data.bookingTypes.length
+    ) {
+      return;
+    }
+    const selectionState = buildSelectableListState(this.data.bookingTypes, []);
+    this.setData({
+      bookingTypeSelectionMode: true,
+      bookingTypeSelectedIds: [],
+      bookingTypeSelectedCount: 0,
+      bookingTypeAllSelected: false,
+      bookingTypes: selectionState.rows,
+    });
+  },
+
+  onCancelBookingTypeSelectionMode() {
+    if (this.data.bookingTypeBatchDeleting) return;
+    const selectionState = buildSelectableListState(this.data.bookingTypes, []);
+    this.setData({
+      bookingTypeSelectionMode: false,
+      bookingTypeSelectedIds: [],
+      bookingTypeSelectedCount: 0,
+      bookingTypeAllSelected: false,
+      bookingTypes: selectionState.rows,
+    });
+  },
+
+  onToggleBookingTypeSelection(e) {
+    if (!this.data.bookingTypeSelectionMode || this.data.bookingTypeBatchDeleting) return;
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.id || 0)
+        : 0;
+    if (!id) return;
+    const currentIds = normalizePositiveIdList(this.data.bookingTypeSelectedIds);
+    const nextIds = currentIds.includes(id)
+      ? currentIds.filter((item) => item !== id)
+      : currentIds.concat(id);
+    const selectionState = buildSelectableListState(this.data.bookingTypes, nextIds);
+    this.setData({
+      bookingTypes: selectionState.rows,
+      bookingTypeSelectedIds: selectionState.selectedIds,
+      bookingTypeSelectedCount: selectionState.selectedCount,
+      bookingTypeAllSelected: selectionState.allSelected,
+    });
+  },
+
+  onToggleAllBookingTypes() {
+    if (!this.data.bookingTypeSelectionMode || this.data.bookingTypeBatchDeleting) return;
+    const nextIds = this.data.bookingTypeAllSelected
+      ? []
+      : (Array.isArray(this.data.bookingTypes) ? this.data.bookingTypes : [])
+          .map((item) => Number(item && item.id))
+          .filter((id) => id > 0);
+    const selectionState = buildSelectableListState(this.data.bookingTypes, nextIds);
+    this.setData({
+      bookingTypes: selectionState.rows,
+      bookingTypeSelectedIds: selectionState.selectedIds,
+      bookingTypeSelectedCount: selectionState.selectedCount,
+      bookingTypeAllSelected: selectionState.allSelected,
+    });
+  },
+
+  async onBatchDeleteBookingTypes() {
+    if (
+      !this.data.bookingTypeSelectionMode ||
+      this.data.bookingTypeBatchDeleting ||
+      !this.data.bookingTypeSelectedCount
+    ) {
+      return;
+    }
+
+    const ids = normalizePositiveIdList(this.data.bookingTypeSelectedIds);
+    if (!ids.length) return;
+
+    const confirmed = await new Promise((resolve) => {
+      wx.showModal({
+        title: "批量删除约拍类型",
+        content: `确定删除已选择的 ${ids.length} 个约拍类型吗？此操作无法撤销。`,
+        confirmColor: "#dc2626",
+        success: (res) => resolve(Boolean(res && res.confirm)),
+        fail: () => resolve(false),
+      });
+    });
+    if (!confirmed) return;
+
+    this.setData({ bookingTypeBatchDeleting: true });
+    try {
+      for (let index = 0; index < ids.length; index += 1) {
+        await deleteAdminBookingType(ids[index]);
+      }
+      const currentId = Number((this.data.bookingTypeForm && this.data.bookingTypeForm.id) || 0);
+      if (currentId > 0 && ids.includes(currentId)) {
+        this.setData({
+          bookingTypeForm: {
+            id: 0,
+            name: "",
+            description: "",
+          },
+        });
+      }
+      this.setData({
+        bookingTypeSelectionMode: false,
+        bookingTypeSelectedIds: [],
+        bookingTypeSelectedCount: 0,
+        bookingTypeAllSelected: false,
+      });
+      await this.safeRefresh(
+        [this.loadBookingTypes(), this.loadRecentBookings(), this.loadStats()],
+        `已删除 ${ids.length} 个约拍类型`
+      );
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "批量删除约拍类型失败"));
+    } finally {
+      this.setData({ bookingTypeBatchDeleting: false });
+    }
+  },
+
   async onConfirmDeleteBookingType() {
     const id = Number(this.data.bookingTypeDeletingTargetId || 0);
     if (!id) {
       this.onCancelBookingTypeDeleteConfirm();
       return;
     }
-    if (this.data.bookingTypeDeletingId || this.data.bookingTypeTogglingId || this.data.bookingTypeSaving) return;
+    if (this.data.bookingTypeDeletingId || this.data.bookingTypeTogglingId || this.data.bookingTypeSaving || this.data.bookingTypeBatchDeleting) return;
 
     this.setData({ bookingTypeDeletingId: id });
     try {
@@ -7860,7 +8079,7 @@ Page({
   },
 
   onEditAllowedCity(e) {
-    if (this.data.citySaving || this.data.cityTogglingId || this.data.cityDeletingId) return;
+    if (this.data.citySaving || this.data.cityTogglingId || this.data.cityDeletingId || this.data.cityBatchDeleting) return;
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? Number(e.currentTarget.dataset.id || 0)
@@ -7886,7 +8105,7 @@ Page({
   },
 
   onResetCityForm() {
-    if (this.data.citySaving || this.data.cityTogglingId || this.data.cityDeletingId) return;
+    if (this.data.citySaving || this.data.cityTogglingId || this.data.cityDeletingId || this.data.cityBatchDeleting) return;
     this.setData({
       cityModalOpen: false,
       cityMapPickerOpen: false,
@@ -7908,7 +8127,7 @@ Page({
         ? Number(e.currentTarget.dataset.id || 0)
         : 0;
     if (!id) return;
-    if (this.data.cityTogglingId || this.data.citySaving || this.data.cityDeletingId) return;
+    if (this.data.cityTogglingId || this.data.citySaving || this.data.cityDeletingId || this.data.cityBatchDeleting) return;
 
     const target = (this.data.allowedCities || []).find((item) => item.id === id) || null;
     if (!target) return;
@@ -7934,13 +8153,136 @@ Page({
     this.onOpenCityDeleteConfirm(e);
   },
 
+  onEnterCitySelectionMode() {
+    if (
+      this.data.citiesLoading ||
+      this.data.citiesRefreshing ||
+      this.data.citySaving ||
+      this.data.cityDeletingId !== 0 ||
+      this.data.cityTogglingId !== 0 ||
+      this.data.cityBatchDeleting ||
+      !Array.isArray(this.data.allowedCities) ||
+      !this.data.allowedCities.length
+    ) {
+      return;
+    }
+    const selectionState = buildSelectableListState(this.data.allowedCities, []);
+    this.setData({
+      citySelectionMode: true,
+      citySelectedIds: [],
+      citySelectedCount: 0,
+      cityAllSelected: false,
+      allowedCities: selectionState.rows,
+    });
+  },
+
+  onCancelCitySelectionMode() {
+    if (this.data.cityBatchDeleting) return;
+    const selectionState = buildSelectableListState(this.data.allowedCities, []);
+    this.setData({
+      citySelectionMode: false,
+      citySelectedIds: [],
+      citySelectedCount: 0,
+      cityAllSelected: false,
+      allowedCities: selectionState.rows,
+    });
+  },
+
+  onToggleCitySelection(e) {
+    if (!this.data.citySelectionMode || this.data.cityBatchDeleting) return;
+    const id =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? Number(e.currentTarget.dataset.id || 0)
+        : 0;
+    if (!id) return;
+    const currentIds = normalizePositiveIdList(this.data.citySelectedIds);
+    const nextIds = currentIds.includes(id)
+      ? currentIds.filter((item) => item !== id)
+      : currentIds.concat(id);
+    const selectionState = buildSelectableListState(this.data.allowedCities, nextIds);
+    this.setData({
+      allowedCities: selectionState.rows,
+      citySelectedIds: selectionState.selectedIds,
+      citySelectedCount: selectionState.selectedCount,
+      cityAllSelected: selectionState.allSelected,
+    });
+  },
+
+  onToggleAllCities() {
+    if (!this.data.citySelectionMode || this.data.cityBatchDeleting) return;
+    const nextIds = this.data.cityAllSelected
+      ? []
+      : (Array.isArray(this.data.allowedCities) ? this.data.allowedCities : [])
+          .map((item) => Number(item && item.id))
+          .filter((id) => id > 0);
+    const selectionState = buildSelectableListState(this.data.allowedCities, nextIds);
+    this.setData({
+      allowedCities: selectionState.rows,
+      citySelectedIds: selectionState.selectedIds,
+      citySelectedCount: selectionState.selectedCount,
+      cityAllSelected: selectionState.allSelected,
+    });
+  },
+
+  async onBatchDeleteCities() {
+    if (!this.data.citySelectionMode || this.data.cityBatchDeleting || !this.data.citySelectedCount) {
+      return;
+    }
+
+    const ids = normalizePositiveIdList(this.data.citySelectedIds);
+    if (!ids.length) return;
+
+    const confirmed = await new Promise((resolve) => {
+      wx.showModal({
+        title: "批量删除城市",
+        content: `确定删除已选择的 ${ids.length} 个城市吗？此操作无法撤销。`,
+        confirmColor: "#dc2626",
+        success: (res) => resolve(Boolean(res && res.confirm)),
+        fail: () => resolve(false),
+      });
+    });
+    if (!confirmed) return;
+
+    this.setData({ cityBatchDeleting: true });
+    try {
+      for (let index = 0; index < ids.length; index += 1) {
+        await deleteAdminAllowedCity(ids[index]);
+      }
+      const currentFormId = Number((this.data.cityForm && this.data.cityForm.id) || 0);
+      if (currentFormId > 0 && ids.includes(currentFormId)) {
+        this.setData({
+          cityForm: {
+            id: 0,
+            city_name: "",
+            province: "",
+            city_code: "",
+            latitude: "",
+            longitude: "",
+            is_active: true,
+          },
+        });
+      }
+      this.setData({
+        citySelectionMode: false,
+        citySelectedIds: [],
+        citySelectedCount: 0,
+        cityAllSelected: false,
+      });
+      await this.safeRefresh([this.loadAllowedCities(), this.loadStats()], `已删除 ${ids.length} 个城市`);
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "批量删除城市失败"));
+    } finally {
+      this.setData({ cityBatchDeleting: false });
+    }
+  },
+
   onOpenCityDeleteConfirm(e) {
     const id =
       e && e.currentTarget && e.currentTarget.dataset
         ? Number(e.currentTarget.dataset.id || 0)
         : 0;
     if (!id) return;
-    if (this.data.cityDeletingId || this.data.cityTogglingId || this.data.citySaving) return;
+    if (this.data.cityDeletingId || this.data.cityTogglingId || this.data.citySaving || this.data.cityBatchDeleting) return;
 
     const target = (this.data.allowedCities || []).find((item) => item.id === id) || null;
     if (!target) return;
@@ -7967,7 +8309,7 @@ Page({
       this.onCancelCityDeleteConfirm();
       return;
     }
-    if (this.data.cityDeletingId || this.data.cityTogglingId || this.data.citySaving) return;
+    if (this.data.cityDeletingId || this.data.cityTogglingId || this.data.citySaving || this.data.cityBatchDeleting) return;
 
     this.setData({ cityDeletingId: id });
     try {
@@ -9218,14 +9560,6 @@ Page({
     // 跳转到专属空间管理详情页面
     wx.navigateTo({
       url: `/pages/admin/album-detail/index?id=${id}&title=${encodeURIComponent(title)}&key=${key}`
-    });
-  },
-
-  onOpenGalleryWallAlbumDetail() {
-    if (this.data.albumActionLoading || this.data.albumBatchDeleting) return;
-    const title = encodeURIComponent("照片墙管理");
-    wx.navigateTo({
-      url: `/pages/admin/album-detail/index?id=${SYSTEM_GALLERY_ALBUM_ID}&title=${title}&key=PUBLIC_GALLERY`,
     });
   },
 

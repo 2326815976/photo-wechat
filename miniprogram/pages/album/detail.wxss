@@ -1,6 +1,20 @@
 @import "../../styles/admin-loading.wxss";
 @import "../../styles/secondary-page-frame.wxss";
 
+.page {
+  min-height: 100vh;
+  background: #fffbf0;
+  display: block;
+}
+
+.content {
+  /* 对齐旧版相册详情页：使用页面原生滚动，避免 flex 容器干扰 sticky 头部与标签栏 */
+  flex: none;
+  padding: 0 16rpx calc(256rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background-image: none;
+}
+
 /* 重置小程序 button 默认样式，避免与 Web 对标样式出现偏差 */
 button {
   margin: 0;
@@ -748,7 +762,7 @@ button::after {
 
 .photo-story-panel {
   min-height: 280rpx;
-  padding: 16rpx;
+  padding: 84rpx 18rpx 18rpx;
   box-sizing: border-box;
   background: linear-gradient(160deg, #fffdf7 0%, #fff5dc 52%, #fcebc5 100%);
   transform-origin: center top;
@@ -767,7 +781,7 @@ button::after {
   width: 100%;
   min-height: 248rpx;
   border-radius: 18rpx;
-  padding: 18rpx 18rpx 20rpx;
+  padding: 16rpx 18rpx 20rpx;
   box-sizing: border-box;
   border: 2rpx solid rgba(166, 126, 82, 0.24);
   background:
@@ -1734,6 +1748,10 @@ button::after {
 .letter-btn--active {
   transform: scale(0.98);
   box-shadow: 0 8rpx 20rpx rgba(93, 64, 55, 0.12);
+}
+
+.letter-btn--disabled {
+  opacity: 0.72;
 }
 
 .donation-title {

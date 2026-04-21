@@ -82,3 +82,7 @@
 .secondary-page-shell__content--scroll {
   height: 0;
 }
+
+.secondary-page-shell__content--standalone {
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+}

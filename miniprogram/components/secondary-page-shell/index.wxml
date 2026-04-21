@@ -1,4 +1,4 @@
-<view class="secondary-page-shell shell-class">
+<view class="secondary-page-shell {{resolvedPreferFallback ? 'secondary-page-shell--standalone' : ''}} shell-class">
   <view wx:if="{{!hidden}}" class="secondary-page-shell__header" style="padding-top: {{resolvedSafeTop}}px;">
     <view class="secondary-page-shell__header-inner">
       <view class="secondary-page-shell__back-wrap" bindtap="onBack">
@@ -15,7 +15,7 @@
 
   <scroll-view
     wx:if="{{useScrollView}}"
-    class="secondary-page-shell__content secondary-page-shell__content--scroll content-class"
+    class="secondary-page-shell__content secondary-page-shell__content--scroll {{resolvedPreferFallback ? 'secondary-page-shell__content--standalone' : ''}} content-class"
     scroll-y="{{scrollY}}"
     enable-flex="{{enableFlex}}"
     show-scrollbar="{{showScrollbar}}"
@@ -23,7 +23,7 @@
     <slot />
   </scroll-view>
 
-  <view wx:else class="secondary-page-shell__content content-class">
+  <view wx:else class="secondary-page-shell__content {{resolvedPreferFallback ? 'secondary-page-shell__content--standalone' : ''}} content-class">
     <slot />
   </view>
 </view>

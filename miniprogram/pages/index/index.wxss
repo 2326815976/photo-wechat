@@ -108,6 +108,18 @@
 }
 
 .content--preview {
+  padding-bottom: calc(4rpx + env(safe-area-inset-bottom));
+}
+
+.content--preview .tagbar {
+  gap: 12rpx;
+  padding: 4rpx 0 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.content--preview .tag-btn,
+.content--preview .tag-all-btn {
+  padding-top: 12rpx;
   padding-bottom: 12rpx;
 }
 
@@ -227,6 +239,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.skeleton-wrap--preview .skeleton-pose {
+  margin-bottom: 10rpx;
+}
+
+.skeleton-wrap--preview .skeleton-card {
+  padding-bottom: 20rpx;
 }
 
 .skeleton-tags-row {
@@ -368,6 +388,10 @@
   transform-origin: center;
 }
 
+.pose-wrap--preview {
+  margin-bottom: 18rpx;
+}
+
 .tape {
   position: absolute;
   top: -24rpx; /* -top-3 */
@@ -394,6 +418,15 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+.pose-card--preview {
+  padding-bottom: 20rpx;
+}
+
+.pose-card--preview .pose-tags {
+  margin-top: 12rpx;
+  gap: 12rpx;
 }
 
 .pose-doodle {
@@ -628,7 +661,17 @@
 }
 
 .bottom--preview {
-  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+  gap: 12rpx;
+  padding-bottom: calc(env(safe-area-inset-bottom));
+}
+
+.bottom--preview .shuffle-btn {
+  width: 100rpx;
+  height: 100rpx;
+}
+
+.bottom--preview .shuffle-text {
+  font-size: 26rpx;
 }
 
 .bottom--enter {

@@ -7,6 +7,7 @@ const {
 } = require("../../services/photo-api");
 const { requestWechatUserProfile } = require("../../utils/wechat-profile");
 const { clearStoredCookie } = require("../../utils/auth");
+const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const {
   getManagedPageAccess,
   normalizeRuntimeConfig,
@@ -21,6 +22,11 @@ const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜我的小天地";
 const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
+const WECHAT_MINIPROGRAM_DEFAULT_NAME = "拾光者";
+const WECHAT_MINIPROGRAM_LEGACY_DEFAULT_NAMES = new Set([
+  "微信用户",
+  WECHAT_MINIPROGRAM_DEFAULT_NAME,
+]);
 
 const PROFILE_MENU_SPECS = [
   {
@@ -96,10 +102,21 @@ function isWechatMiniProgramAccount(user) {
   return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
 }
 
+function normalizeWechatMiniDefaultName(name, user) {
+  const normalizedName = toOptionalText(name);
+  if (!isWechatMiniProgramAccount(user)) {
+    return normalizedName;
+  }
+  if (!normalizedName || WECHAT_MINIPROGRAM_LEGACY_DEFAULT_NAMES.has(normalizedName)) {
+    return WECHAT_MINIPROGRAM_DEFAULT_NAME;
+  }
+  return normalizedName;
+}
+
 function resolveDisplayUserName(user) {
-  const name = toOptionalText(user && user.name);
+  const name = normalizeWechatMiniDefaultName(user && user.name, user);
   const phone = toOptionalText(user && user.phone);
-  return name || phone || "拾光者";
+  return name || phone || WECHAT_MINIPROGRAM_DEFAULT_NAME;
 }
 
 function resolveAvatarText(name) {
@@ -236,6 +253,14 @@ Page({
     backendReady: false,
     backendReconnecting: false,
     wechatLoginEnabled: true,
+    wechatLoginSubmitting: false,
+    showWechatLegalModal: false,
+    wechatLegalDocTabs: [],
+    wechatActiveLegalKey: "",
+    wechatActiveLegalTitle: "",
+    wechatActiveLegalVersion: "",
+    wechatActiveLegalSections: [],
+    wechatActiveLegalFooter: [],
 
     loading: true,
     pageLoadingTitle: "拾光中...",
@@ -290,6 +315,8 @@ Page({
       userPhone: "",
       userRegisterDateText: "",
       canChangePassword: false,
+      wechatLoginSubmitting: false,
+      showWechatLegalModal: false,
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
       profileMenuItems: [],
@@ -340,6 +367,7 @@ Page({
       backendReconnecting,
     });
 
+    this.initWechatLegalDocuments();
     this.applyRuntimeConfig(globalData.runtimeConfig);
     this.applyPagePresentation();
 
@@ -491,14 +519,97 @@ Page({
     }, 360);
   },
 
+  initWechatLegalDocuments() {
+    const docs = getLegalDocuments();
+    this.wechatLegalDocMap = {};
+    docs.forEach((doc) => {
+      const key = toText(doc && doc.key);
+      if (!key) return;
+      this.wechatLegalDocMap[key] = doc;
+    });
+
+    const tabs = docs
+      .map((doc) => ({
+        key: toText(doc && doc.key),
+        title: toText(doc && doc.title),
+        shortTitle: toText((doc && doc.shortTitle) || (doc && doc.title)),
+      }))
+      .filter((doc) => doc.key);
+    const activeKey = toText(this.data.wechatActiveLegalKey);
+    const defaultKey = tabs.some((tab) => tab.key === activeKey)
+      ? activeKey
+      : (tabs[0] ? tabs[0].key : "");
+
+    this.setData({ wechatLegalDocTabs: tabs });
+    if (defaultKey) {
+      this.applyWechatLegalDocument(defaultKey);
+    }
+  },
+
+  applyWechatLegalDocument(key) {
+    const normalizedKey = toText(key);
+    if (!normalizedKey) return false;
+
+    const doc = (this.wechatLegalDocMap && this.wechatLegalDocMap[normalizedKey])
+      || getLegalDocumentByKey(normalizedKey);
+    if (!doc) return false;
+
+    this.setData({
+      wechatActiveLegalKey: toText(doc.key) || normalizedKey,
+      wechatActiveLegalTitle: toText(doc.title),
+      wechatActiveLegalVersion: toText(doc.versionLine),
+      wechatActiveLegalSections: Array.isArray(doc.sections) ? doc.sections : [],
+      wechatActiveLegalFooter: Array.isArray(doc.footer) ? doc.footer : [],
+    });
+    return true;
+  },
+
+  openWechatLegalModal() {
+    if (!Array.isArray(this.data.wechatLegalDocTabs) || this.data.wechatLegalDocTabs.length === 0) {
+      this.initWechatLegalDocuments();
+    }
+    if (!this.data.wechatActiveLegalKey && this.data.wechatLegalDocTabs[0]) {
+      this.applyWechatLegalDocument(this.data.wechatLegalDocTabs[0].key);
+    }
+    if (!this.data.wechatActiveLegalKey) {
+      wx.showToast({ title: "条款加载失败，请稍后重试", icon: "none" });
+      return false;
+    }
+    this.setData({ showWechatLegalModal: true });
+    return true;
+  },
+
+  onSwitchWechatLegalDoc(e) {
+    const dataset = e && e.currentTarget ? e.currentTarget.dataset : {};
+    this.applyWechatLegalDocument(dataset && dataset.docKey);
+  },
+
+  onCloseWechatLegalModal() {
+    if (!this.data.showWechatLegalModal) return;
+    this.setData({ showWechatLegalModal: false });
+  },
+
+  onRejectWechatLogin() {
+    this.setData({ showWechatLegalModal: false });
+  },
+
+  onAgreeWechatLogin() {
+    if (this.data.wechatLoginSubmitting) return;
+    this.setData({ showWechatLegalModal: false });
+    void this.submitWechatLogin();
+  },
+
+  onStopPropagation() {},
+
   async submitWechatLogin() {
     if (this.data.serviceMissing) {
       wx.showToast({ title: "当前服务配置不完整", icon: "none" });
       return;
     }
-    if (this._wechatSubmitting) return;
+    if (this._wechatSubmitting || this.data.wechatLoginSubmitting) return;
 
     this._wechatSubmitting = true;
+    this.setData({ wechatLoginSubmitting: true });
     try {
       const [loginRes, profile] = await Promise.all([
         wxLogin(),
@@ -535,7 +646,7 @@ Page({
         userRole: isAdmin ? "admin" : "user",
         userName,
         userAvatarText: resolveAvatarText(userName),
-        userPhone: String((user && user.phone) || "").trim(),
+        userPhone: "",
         userRegisterDateText:
           formatRegisterDateText(user && (user.created_at || user.createdAt)) || this.data.userRegisterDateText,
         canChangePassword,
@@ -570,6 +681,7 @@ Page({
       }
     } finally {
       this._wechatSubmitting = false;
+      this.setData({ wechatLoginSubmitting: false });
     }
   },
 
@@ -600,7 +712,6 @@ Page({
       }
 
       let userName = resolveDisplayUserName(user);
-      let userPhone = String((user && user.phone) || "").trim();
       let userRegisterDateText = formatRegisterDateText(user && (user.created_at || user.createdAt));
       const isWechatLogin = isWechatMiniProgramAccount(user);
       const rawUserRole = String((user && user.role) || "").trim();
@@ -610,16 +721,13 @@ Page({
         const result = await dbQuery({
           table: "profiles",
           action: "select",
-          columns: "name,phone,role",
+          columns: "name,role",
           filters: [{ column: "id", operator: "eq", value: user.id }],
           maybeSingle: true,
         });
         const profile = result ? result.data : null;
         if (profile && profile.name) {
-          userName = String(profile.name);
-        }
-        if (profile && profile.phone) {
-          userPhone = String(profile.phone);
+          userName = normalizeWechatMiniDefaultName(profile.name, user) || userName;
         }
         if (profile && profile.role) {
           profileRole = String(profile.role).trim();
@@ -654,7 +762,7 @@ Page({
         userRole: isAdmin ? "admin" : "user",
         userName,
         userAvatarText: resolveAvatarText(userName),
-        userPhone,
+        userPhone: "",
         userRegisterDateText,
         canChangePassword,
         pageLoadingTitle: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingTitle,
@@ -680,7 +788,8 @@ Page({
   },
 
   goWechatLogin() {
-    void this.submitWechatLogin();
+    if (this.data.serviceMissing || this.data.wechatLoginSubmitting) return;
+    this.openWechatLegalModal();
   },
 
   goEditProfile() {

@@ -93,6 +93,19 @@ function computeTagbarStickyTop(safeTop) {
   return Math.max(0, Math.round(top));
 }
 
+function resolveCurrentRouteFromStack() {
+  try {
+    const pages = typeof getCurrentPages === "function" ? getCurrentPages() : [];
+    const currentPage = Array.isArray(pages) && pages.length > 0 ? pages[pages.length - 1] : null;
+    return String((currentPage && currentPage.route) || "")
+      .trim()
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
+  } catch (error) {
+    return "";
+  }
+}
+
 Page({
   data: {
     safeTop: 0,
@@ -185,6 +198,10 @@ Page({
     return applyPagePresentationToPage(this, app, "pages/index/index");
   },
 
+  isHomePageActive() {
+    return Boolean(this._pageVisible) && resolveCurrentRouteFromStack() === "pages/index/index";
+  },
+
   normalizeHomeEntryPath(value) {
     return String(value || "pages/index/index")
       .trim()
@@ -208,6 +225,7 @@ Page({
 
   onLoad() {
     this.isPageAlive = true;
+    this._pageVisible = false;
     const app = getApp();
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
@@ -233,6 +251,9 @@ Page({
       this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((nextRuntimeConfig) => {
         this.applyRuntimeConfig(nextRuntimeConfig);
         const presentationState = this.applyPagePresentation();
+        if (!this.isHomePageActive()) {
+          return;
+        }
         if (!this.shouldStayOnPoseHome(presentationState)) {
           this.redirectToHomeEntry();
           return;
@@ -249,6 +270,9 @@ Page({
           backendReady: ready,
           backendReconnecting: reconnecting,
         });
+        if (!this.isHomePageActive()) {
+          return;
+        }
         this.startHomePageIfNeeded();
       });
     }
@@ -275,6 +299,7 @@ Page({
   },
 
   async onShow() {
+    this._pageVisible = true;
     const app = typeof getApp === "function" ? getApp() : null;
     const appEnterSeq = Math.max(0, Number(app && app.globalData ? app.globalData.appEnterSeq : 0));
     const lastSeenAppEnterSeq = Math.max(0, Number(this._lastSeenAppEnterSeq || 0));
@@ -353,6 +378,7 @@ Page({
   },
 
   onHide() {
+    this._pageVisible = false;
     this.clearAnimationTimers();
     this.stopShake();
     this.stopTagsRefreshTimer();
@@ -362,6 +388,7 @@ Page({
 
   onUnload() {
     this.isPageAlive = false;
+    this._pageVisible = false;
     this.homeBootstrapped = false;
     this.betaPoseBypassAllowed = false;
     this.clearAnimationTimers();
@@ -435,6 +462,7 @@ Page({
   },
 
   redirectToHomeEntry() {
+    if (!this.isHomePageActive()) return;
     if (this.data.pageIsStandalone) return;
     if (this._redirectingToHomeEntry) return;
     const targetPath = this.normalizeHomeEntryPath(this.data.homeRedirectPath);

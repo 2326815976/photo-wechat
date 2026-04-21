@@ -152,9 +152,9 @@
 }
 
 .toolbar-btn--danger {
-  background: #fee2e2;
-  color: #b91c1c;
-  border: 2rpx solid #fecaca;
+  background: #ef4444;
+  color: #ffffff;
+  border: none;
 }
 
 .toolbar-btn--disabled {

@@ -9,6 +9,8 @@ const {
   resolvePagePresentationState,
 } = require("../utils/page-presentation");
 
+const TAB_SWITCH_TIMEOUT_MS = 3000;
+
 const ICON_PATH_MAP = {
   home: {
     normal: "/images/tab/house.svg",
@@ -131,6 +133,10 @@ Component({
   pageLifetimes: {
     show() {
       this.releaseSwitchLock();
+      const app = typeof getApp === "function" ? getApp() : null;
+      if (app && typeof app.getPagePresentation === "function") {
+        this.applyPresentation(app.getPagePresentation());
+      }
       this.setData({ selectedPath: resolveCurrentRouteFromStack() });
       this.refreshLoginState();
       this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
@@ -272,10 +278,6 @@ Component({
       }
 
       this._switchingPath = path;
-      this._switchLockTimer = setTimeout(() => {
-        this.releaseSwitchLock();
-        this.applyList(Array.isArray(this.data.list) ? this.data.list : []);
-      }, 900);
 
       if (index >= 0) {
         this.setData({ selected: index, selectedPath: path });
@@ -300,10 +302,25 @@ Component({
 
       const app = typeof getApp === "function" ? getApp() : null;
       if (app && typeof app.resetPagePresentation === "function") {
-        app.resetPagePresentation();
+        app.resetPagePresentation({ silent: true });
+        if (typeof app.getPagePresentation === "function") {
+          this.applyPresentation(app.getPagePresentation());
+        }
       }
+      this._switchLockTimer = setTimeout(() => {
+        if (String(this._switchingPath || "") !== path) return;
+        const activePath = resolveCurrentRouteFromStack();
+        if (activePath === path) {
+          this.releaseSwitchLock();
+          return;
+        }
+        revertSelection();
+      }, TAB_SWITCH_TIMEOUT_MS);
       wx.switchTab({
         url: `/${path}`,
+        success: () => {
+          this.releaseSwitchLock();
+        },
         fail: revertSelection,
       });
     },

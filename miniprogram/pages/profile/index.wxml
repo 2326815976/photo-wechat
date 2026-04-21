@@ -38,6 +38,8 @@
           hover-class="{{item.hoverClass}}"
           bindtap="onProfileMenuTap"
           data-action="{{item.action}}"
+          loading="{{wechatLoginSubmitting && item.action === 'goWechatLogin'}}"
+          disabled="{{wechatLoginSubmitting && item.action === 'goWechatLogin'}}"
         >
           {{item.title}}
         </button>
@@ -49,8 +51,7 @@
         <view class="avatar">{{userAvatarText}}</view>
         <view class="id-info">
           <text class="id-name">{{userName}}</text>
-          <text class="id-sub" wx:if="{{userPhone}}">{{userPhone}}</text>
-          <view class="id-sub-row id-sub-row--register" wx:if="{{!userPhone && userRegisterDateText}}">
+          <view class="id-sub-row id-sub-row--register" wx:if="{{userRegisterDateText}}">
             <text class="id-sub id-sub--register">{{userRegisterDateText}}</text>
           </view>
         </view>
@@ -95,6 +96,75 @@
           </view>
         </view>
       </view>
+    </view>
+  </view>
+</view>
+
+<view
+  wx:if="{{showWechatLegalModal}}"
+  class="legal-modal-mask"
+  bindtap="onCloseWechatLegalModal"
+  catchtouchmove="onStopPropagation"
+>
+  <view class="legal-modal" catchtap="onStopPropagation" catchtouchmove="onStopPropagation">
+    <view class="legal-modal__head">
+      <text class="legal-modal__title">{{wechatActiveLegalTitle}}</text>
+      <view class="legal-modal__close" bindtap="onCloseWechatLegalModal">
+        <image class="legal-modal__close-icon" src="/images/icons/x-gray.svg" mode="aspectFit" />
+      </view>
+    </view>
+
+    <scroll-view class="legal-modal__tabs" scroll-x="{{true}}" enable-flex="{{true}}" show-scrollbar="{{false}}">
+      <view class="legal-modal__tabs-inner">
+        <view
+          wx:for="{{wechatLegalDocTabs}}"
+          wx:for-item="tab"
+          wx:key="key"
+          class="legal-modal__tab {{wechatActiveLegalKey === tab.key ? 'legal-modal__tab--active' : ''}}"
+          data-doc-key="{{tab.key}}"
+          bindtap="onSwitchWechatLegalDoc"
+        >
+          {{tab.shortTitle || tab.title}}
+        </view>
+      </view>
+    </scroll-view>
+
+    <scroll-view class="legal-modal__body" scroll-y="{{true}}" enable-flex="{{true}}">
+      <text class="legal-modal__version">{{wechatActiveLegalVersion}}</text>
+
+      <view wx:for="{{wechatActiveLegalSections}}" wx:for-item="section" wx:for-index="sectionIndex" wx:key="sectionIndex" class="legal-section">
+        <text class="legal-section__title">{{section.title}}</text>
+        <text
+          wx:for="{{section.paragraphs}}"
+          wx:for-item="paragraph"
+          wx:for-index="paragraphIndex"
+          wx:key="paragraphIndex"
+          class="legal-section__paragraph"
+        >
+          {{paragraph}}
+        </text>
+      </view>
+
+      <view class="legal-footer" wx:if="{{wechatActiveLegalFooter.length > 0}}">
+        <text
+          wx:for="{{wechatActiveLegalFooter}}"
+          wx:for-item="line"
+          wx:for-index="lineIndex"
+          wx:key="lineIndex"
+          class="legal-footer__line"
+        >
+          {{line}}
+        </text>
+      </view>
+    </scroll-view>
+
+    <view class="legal-modal__foot legal-modal__foot--dual">
+      <button class="legal-modal__btn legal-modal__btn--reject" hover-class="legal-modal__btn--reject-active" bindtap="onRejectWechatLogin">
+        拒绝
+      </button>
+      <button class="legal-modal__btn legal-modal__btn--agree" hover-class="legal-modal__btn--agree-active" bindtap="onAgreeWechatLogin" loading="{{wechatLoginSubmitting}}" disabled="{{wechatLoginSubmitting}}">
+        同意
+      </button>
     </view>
   </view>
 </view>

@@ -5,7 +5,8 @@ const {
 } = require("../../../utils/runtime-config");
 const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
-const BETA_POSE_BYPASS_STORAGE_KEY = "beta_pose_bypass_until";
+const POSE_FEATURE_ID = "pose";
+const POSE_BETA_ROUTE = "/pages/profile/beta/pose/index";
 
 const ROUTE_ALIAS_MAP = {
   "/pose": "/pages/profile/beta/pose/index",
@@ -19,13 +20,37 @@ const ROUTE_ALIAS_MAP = {
   "/admin": "/pages/admin/index",
 };
 
-function toErrorMessage(error, fallback) {
-  if (error && typeof error === "object") {
-    const message = String(error.message || "").trim();
-    if (message) return normalizeRpcErrorMessage(message);
-  }
+function extractErrorText(error) {
   if (typeof error === "string" && error.trim()) {
-    return normalizeRpcErrorMessage(error.trim());
+    return error.trim();
+  }
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const nestedError = error.error && typeof error.error === "object" ? error.error : null;
+  const candidates = [
+    error.message,
+    error.errMsg,
+    error.reason,
+    nestedError && nestedError.message,
+    typeof error.error === "string" ? error.error : "",
+  ];
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const value = String(candidates[index] || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function toErrorMessage(error, fallback) {
+  const message = extractErrorText(error);
+  if (message) {
+    return normalizeRpcErrorMessage(message);
   }
   return String(fallback || "操作失败");
 }
@@ -33,6 +58,7 @@ function toErrorMessage(error, fallback) {
 function normalizeRpcErrorMessage(message) {
   const text = String(message || "").trim();
   if (!text) return "";
+  const lowerText = text.toLowerCase();
   if (text.includes("未实现的 RPC")) {
     return "后端服务版本过旧，请先发布 photo 服务最新版本";
   }
@@ -42,6 +68,24 @@ function normalizeRpcErrorMessage(message) {
     text.includes("InvalidParameter")
   ) {
     return "后端服务仍是旧版本（SQL 兼容逻辑未生效），请先发布 photo 最新后端到云托管 service：slogan";
+  }
+  if (
+    lowerText.includes("webview count limit exceed") ||
+    lowerText.includes("page stack depth exceed") ||
+    (lowerText.includes("page stack") && lowerText.includes("exceed")) ||
+    lowerText.includes("limit exceed")
+  ) {
+    return "页面层级过深，已无法继续压栈，请返回上一页后重试";
+  }
+  if (lowerText.includes("is not found") && lowerText.includes("page")) {
+    return "目标内测页面未注册，请重新编译小程序后重试";
+  }
+  if (
+    lowerText.includes("script error") ||
+    lowerText.includes("component is not found") ||
+    lowerText.includes("failed to load page")
+  ) {
+    return "目标内测页面加载失败，请重新编译小程序后重试";
   }
   return text;
 }
@@ -102,13 +146,107 @@ function normalizeFeatureRoutePath(input) {
 function parseRoutePathAndQuery(url) {
   const normalized = String(url || "").trim();
   if (!normalized) {
-    return { path: "", fullPath: "" };
+    return { path: "", fullPath: "", query: "" };
   }
-  const [path] = normalized.split("?");
+  const [path, query = ""] = normalized.split("?");
   return {
     path: path || normalized,
     fullPath: normalized,
+    query,
   };
+}
+
+function decodeQueryValue(value) {
+  const raw = String(value || "");
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, "%20"));
+  } catch (error) {
+    return raw;
+  }
+}
+
+function parseQueryString(query) {
+  const output = {};
+  const normalized = String(query || "").trim().replace(/^\?/, "");
+  if (!normalized) {
+    return output;
+  }
+
+  normalized.split("&").forEach((segment) => {
+    if (!segment) return;
+    const [rawKey, ...valueParts] = segment.split("=");
+    const key = decodeQueryValue(rawKey);
+    if (!key) return;
+    output[key] = decodeQueryValue(valueParts.join("="));
+  });
+
+  return output;
+}
+
+function stringifyQueryString(params) {
+  return Object.keys(params || {}).reduce((parts, key) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return parts;
+    }
+    const value = params[key];
+    if (value === undefined || value === null) {
+      return parts;
+    }
+    const normalizedValue = String(value).trim();
+    if (!normalizedValue) {
+      return parts;
+    }
+    parts.push(`${encodeURIComponent(normalizedKey)}=${encodeURIComponent(normalizedValue)}`);
+    return parts;
+  }, []).join("&");
+}
+
+function attachBetaFallbackQuery(url, featureId) {
+  const parsed = parseRoutePathAndQuery(url);
+  if (!parsed.path) {
+    return "";
+  }
+
+  const params = parseQueryString(parsed.query);
+  const mode = String(params.presentation || "").trim().toLowerCase();
+  if (mode !== "beta" && mode !== "preview") {
+    return parsed.fullPath;
+  }
+
+  const pageKey = String(featureId || "").trim();
+  if (pageKey && !String(params.page_key || "").trim()) {
+    params.page_key = pageKey;
+  }
+  if (!String(params.fallback_route || "").trim()) {
+    params.fallback_route = "/pages/profile/beta/index";
+  }
+  if (!String(params.fallback_tab || "").trim()) {
+    params.fallback_tab = "pages/profile/index";
+  }
+
+  const query = stringifyQueryString(params);
+  return query ? `${parsed.path}?${query}` : parsed.path;
+}
+
+function shouldRetryRouteWithRedirect(error) {
+  const lowerMessage = extractErrorText(error).toLowerCase();
+  return (
+    lowerMessage.includes("webview count limit exceed") ||
+    lowerMessage.includes("page stack depth exceed") ||
+    (lowerMessage.includes("page stack") && lowerMessage.includes("exceed")) ||
+    lowerMessage.includes("limit exceed")
+  );
+}
+
+function buildNavigationError(error, fallback) {
+  const wrapped = new Error(extractErrorText(error) || String(fallback || "页面跳转失败"));
+  if (error && typeof error === "object") {
+    wrapped.errMsg = String(error.errMsg || "").trim();
+    wrapped.code = String(error.code || "").trim();
+  }
+  return wrapped;
 }
 
 function isPoseFeatureRoute(rawRoutePath) {
@@ -126,6 +264,14 @@ function isPoseFeatureRoute(rawRoutePath) {
     .split("?")[0]
     .replace(/\/+$/, "");
   return normalized === "/pages/index/index" || normalized === "/pages/profile/beta/pose/index";
+}
+
+function resolveFeatureEntryRoute(featureId, rawRoutePath) {
+  const normalizedFeatureId = String(featureId || "").trim().toLowerCase();
+  if (normalizedFeatureId === POSE_FEATURE_ID || isPoseFeatureRoute(rawRoutePath)) {
+    return POSE_BETA_ROUTE;
+  }
+  return normalizeFeatureRoutePath(rawRoutePath);
 }
 
 function normalizeBetaFeatureCode(input) {
@@ -161,23 +307,6 @@ function formatFeatureExpiresAt(rawValue) {
   return `${year}-${month}-${day}`;
 }
 
-function setPoseBypassIfNeeded(rawRoutePath) {
-  if (!isPoseFeatureRoute(rawRoutePath)) {
-    return;
-  }
-
-  const app = typeof getApp === "function" ? getApp() : null;
-  if (!app || !app.globalData) return;
-
-  app.globalData.betaFeatureBypassRoute = "/pose";
-  app.globalData.betaFeatureBypassExpiresAt = Date.now() + 5 * 60 * 1000;
-  try {
-    wx.setStorageSync(BETA_POSE_BYPASS_STORAGE_KEY, app.globalData.betaFeatureBypassExpiresAt);
-  } catch (error) {
-    // ignore storage write errors
-  }
-}
-
 function prepareFeaturePresentation(featureId, routePath) {
   const app = typeof getApp === "function" ? getApp() : null;
   if (!app || typeof app.setPagePresentation !== "function") return;
@@ -209,7 +338,7 @@ function openRoute(url) {
       wx.switchTab({
         url: path,
         success: () => resolve(true),
-        fail: (error) => reject(error),
+        fail: (error) => reject(buildNavigationError(error, `页面跳转失败：${path}`)),
       });
     });
   }
@@ -219,16 +348,24 @@ function openRoute(url) {
       url: fullPath,
       success: () => resolve(true),
       fail: (error) => {
-        const message = String((error && error.errMsg) || "").toLowerCase();
+        const message = extractErrorText(error).toLowerCase();
         if (message.includes("tabbar page") && path) {
           wx.switchTab({
             url: path,
             success: () => resolve(true),
-            fail: (switchError) => reject(switchError),
+            fail: (switchError) => reject(buildNavigationError(switchError, `页面跳转失败：${path}`)),
           });
           return;
         }
-        reject(error);
+        if (shouldRetryRouteWithRedirect(error)) {
+          wx.redirectTo({
+            url: fullPath,
+            success: () => resolve(true),
+            fail: (redirectError) => reject(buildNavigationError(redirectError, `页面跳转失败：${fullPath}`)),
+          });
+          return;
+        }
+        reject(buildNavigationError(error, `页面跳转失败：${fullPath}`));
       },
     });
   });
@@ -237,7 +374,11 @@ function openRoute(url) {
 async function enterFeatureRoute(featureId, routePathRaw) {
   const normalizedFeatureId = String(featureId || "").trim();
   const rawRoute = String(routePathRaw || "").trim();
-  const normalizedRoute = normalizeFeatureRoutePath(rawRoute);
+  const resolvedRoute = resolveFeatureEntryRoute(normalizedFeatureId, rawRoute);
+  const normalizedRoute = attachBetaFallbackQuery(
+    resolvedRoute,
+    normalizedFeatureId
+  );
   if (!normalizedFeatureId) {
     throw new Error("缺少页面标识");
   }
@@ -245,15 +386,50 @@ async function enterFeatureRoute(featureId, routePathRaw) {
     throw new Error("该功能未配置可访问路由");
   }
 
-  if (isPoseFeatureRoute(rawRoute)) {
-    prepareFeaturePresentation(normalizedFeatureId, "/pages/profile/beta/pose/index");
-    await openRoute("/pages/profile/beta/pose/index");
-    return;
-  }
-
-  setPoseBypassIfNeeded(rawRoute);
   prepareFeaturePresentation(normalizedFeatureId, normalizedRoute);
   await openRoute(normalizedRoute);
+}
+
+function readFeatureAccessDeniedMessage(payload, fallback) {
+  const directMessage = extractErrorText(payload);
+  if (directMessage) {
+    return normalizeRpcErrorMessage(directMessage);
+  }
+
+  const reason = String((payload && payload.reason) || "").trim().toLowerCase();
+  if (reason.startsWith("legacy_")) {
+    return "当前小程序仅支持页面中心新体系，请先迁移旧内测数据。";
+  }
+  if (reason === "beta_disabled") {
+    return "该页面当前未开放内测入口";
+  }
+  if (reason === "beta_service_unavailable") {
+    return "页面内测服务暂不可用，请稍后重试";
+  }
+  if (reason === "forbidden") {
+    return "当前账号未获得该内测功能权限";
+  }
+  if (reason === "unauthorized") {
+    return "登录状态已失效，请重新登录后重试";
+  }
+
+  return String(fallback || "进入功能失败");
+}
+
+function isLegacyMiniProgramBetaPayload(payload) {
+  const source = String((payload && payload.source) || "").trim().toLowerCase();
+  const reason = String((payload && payload.reason) || "").trim().toLowerCase();
+  return (
+    source === "legacy_compatible" ||
+    source === "page_center_with_legacy" ||
+    reason.startsWith("legacy_")
+  );
+}
+
+function assertMiniProgramPageCenterOnly(payload) {
+  if (isLegacyMiniProgramBetaPayload(payload)) {
+    throw new Error("当前小程序仅支持页面中心新体系，请先迁移旧内测数据。");
+  }
 }
 
 Page({
@@ -262,8 +438,14 @@ Page({
     loading: true,
     isLoggedIn: false,
     codeInput: "",
+    enterButtonText: "进入",
+    enteringButtonText: "进入中...",
+    unbindButtonText: "解绑",
+    unbindingButtonText: "解绑中...",
     submitting: false,
     enteringFeatureId: "",
+    unbindingFeatureId: "",
+    unbindTargetFeature: null,
     featureRows: [],
   },
 
@@ -375,11 +557,13 @@ Page({
     if (!payload || payload.error) {
       throw new Error(String((payload && payload.error) || "加载内测功能失败"));
     }
+    assertMiniProgramPageCenterOnly(payload);
 
     const rows = readArrayFromPayloadChain(payload.data || payload);
     const featureRows = rows.map((row) => {
       const id = String((row && row.feature_id) || "").trim();
       const routePathRaw = String((row && row.route_path) || "").trim();
+      const resolvedRoutePath = resolveFeatureEntryRoute(id, routePathRaw);
       const expiresAt = String((row && row.expires_at) || "").trim();
       const expiresAtText = formatFeatureExpiresAt(expiresAt);
       const featureDescription = String((row && row.feature_description) || "").trim();
@@ -388,8 +572,8 @@ Page({
         feature_name: String((row && row.feature_name) || "").trim(),
         feature_description: featureDescription,
         feature_code: String((row && row.feature_code) || "").trim(),
-        route_path_raw: routePathRaw,
-        route_path: normalizeFeatureRoutePath(routePathRaw),
+        route_path_raw: resolvedRoutePath,
+        route_path: resolvedRoutePath,
         route_title: String((row && row.route_title) || "").trim(),
         route_description: String((row && row.route_description) || "").trim(),
         bound_at: String((row && row.bound_at) || "").trim(),
@@ -448,6 +632,7 @@ Page({
       if (!payload || payload.error) {
         throw new Error(String((payload && payload.error) || "绑定内测码失败"));
       }
+      assertMiniProgramPageCenterOnly(payload);
 
       const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
       const featureId = String(data.feature_id || data.page_key || "").trim();
@@ -475,7 +660,7 @@ Page({
   },
 
   async onEnterFeature(e) {
-    if (this.data.submitting) return;
+    if (this.data.submitting || this.data.enteringFeatureId || this.data.unbindingFeatureId) return;
     const featureId =
       e && e.currentTarget && e.currentTarget.dataset
         ? String(e.currentTarget.dataset.id || "")
@@ -495,8 +680,9 @@ Page({
         }
       );
       if (!payload || payload.error || payload.allowed !== true) {
-        throw new Error(String((payload && (payload.message || payload.error)) || "进入功能失败"));
+        throw new Error(readFeatureAccessDeniedMessage(payload, "进入功能失败"));
       }
+      assertMiniProgramPageCenterOnly(payload);
 
       const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
       const routePathRaw = String(data.route_path || target.route_path_raw || "").trim();
@@ -513,6 +699,67 @@ Page({
       }
     } finally {
       this.setData({ enteringFeatureId: "" });
+    }
+  },
+
+  async onUnbindFeature(e) {
+    if (this.data.submitting || this.data.enteringFeatureId || this.data.unbindingFeatureId) return;
+    const featureId =
+      e && e.currentTarget && e.currentTarget.dataset
+        ? String(e.currentTarget.dataset.id || "")
+        : "";
+    if (!featureId) return;
+
+    const target = (this.data.featureRows || []).find((row) => row.id === featureId);
+    if (!target) return;
+
+    this.setData({ unbindTargetFeature: target });
+  },
+
+  cancelUnbindFeature() {
+    if (this.data.unbindingFeatureId) return;
+    this.setData({ unbindTargetFeature: null });
+  },
+
+  noop() {},
+
+  async confirmUnbindFeature() {
+    const target = this.data.unbindTargetFeature;
+    if (!target || this.data.submitting || this.data.enteringFeatureId || this.data.unbindingFeatureId) return;
+
+    const featureId = String(target.id || "").trim();
+    if (!featureId) {
+      this.setData({ unbindTargetFeature: null });
+      return;
+    }
+
+    this.setData({ unbindingFeatureId: featureId });
+    try {
+      const payload = await requestJson(
+        `/api/page-center/beta/bindings/${encodeURIComponent(featureId)}?channel=miniprogram`,
+        {
+          method: "DELETE",
+          timeout: 10000,
+        }
+      );
+      if (!payload || payload.error) {
+        throw new Error(String((payload && payload.error) || "解绑内测功能失败"));
+      }
+
+      await this.loadFeatureRows();
+      this.setData({ unbindTargetFeature: null });
+      wx.showToast({
+        title: "已解绑",
+        icon: "none",
+      });
+    } catch (error) {
+      this.setData({ unbindTargetFeature: null });
+      wx.showToast({
+        title: toErrorMessage(error, "解绑内测功能失败"),
+        icon: "none",
+      });
+    } finally {
+      this.setData({ unbindingFeatureId: "" });
     }
   },
 

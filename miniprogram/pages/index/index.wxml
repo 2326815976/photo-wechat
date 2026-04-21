@@ -1,9 +1,9 @@
 <view class="page {{pageIsStandalone ? 'page--preview' : ''}}">
   <primary-page-shell
-    managedPageKey="pose"
+    managedPageKey="{{pageIsStandalone ? '' : 'pose'}}"
     wx:if="{{!auditChecking && backendReady && (pageIsStandalone || homeRedirectPath === 'pages/index/index' || betaPoseBypassAllowed)}}"
-    title="拾光谣"
-    subtitle="✨ 记录此刻的不期而遇 ✨"
+    title="{{pageIsStandalone ? '摆姿推荐' : '拾光谣'}}"
+    subtitle="{{pageIsStandalone ? '' : '✨ 记录此刻的不期而遇 ✨'}}"
     showBack="{{pageIsStandalone}}"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
@@ -51,7 +51,7 @@
     </view>
 
     <!-- 骨架屏 -->
-    <view class="skeleton-wrap motion-fade-up motion-delay-2" wx:if="{{!currentPose}}">
+    <view class="skeleton-wrap {{pageIsStandalone ? 'skeleton-wrap--preview' : ''}} motion-fade-up motion-delay-2" wx:if="{{!currentPose}}">
       <view class="skeleton-tags-row">
         <view class="skeleton-tags-scroll">
           <view class="skeleton-tags-inner">
@@ -86,9 +86,9 @@
     </view>
 
     <!-- 摆姿卡片 -->
-    <view class="pose-wrap" wx:if="{{currentPose}}" animation="{{poseWrapAnimation}}">
+    <view class="pose-wrap {{pageIsStandalone ? 'pose-wrap--preview' : ''}}" wx:if="{{currentPose}}" animation="{{poseWrapAnimation}}">
       <view class="tape"></view>
-      <view class="pose-card">
+      <view class="pose-card {{pageIsStandalone ? 'pose-card--preview' : ''}}">
         <view class="pose-doodle">📷</view>
         <view class="pose-img-wrap" bindtap="openFullscreen">
           <image

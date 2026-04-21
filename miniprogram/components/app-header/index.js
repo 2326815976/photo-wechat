@@ -1,3 +1,24 @@
+function normalizeMiniProgramRoutePath(value) {
+  return String(value || "")
+    .trim()
+    .split("?")[0]
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+}
+
+function normalizeMiniProgramRouteUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const [path, query = ""] = raw.split("?");
+  const normalizedPath = normalizeMiniProgramRoutePath(path);
+  if (!normalizedPath) {
+    return "";
+  }
+  return `/${normalizedPath}${query ? `?${query}` : ""}`;
+}
+
 Component({
   data: {
     displayedTitle: "",
@@ -97,33 +118,50 @@ Component({
       });
     },
 
-    openFallbackRoute() {
-      const fallbackRoute = String(this.properties.fallbackRoute || "").trim();
-      if (fallbackRoute) {
-        wx.reLaunch({ url: fallbackRoute });
-        return true;
+    openFallbackTab() {
+      const fallbackTab =
+        normalizeMiniProgramRoutePath(this.properties.fallbackTab) || "pages/index/index";
+      wx.switchTab({ url: `/${fallbackTab}` });
+    },
+
+    openFallbackRoute(onFail) {
+      const fallbackRoute = normalizeMiniProgramRouteUrl(this.properties.fallbackRoute);
+      if (!fallbackRoute) {
+        return false;
       }
-      return false;
+      wx.reLaunch({
+        url: fallbackRoute,
+        fail: (error) => {
+          if (typeof onFail === "function") {
+            onFail(error);
+          }
+        },
+      });
+      return true;
+    },
+
+    shouldPreferExplicitFallback() {
+      return Boolean(normalizeMiniProgramRouteUrl(this.properties.fallbackRoute));
     },
 
     onBack() {
       this.triggerEvent("back");
 
-      if (this.properties.preferFallback) {
-        if (this.openFallbackRoute()) {
+      if (this.properties.preferFallback || this.shouldPreferExplicitFallback()) {
+        if (this.openFallbackRoute(() => this.openFallbackTab())) {
           return;
         }
-        wx.switchTab({ url: `/${this.properties.fallbackTab}` });
+        this.openFallbackTab();
         return;
       }
 
       wx.navigateBack({
         delta: 1,
         fail: () => {
-          if (this.openFallbackRoute()) {
+          if (this.openFallbackRoute(() => this.openFallbackTab())) {
             return;
           }
-          wx.switchTab({ url: `/${this.properties.fallbackTab}` });
+          this.openFallbackTab();
         },
       });
     },

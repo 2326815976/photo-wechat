@@ -16,7 +16,7 @@
 }
 
 .content--preview {
-  padding-bottom: 48rpx;
+  padding-bottom: calc(8rpx + env(safe-area-inset-bottom));
 }
 
 .config-tip {

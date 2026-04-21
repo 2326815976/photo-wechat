@@ -24,6 +24,124 @@ const SHARE_TITLE_BY_ROUTE = {
   "pages/profile/index": "拾光谣｜定格美好瞬间",
 };
 
+function decodeUrlQueryComponent(value) {
+  const raw = String(value || "");
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, "%20"));
+  } catch (error) {
+    return raw;
+  }
+}
+
+function createURLSearchParamsPolyfill() {
+  function MiniProgramURLSearchParams(init) {
+    this._entries = [];
+
+    const appendEntry = (key, value) => {
+      const normalizedKey = String(key || "").trim();
+      if (!normalizedKey) return;
+      this._entries.push([normalizedKey, String(value == null ? "" : value)]);
+    };
+
+    if (typeof init === "string") {
+      String(init || "")
+        .trim()
+        .replace(/^\?/, "")
+        .split("&")
+        .forEach((segment) => {
+          if (!segment) return;
+          const [rawKey, ...valueParts] = segment.split("=");
+          const key = decodeUrlQueryComponent(rawKey);
+          if (!key) return;
+          appendEntry(key, decodeUrlQueryComponent(valueParts.join("=")));
+        });
+      return;
+    }
+
+    if (Array.isArray(init)) {
+      init.forEach((item) => {
+        if (!Array.isArray(item) || item.length < 1) return;
+        appendEntry(item[0], item.length > 1 ? item[1] : "");
+      });
+      return;
+    }
+
+    if (init && typeof init === "object") {
+      Object.keys(init).forEach((key) => {
+        appendEntry(key, init[key]);
+      });
+    }
+  }
+
+  MiniProgramURLSearchParams.prototype.append = function append(key, value) {
+    this._entries.push([String(key || "").trim(), String(value == null ? "" : value)]);
+  };
+
+  MiniProgramURLSearchParams.prototype.get = function get(key) {
+    const normalizedKey = String(key || "").trim();
+    for (let index = 0; index < this._entries.length; index += 1) {
+      const item = this._entries[index];
+      if (item && item[0] === normalizedKey) {
+        return item[1];
+      }
+    }
+    return null;
+  };
+
+  MiniProgramURLSearchParams.prototype.set = function set(key, value) {
+    const normalizedKey = String(key || "").trim();
+    const normalizedValue = String(value == null ? "" : value);
+    let replaced = false;
+    this._entries = this._entries.reduce((list, item) => {
+      if (!item || item[0] !== normalizedKey) {
+        list.push(item);
+        return list;
+      }
+      if (!replaced) {
+        list.push([normalizedKey, normalizedValue]);
+        replaced = true;
+      }
+      return list;
+    }, []);
+    if (!replaced) {
+      this._entries.push([normalizedKey, normalizedValue]);
+    }
+  };
+
+  MiniProgramURLSearchParams.prototype.toString = function toString() {
+    return this._entries
+      .filter((item) => item && item[0])
+      .map((item) => `${encodeURIComponent(item[0])}=${encodeURIComponent(String(item[1] || ""))}`)
+      .join("&");
+  };
+
+  return MiniProgramURLSearchParams;
+}
+
+function installURLSearchParamsPolyfill() {
+  if (typeof URLSearchParams !== "undefined") {
+    return;
+  }
+  const Polyfill = createURLSearchParamsPolyfill();
+  try {
+    if (typeof globalThis !== "undefined" && globalThis) {
+      globalThis.URLSearchParams = Polyfill;
+    }
+  } catch (error) {
+    // ignore global assignment errors
+  }
+  try {
+    if (typeof global !== "undefined" && global) {
+      global.URLSearchParams = Polyfill;
+    }
+  } catch (error) {
+    // ignore global assignment errors
+  }
+}
+
+installURLSearchParamsPolyfill();
+
 function loadCachedRuntimeConfig() {
   try {
     const raw = wx.getStorageSync(RUNTIME_CONFIG_CACHE_KEY);
@@ -204,6 +322,22 @@ function normalizeMiniProgramRoutePath(value) {
     .replace(/\/+$/, "");
 }
 
+function resolvePresentationFallbackRoute(mode, value) {
+  const fallbackRoute = String(value || "").trim();
+  if (fallbackRoute) {
+    return fallbackRoute;
+  }
+  return mode === "beta" ? "/pages/profile/beta/index" : "";
+}
+
+function resolvePresentationFallbackTab(mode, value) {
+  const fallbackTab = normalizeMiniProgramRoutePath(value);
+  if (fallbackTab) {
+    return fallbackTab;
+  }
+  return mode === "beta" ? "pages/profile/index" : "pages/index/index";
+}
+
 function normalizePagePresentation(input) {
   const current = input && typeof input === "object" ? input : {};
   const rawMode = String(current.mode || "").trim().toLowerCase();
@@ -212,10 +346,8 @@ function normalizePagePresentation(input) {
     mode,
     pageKey: String(current.pageKey || "").trim(),
     routePath: normalizeMiniProgramRoutePath(current.routePath),
-    fallbackRoute: String(current.fallbackRoute || "").trim(),
-    fallbackTab:
-      normalizeMiniProgramRoutePath(current.fallbackTab || "pages/index/index") ||
-      "pages/index/index",
+    fallbackRoute: resolvePresentationFallbackRoute(mode, current.fallbackRoute),
+    fallbackTab: resolvePresentationFallbackTab(mode, current.fallbackTab),
   };
 }
 
@@ -544,10 +676,11 @@ App({
     return this.globalData.pagePresentation;
   },
 
-  setPagePresentation(presentation) {
+  setPagePresentation(presentation, options) {
     if (!this.globalData) {
       this.globalData = {};
     }
+    const opts = options && typeof options === "object" ? options : {};
     const nextPresentation = normalizePagePresentation(presentation);
     const currentPresentation = normalizePagePresentation(this.globalData.pagePresentation);
     if (isSamePagePresentation(currentPresentation, nextPresentation)) {
@@ -555,12 +688,17 @@ App({
       return currentPresentation;
     }
     this.globalData.pagePresentation = nextPresentation;
-    this.notifyPagePresentationChange();
+    if (!opts.silent) {
+      this.notifyPagePresentationChange();
+    }
     return this.globalData.pagePresentation;
   },
 
-  resetPagePresentation() {
-    return this.setPagePresentation({ mode: "tabbar", fallbackTab: "pages/index/index" });
+  resetPagePresentation(options) {
+    return this.setPagePresentation(
+      { mode: "tabbar", fallbackTab: "pages/index/index" },
+      options
+    );
   },
   ensureAuditConfig() {
     if (this.auditConfigPromise) {

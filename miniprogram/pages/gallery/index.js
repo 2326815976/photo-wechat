@@ -38,6 +38,7 @@ const GALLERY_PAGE_READY_DELAY_MS = 120;
 const GALLERY_TAG_GUIDE_TRIGGER_DELAY_MS = 120;
 const GALLERY_CACHE_KEY = GALLERY_PAGE_CACHE_KEY;
 const GALLERY_CACHE_TTL = 30 * 60 * 1000;
+const GALLERY_STALE_PAGE_LOADING_MS = 15000;
 const ROOT_FOLDER_ID = "__ROOT__";
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜定格美好瞬间";
@@ -584,6 +585,43 @@ function computeTagbarStickyTop(safeTop) {
   return Math.max(0, Math.round(top));
 }
 
+function readWindowWidth() {
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      const windowWidth = Number(info && info.windowWidth);
+      if (Number.isFinite(windowWidth) && windowWidth > 0) {
+        return windowWidth;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      const windowWidth = Number(info && info.windowWidth);
+      if (Number.isFinite(windowWidth) && windowWidth > 0) {
+        return windowWidth;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+
+  return 375;
+}
+
+function convertRpxToPx(value) {
+  const windowWidth = Math.max(readWindowWidth(), 320);
+  return Math.round((Number(value || 0) * windowWidth) / 750);
+}
+
+function computeGallerySwitchOverlayTop(safeTop) {
+  return computeTagbarStickyTop(safeTop) + convertRpxToPx(92);
+}
+
 function readWindowHeight() {
   try {
     if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
@@ -616,6 +654,7 @@ Page({
   data: {
     safeTop: 0,
     tagbarStickyTop: 0,
+    tagSwitchOverlayTopPx: 0,
     serviceMissing: false,
     backendReady: false,
     backendReconnecting: false,
@@ -628,7 +667,6 @@ Page({
     hasMore: true,
     pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在加载页面",
-    tagSwitchLoadingDescription: "正在加载页面",
 
     isLoggedIn: false,
 
@@ -687,6 +725,7 @@ Page({
   storyMotionTimers: null,
   isPageAlive: false,
   pendingScrollMetricsRefresh: false,
+  pageLoadingStartedAt: 0,
 
   applyRuntimeConfig(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
@@ -694,7 +733,6 @@ Page({
     this.setData({
       pageLoadingTitle: loadingCopy.title,
       pageLoadingDescription: loadingCopy.pageDescription,
-      tagSwitchLoadingDescription: loadingCopy.switchDescription,
     });
     return normalized;
   },
@@ -726,6 +764,7 @@ Page({
     this.galleryLoadTicket = 0;
     this.fullPhotosByFolder = Object.create(null);
     this._galleryBootstrapped = false;
+    this.pageLoadingStartedAt = Date.now();
     const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     // 首次进入页面时也需要展示一次引导：将“已见序号”回退一位，确保首帧可触发。
     this._lastSeenAppEnterSeq = Math.max(0, currentAppEnterSeq - 1);
@@ -733,6 +772,7 @@ Page({
     this.setData({
       safeTop,
       tagbarStickyTop: computeTagbarStickyTop(safeTop),
+      tagSwitchOverlayTopPx: computeGallerySwitchOverlayTop(safeTop),
       serviceMissing,
       backendReady,
       backendReconnecting,
@@ -768,12 +808,14 @@ Page({
       if (backendReady) {
         this.startGalleryBootstrapIfReady();
       } else {
+        this.markPageLoadingStarted();
         this.setData({ loading: true });
         if (app && typeof app.ensureBackendReady === "function") {
           void app.ensureBackendReady();
         }
       }
     } else {
+      this.clearPageLoadingStarted();
       this.setData({ loading: false, initialContentReady: true });
     }
   },
@@ -855,6 +897,10 @@ Page({
       this.scheduleTagGuideTrigger();
     }
     if (this.consumeSuppressRefreshOnShow()) return;
+    if (this.recoverFromStalePageLoading()) {
+      void this.refreshLoginState();
+      return;
+    }
     if (this.data.loading || this.data.loadingMore) {
       void this.refreshLoginState();
       return;
@@ -896,6 +942,7 @@ Page({
     this.loadingNextPage = false;
     this.galleryLoadTicket += 1;
     this._galleryBootstrapped = false;
+    this.clearPageLoadingStarted();
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
     }
@@ -1186,11 +1233,13 @@ Page({
       pendingSwitchPhotoIds: [],
       loadingMore: false,
       hasMore: true,
-      pageNo: 1,
+      pageNo: 0,
       total: 0,
       showFilterModal: false,
       tagWaveActiveIndex: -1,
       tagWaveTick: 0,
+    }, () => {
+      void this.loadPage(1, { keepCurrentContent: true, folderId: nextId });
     });
 
     try {
@@ -1199,7 +1248,6 @@ Page({
       // ignore
     }
 
-    void this.loadPage(1, { keepCurrentContent: true, folderId: nextId });
   },
 
   toggleStory(e) {
@@ -1261,6 +1309,63 @@ Page({
     return !expired;
   },
 
+  markPageLoadingStarted() {
+    this.pageLoadingStartedAt = Date.now();
+  },
+
+  clearPageLoadingStarted() {
+    this.pageLoadingStartedAt = 0;
+  },
+
+  hasStalePageLoading() {
+    const startedAt = Number(this.pageLoadingStartedAt || 0);
+    if (!(startedAt > 0)) return false;
+    return Date.now() - startedAt >= GALLERY_STALE_PAGE_LOADING_MS;
+  },
+
+  restoreVisibleGalleryFromSource() {
+    const sourcePhotos = Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos : [];
+    if (sourcePhotos.length <= 0) {
+      return false;
+    }
+
+    this.applyGalleryViewFromSource(sourcePhotos);
+    this.clearPageLoadingStarted();
+    this.setData({
+      loading: false,
+      loadingMore: false,
+      initialContentReady: true,
+    });
+    this.scheduleScrollMetricsRefresh();
+    return true;
+  },
+
+  recoverFromStalePageLoading() {
+    if (this.data.initialContentReady && !this.data.loading && !this.data.loadingMore) {
+      this.clearPageLoadingStarted();
+      return false;
+    }
+
+    if (!this.data.initialContentReady && this.restoreVisibleGalleryFromSource()) {
+      return true;
+    }
+
+    if (!this.data.loading) {
+      return false;
+    }
+
+    if (!this.hasStalePageLoading()) {
+      return false;
+    }
+
+    this.resetGalleryStateForRefresh();
+    void this.loadPage(1, {
+      silent: false,
+      folderId: String(this.data.selectedFolder || ROOT_FOLDER_ID),
+    });
+    return true;
+  },
+
   resetGalleryStateForRefresh() {
     clearGalleryMemoryCache();
     clearGalleryStorageCache();
@@ -1275,6 +1380,7 @@ Page({
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
     this.fullPhotosByFolder = Object.create(null);
+    this.markPageLoadingStarted();
 
     this.setData({
       loading: true,
@@ -1325,8 +1431,10 @@ Page({
     if (!cached || !Array.isArray(cached.photos) || cached.photos.length === 0) return;
 
     const photos = cached.photos.map((row) => normalizePhoto(row));
+    this.clearPageLoadingStarted();
     this.setData({
       loading: false,
+      initialContentReady: true,
       pageNo: 1,
       total: Number(cached.total || photos.length),
       hasMore: photos.length < Number(cached.total || photos.length),
@@ -2039,6 +2147,7 @@ Page({
     let nextPendingSwitchPhotoIds = null;
     if (pageNo === 1) {
       if (!silent && !keepCurrentContent) {
+        this.markPageLoadingStarted();
         this.setData({ loading: true });
       }
     } else {
@@ -2165,6 +2274,9 @@ Page({
       const shouldKeepSwitchOverlay = shouldTrackSwitchOverlay
         ? Boolean(Array.isArray(nextPendingSwitchPhotoIds) && nextPendingSwitchPhotoIds.length > 0)
         : false;
+      if (pageNo === 1) {
+        this.clearPageLoadingStarted();
+      }
       const nextState = {
         loading: false,
         switchingFolderLoading: shouldKeepSwitchOverlay,

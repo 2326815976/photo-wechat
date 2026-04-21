@@ -6,6 +6,22 @@
     .replace(/\/+$/, "");
 }
 
+function resolvePresentationFallbackRoute(mode, value) {
+  const fallbackRoute = String(value || "").trim();
+  if (fallbackRoute) {
+    return fallbackRoute;
+  }
+  return mode === "beta" ? "/pages/profile/beta/index" : "";
+}
+
+function resolvePresentationFallbackTab(mode, value) {
+  const fallbackTab = normalizeMiniProgramRoutePath(value);
+  if (fallbackTab) {
+    return fallbackTab;
+  }
+  return mode === "beta" ? "pages/profile/index" : "pages/index/index";
+}
+
 function normalizePagePresentation(input) {
   const current = input && typeof input === "object" ? input : {};
   const rawMode = String(current.mode || "").trim().toLowerCase();
@@ -15,10 +31,8 @@ function normalizePagePresentation(input) {
     mode,
     pageKey: String(current.pageKey || "").trim(),
     routePath: normalizeMiniProgramRoutePath(current.routePath),
-    fallbackRoute: String(current.fallbackRoute || "").trim(),
-    fallbackTab:
-      normalizeMiniProgramRoutePath(current.fallbackTab || "pages/index/index") ||
-      "pages/index/index",
+    fallbackRoute: resolvePresentationFallbackRoute(mode, current.fallbackRoute),
+    fallbackTab: resolvePresentationFallbackTab(mode, current.fallbackTab),
   };
 }
 
@@ -47,10 +61,14 @@ function readPreviewPresentationFromPage(page, pagePath) {
     mode,
     pageKey: String(options.page_key || options.pageKey || "").trim(),
     routePath: currentPagePath,
-    fallbackRoute: String(options.fallback_route || options.fallbackRoute || "").trim(),
-    fallbackTab:
-      normalizeMiniProgramRoutePath(options.fallback_tab || options.fallbackTab || "pages/index/index") ||
-      "pages/index/index",
+    fallbackRoute: resolvePresentationFallbackRoute(
+      mode,
+      options.fallback_route || options.fallbackRoute
+    ),
+    fallbackTab: resolvePresentationFallbackTab(
+      mode,
+      options.fallback_tab || options.fallbackTab
+    ),
   });
 }
 

@@ -574,6 +574,7 @@ Page({
     welcomeOpenedFromEgg: false,
     pendingFolderWaveAfterLetterClose: false,
     showDonationModal: false,
+    donationSaving: false,
     welcomeStorageKey: "",
     welcomeEggStorageKey: "",
     welcomeStorageToken: "",
@@ -1334,7 +1335,45 @@ Page({
   },
 
   closeDonationModal() {
-    this.setData({ showDonationModal: false });
+    this.setData({
+      showDonationModal: false,
+      donationSaving: false,
+    });
+  },
+
+  async handleSaveDonationQr() {
+    if (this.data.donationSaving) return;
+
+    const album = this.data.album || null;
+    const qrCodeUrl = String((album && album.donation_qr_code_url) || "").trim();
+    if (!qrCodeUrl) {
+      this.showToast("赞赏码暂不可用", "error", 2200);
+      return;
+    }
+
+    const granted = await this.ensureAlbumWritePermission();
+    if (!granted) {
+      wx.showModal({
+        title: "需要相册权限",
+        content: "请在小程序设置中开启“保存到相册”权限后重试。",
+        showCancel: false,
+      });
+      return;
+    }
+
+    this.setData({ donationSaving: true });
+    wx.showLoading({ title: "保存中..." });
+
+    try {
+      await this.savePhotoToAlbum(qrCodeUrl);
+      wx.hideLoading();
+      this.showToast("赞赏码已保存到相册", "success", 2400);
+      this.closeDonationModal();
+    } catch (error) {
+      wx.hideLoading();
+      this.setData({ donationSaving: false });
+      this.showToast("保存赞赏码失败", "error", 2400);
+    }
   },
 
   findPhotoById(id) {

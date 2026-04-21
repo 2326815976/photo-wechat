@@ -16,7 +16,7 @@
           <image class="toolbar-btn__icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">新建文件夹</text>
         </button>
-        <button class="toolbar-btn toolbar-btn--ghost" bindtap="onEnterSelectionMode">
+        <button class="toolbar-btn toolbar-btn--danger" bindtap="onEnterSelectionMode">
           <image class="toolbar-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
           <text class="toolbar-btn__text">批量删除</text>
         </button>

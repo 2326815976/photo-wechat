@@ -24,6 +24,19 @@ const POSE_SWITCH_OUT_DURATION = 170;
 const POSE_SWITCH_IN_DURATION = 340;
 const POSE_SWITCH_TOTAL_DURATION = POSE_SWITCH_OUT_DURATION + POSE_SWITCH_IN_DURATION + 24;
 
+function clearPoseBypassState() {
+  const app = typeof getApp === "function" ? getApp() : null;
+  if (app && app.globalData) {
+    app.globalData.betaFeatureBypassRoute = "";
+    app.globalData.betaFeatureBypassExpiresAt = 0;
+  }
+  try {
+    wx.removeStorageSync(BETA_POSE_BYPASS_STORAGE_KEY);
+  } catch (error) {
+    // ignore storage cleanup errors
+  }
+}
+
 function isSortOrderColumnMissing(error) {
   const message = String(
     (error && typeof error === "object" && error.message) || error || ""
@@ -70,30 +83,17 @@ function extractPoseRows(payload) {
   return [];
 }
 
-function computeTagbarStickyTop(safeTop) {
-  let windowWidth = 375;
-  try {
-    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
-      const info = wx.getWindowInfo();
-      windowWidth = Number(info && info.windowWidth) || windowWidth;
-    } else if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
-      const info = wx.getSystemInfoSync();
-      windowWidth = Number(info && info.windowWidth) || windowWidth;
-    }
-  } catch (error) {
-    // ignore
+function resolvePoseImageUrl(pose) {
+  const primaryUrl = resolvePublicUrl(pose && pose.image_url);
+  if (primaryUrl) {
+    return primaryUrl;
   }
-
-  const unit = Math.max(windowWidth, 320) / 750;
-  const headerInnerHeight = 88 * unit; // 与照片墙保持一致
-  const top = Number(safeTop || 0) + headerInnerHeight;
-  return Math.max(0, Math.round(top));
+  return resolvePublicUrl(pose && pose.storage_path);
 }
 
 Page({
   data: {
     safeTop: 0,
-    tagbarStickyTop: 0,
 
     serviceMissing: false,
     betaPoseBypassAllowed: false,
@@ -117,7 +117,7 @@ Page({
     auditChecking: true,
     pageReady: false,
     pagePresentationMode: "tabbar",
-    pageFallbackRoute: "",
+    pageFallbackRoute: "/pages/profile/beta/index",
     pageFallbackTab: "pages/profile/index",
     hasBottomTabbar: false,
 
@@ -173,7 +173,6 @@ Page({
     this._lastSeenAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this.setData({
       safeTop,
-      tagbarStickyTop: computeTagbarStickyTop(safeTop),
       serviceMissing,
       backendReady,
       backendReconnecting,
@@ -313,6 +312,35 @@ Page({
   },
 
   noop() {},
+
+  onForceBack() {
+    if (this._forceBacking) return;
+    this._forceBacking = true;
+    clearPoseBypassState();
+
+    const release = () => {
+      setTimeout(() => {
+        this._forceBacking = false;
+      }, 320);
+    };
+
+    wx.navigateBack({
+      delta: 1,
+      success: release,
+      fail: () => {
+        wx.reLaunch({
+          url: "/pages/profile/beta/index",
+          success: release,
+          fail: () => {
+            wx.switchTab({
+              url: "/pages/profile/index",
+              complete: release,
+            });
+          },
+        });
+      },
+    });
+  },
 
   consumeBetaPoseBypass() {
     const app = typeof getApp === "function" ? getApp() : null;
@@ -834,7 +862,7 @@ Page({
   },
 
   normalizePose(pose) {
-    const imageUrl = resolvePublicUrl(pose && pose.image_url);
+    const imageUrl = resolvePoseImageUrl(pose);
     return Object.assign({}, pose, {
       tags: pose && Array.isArray(pose.tags) ? pose.tags : [],
       image_url_resolved: imageUrl,

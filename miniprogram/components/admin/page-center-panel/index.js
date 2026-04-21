@@ -277,10 +277,19 @@ function createEmptyBetaDraft(channel) {
   };
 }
 
+function normalizeBetaCodeChannel(channel) {
+  const normalized = normalizeText(channel);
+  if (normalized === "web" || normalized === "miniprogram") {
+    return normalized;
+  }
+  return "shared";
+}
+
 function filterBetaCodesByChannel(codes, channel) {
+  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
   return (Array.isArray(codes) ? codes : []).filter((item) => {
-    const codeChannel = normalizeText(item && item.channel) || "shared";
-    return codeChannel === channel;
+    const codeChannel = normalizeBetaCodeChannel(item && item.channel);
+    return codeChannel === "shared" || codeChannel === currentChannel;
   });
 }
 
@@ -303,7 +312,7 @@ function getDateDiffFromToday(dateText) {
 }
 
 function buildBetaScopeMeta(codeChannel, channel) {
-  if (normalizeText(codeChannel) === "shared") {
+  if (normalizeBetaCodeChannel(codeChannel) === "shared") {
     return {
       scopeLabel: "双端通用",
       scopeHint: "Web 与小程序登录用户都可绑定这条内测码进入当前页面。",
@@ -318,13 +327,26 @@ function buildBetaScopeMeta(codeChannel, channel) {
   };
 }
 
+function applyReadOnlyBetaMeta(code, payload) {
+  if (!normalizeBoolean(code && code.readOnly, false)) {
+    return payload;
+  }
+  return Object.assign({}, payload, {
+    readOnly: true,
+    source: normalizeText(code && code.source) || "legacy",
+    manageHint:
+      normalizeText(code && code.manageHint) || "旧体系兼容码，仅参与兼容展示；如需维护，请使用旧版内测功能管理。",
+    editActionText: "兼容只读",
+  });
+}
+
 function decorateBetaCodeForChannel(code, channel) {
   const expiresDateText = extractDateText(code && code.expiresAt);
   const scopeMeta = buildBetaScopeMeta(code && code.channel, channel);
   const isActive = normalizeBoolean(code && code.isActive, true);
 
   if (!isActive) {
-    return Object.assign({}, code, scopeMeta, {
+    return applyReadOnlyBetaMeta(code, Object.assign({}, code, scopeMeta, {
       lifecycleKey: "destroyed",
       lifecycleLabel: "已销毁",
       lifecycleHint: "已销毁后新用户不能再绑定；重新编辑并保存可恢复使用。",
@@ -332,12 +354,12 @@ function decorateBetaCodeForChannel(code, channel) {
       isUsable: false,
       expiresDateText,
       editActionText: "恢复并编辑",
-    });
+    }));
   }
 
   const diffDays = getDateDiffFromToday(expiresDateText);
   if (typeof diffDays === "number" && diffDays < 0) {
-    return Object.assign({}, code, scopeMeta, {
+    return applyReadOnlyBetaMeta(code, Object.assign({}, code, scopeMeta, {
       lifecycleKey: "expired",
       lifecycleLabel: "已失效",
       lifecycleHint: "内测码已过期，需调整到期日期后才可继续绑定。",
@@ -345,11 +367,11 @@ function decorateBetaCodeForChannel(code, channel) {
       isUsable: false,
       expiresDateText,
       editActionText: "续期并编辑",
-    });
+    }));
   }
 
   if (typeof diffDays === "number" && diffDays <= 3) {
-    return Object.assign({}, code, scopeMeta, {
+    return applyReadOnlyBetaMeta(code, Object.assign({}, code, scopeMeta, {
       lifecycleKey: "expiring",
       lifecycleLabel: diffDays === 0 ? "今日到期" : "即将到期",
       lifecycleHint:
@@ -358,10 +380,10 @@ function decorateBetaCodeForChannel(code, channel) {
       isUsable: true,
       expiresDateText,
       editActionText: "续期并编辑",
-    });
+    }));
   }
 
-  return Object.assign({}, code, scopeMeta, {
+  return applyReadOnlyBetaMeta(code, Object.assign({}, code, scopeMeta, {
     lifecycleKey: "usable",
     lifecycleLabel: expiresDateText ? "有效中" : "长期有效",
     lifecycleHint: expiresDateText ? `有效期至 ${expiresDateText}` : "未设置到期日期，当前长期有效。",
@@ -369,7 +391,7 @@ function decorateBetaCodeForChannel(code, channel) {
     isUsable: true,
     expiresDateText,
     editActionText: "编辑",
-  });
+  }));
 }
 
 function decorateBetaCodesByChannel(codes, channel) {
@@ -394,6 +416,9 @@ function buildBetaDraftHelperText(draft, channel, codes) {
   const currentDraft = draft && typeof draft === "object" ? draft : createEmptyBetaDraft(channel);
   const currentCode = (Array.isArray(codes) ? codes : []).find((item) => item.id === normalizeText(currentDraft.codeId));
   if (currentCode) {
+    if (currentCode.readOnly) {
+      return currentCode.manageHint || "旧体系兼容码在这里仅支持查看，不支持编辑。";
+    }
     if (currentCode.lifecycleKey === "destroyed") {
       return "这条内测码当前已销毁；重新保存后会恢复使用。";
     }
@@ -414,9 +439,93 @@ function buildBetaSaveButtonText(draft, codes) {
     (item) => item.id === normalizeText(currentDraft && currentDraft.codeId)
   );
   if (!currentCode) return "创建内测码";
+  if (currentCode.readOnly) return "兼容只读";
   if (currentCode.lifecycleKey === "destroyed") return "恢复并保存";
   if (currentCode.lifecycleKey === "expired") return "续期并保存";
   return "更新内测码";
+}
+
+function buildBetaSectionDesc(row, channel) {
+  const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  const visibleCodes = Array.isArray(row && row.betaCodesVisible) ? row.betaCodesVisible : [];
+  const availableCodes = Array.isArray(row && row.betaCodesAvailable) ? row.betaCodesAvailable : [];
+  const readOnlyVisibleCodes = visibleCodes.filter((item) => normalizeBoolean(item && item.readOnly, false));
+  const readOnlyAvailableCodes = availableCodes.filter((item) => normalizeBoolean(item && item.readOnly, false));
+  const editableAvailableCodes = availableCodes.filter((item) => !normalizeBoolean(item && item.readOnly, false));
+  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
+  const otherChannelCodes = (Array.isArray(row && row.betaCodes) ? row.betaCodes : []).filter((item) => {
+    const codeChannel = normalizeBetaCodeChannel(item && item.channel);
+    return codeChannel !== "shared" && codeChannel !== currentChannel;
+  });
+
+  if (currentState === "beta") {
+    if (availableCodes.length > 0) {
+      if (!editableAvailableCodes.length && readOnlyAvailableCodes.length) {
+        return "当前页面仍处于内测状态，现有可用内测码来自旧体系兼容展示；此处仅可查看，如需维护请使用旧版内测功能管理。";
+      }
+      if (readOnlyAvailableCodes.length) {
+        return "维护当前端可用的内测码；旧体系兼容码会一并展示为只读。";
+      }
+      return "维护当前端可用的内测码，并可继续保留内测发布。";
+    }
+    if (otherChannelCodes.length > 0 && visibleCodes.length === 0) {
+      return "当前页面仍处于内测状态，但当前端没有可用内测码；现有内测码属于另一端。";
+    }
+    if (visibleCodes.length > 0) {
+      if (readOnlyVisibleCodes.length === visibleCodes.length) {
+        return "当前页面仍处于内测状态，但当前端仅剩旧体系兼容码，且暂时都不可用；如需维护请使用旧版内测功能管理。";
+      }
+      return "当前页面仍处于内测状态，但当前端内测码都已失效或不可用。";
+    }
+    return "当前页面仍处于内测状态，但当前端还没有内测码。";
+  }
+
+  if (availableCodes.length > 0) {
+    if (!editableAvailableCodes.length && readOnlyAvailableCodes.length) {
+      return "当前端已有可用的旧体系兼容码，可直接切换为内测；兼容码在这里仅作只读展示。";
+    }
+    if (readOnlyAvailableCodes.length) {
+      return "已满足切换为内测条件；旧体系兼容码会一并展示为只读。";
+    }
+    return "已满足切换为内测条件，可从当前状态切换为内测。";
+  }
+  if (visibleCodes.length > 0) {
+    if (readOnlyVisibleCodes.length === visibleCodes.length) {
+      return "当前端仅有旧体系兼容码，且暂时都不可用；如需维护请使用旧版内测功能管理。";
+    }
+    return "当前端已有内测码，但暂时都不可用；建议续期、恢复或新建一条可用内测码。";
+  }
+  return "请先创建至少一个当前端可用的内测码，才能切换为内测。";
+}
+
+function buildBetaEmptyStateText(row, channel) {
+  const visibleCodes = Array.isArray(row && row.betaCodesVisible) ? row.betaCodesVisible : [];
+  const availableCodes = Array.isArray(row && row.betaCodesAvailable) ? row.betaCodesAvailable : [];
+  const readOnlyVisibleCodes = visibleCodes.filter((item) => normalizeBoolean(item && item.readOnly, false));
+  const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  const currentChannelLabel = normalizeText(channel) === "miniprogram" ? "小程序" : "Web";
+  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
+  const otherChannelCodes = (Array.isArray(row && row.betaCodes) ? row.betaCodes : []).filter((item) => {
+    const codeChannel = normalizeBetaCodeChannel(item && item.channel);
+    return codeChannel !== "shared" && codeChannel !== currentChannel;
+  });
+
+  if (availableCodes.length > 0) {
+    return "";
+  }
+  if (otherChannelCodes.length > 0 && visibleCodes.length === 0) {
+    return `当前${currentChannelLabel}端没有内测码；现有内测码属于另一端，请为当前端补充内测码。`;
+  }
+  if (visibleCodes.length > 0) {
+    if (readOnlyVisibleCodes.length === visibleCodes.length) {
+      return `当前${currentChannelLabel}端只有旧体系兼容内测码，且当前均不可用；如需维护请使用旧版内测功能管理。`;
+    }
+    return `当前${currentChannelLabel}端暂无可用内测码，请续期、恢复或新建一条可用内测码。`;
+  }
+  if (currentState === "beta") {
+    return `当前${currentChannelLabel}端还没有内测码；页面虽然仍标记为内测，但普通用户已无法通过内测码进入。`;
+  }
+  return `当前${currentChannelLabel}端还没有内测码，请先创建至少一个可用内测码。`;
 }
 
 function applyBetaPresentation(row, channel) {
@@ -426,6 +535,8 @@ function applyBetaPresentation(row, channel) {
   row.betaCodeSummary = summarizeDecoratedBetaCodes(betaCodesVisible);
   row.betaDraftHelperText = buildBetaDraftHelperText(row.betaDraft, channel, betaCodesVisible);
   row.betaSaveButtonText = buildBetaSaveButtonText(row.betaDraft, betaCodesVisible);
+  row.betaSectionDesc = buildBetaSectionDesc(row, channel);
+  row.betaEmptyStateText = buildBetaEmptyStateText(row, channel);
   return row;
 }
 
@@ -535,19 +646,20 @@ function resolveQuickActionMeta(row, channel) {
 
 function getDisplayStateMeta(row) {
   const currentState = normalizeText(row && row.currentRule ? row.currentRule.publishState : "") || "offline";
+  const betaUsableCount = normalizeNumber(row && row.betaCodeSummary ? row.betaCodeSummary.usable : 0, 0);
   if (isSecondaryPageKey(row && row.pageKey)) {
     if (currentState === "online") {
       return { type: "online", label: "显示中" };
     }
     if (currentState === "beta") {
-      return { type: "beta", label: "内测中" };
+      return { type: "beta", label: betaUsableCount > 0 ? "内测中" : "内测异常" };
     }
     return { type: "offline", label: "已隐藏" };
   }
 
   return {
     type: currentState,
-    label: STATE_LABEL_MAP[currentState] || "下线",
+    label: currentState === "beta" && betaUsableCount <= 0 ? "内测异常" : (STATE_LABEL_MAP[currentState] || "下线"),
   };
 }
 
@@ -737,6 +849,44 @@ function normalizeRuleForm(row, channel, form) {
   };
 }
 
+function buildDialogEditableRule(row, channel, form) {
+  const savedRule = createRuleForm(row && row.channels ? row.channels[channel] : null, row);
+  const draftRule = normalizeRuleForm(row, channel, form);
+  const isSecondaryPage = isSecondaryPageKey(row && row.pageKey);
+
+  if (isSecondaryPage) {
+    const titleText = normalizeText(draftRule.navText);
+    return normalizeRuleForm(row, channel, Object.assign({}, savedRule, {
+      publishState: draftRule.publishState,
+      navOrder: draftRule.navOrder,
+      notes: draftRule.notes,
+      navText: titleText,
+      guestNavText: titleText,
+      headerTitle: titleText,
+    }));
+  }
+
+  if (draftRule.publishState === "beta") {
+    return normalizeRuleForm(row, channel, Object.assign({}, savedRule, {
+      publishState: draftRule.publishState,
+      navOrder: draftRule.navOrder,
+      notes: draftRule.notes,
+      headerTitle: normalizeText(draftRule.headerTitle),
+    }));
+  }
+
+  const navText = normalizeText(draftRule.navText);
+  return normalizeRuleForm(row, channel, Object.assign({}, savedRule, {
+    publishState: draftRule.publishState,
+    navOrder: draftRule.navOrder,
+    notes: draftRule.notes,
+    navText,
+    guestNavText: navText,
+    headerTitle: normalizeText(draftRule.headerTitle),
+    headerSubtitle: normalizeText(draftRule.headerSubtitle),
+  }));
+}
+
 function withDisplayLabel(item) {
   return Object.assign({}, item, {
     displayLabel:
@@ -817,6 +967,8 @@ function buildRow(item, channel) {
     betaCodeSummary: { total: 0, usable: 0, expiring: 0, expired: 0, destroyed: 0 },
     betaDraftHelperText: "",
     betaSaveButtonText: "创建内测码",
+    betaSectionDesc: "",
+    betaEmptyStateText: "当前端还没有内测码，请先创建至少一个可用内测码。",
     quickActionType: "offline",
     quickActionLabel: "下线",
     quickActionLoadingLabel: "下线中...",
@@ -917,6 +1069,29 @@ function buildPresentation(rows, channel, keyword, expandedKey, stateFilter) {
         normalizeText(row.currentRule.headerTitle) || row.loginNavLabel || normalizeText(row.pageName);
       row.headerSubtitlePreview =
         normalizeText(row.currentRule.headerSubtitle) || "留空时不单独显示";
+      row.showPrimaryBetaTitleEdit = !row.isSecondaryPage && row.currentRule.publishState === "beta";
+      row.showPrimaryFullEdit = !row.isSecondaryPage && row.currentRule.publishState !== "beta";
+      row.editSectionTitle = row.isSecondaryPage
+        ? row.pageKey === "album-detail"
+          ? "默认名称"
+          : "标题设置"
+        : row.showPrimaryBetaTitleEdit
+          ? "顶部标题"
+          : "页面信息";
+      row.editSectionDesc = row.isSecondaryPage
+        ? row.pageKey === "album-detail"
+          ? "实际页面顶部优先显示相册名；只有相册未命名时，才会使用这里的默认名称。"
+          : "二级页入口名称会同步作为页面顶部标题，并与所属一级页中的入口保持一致。"
+        : row.showPrimaryBetaTitleEdit
+          ? "当前为内测状态，只维护页面顶部标题；小标题和底部菜单名称沿用正式配置。"
+          : "上线、下线状态下可维护大标题、小标题与底部菜单名称。";
+      row.editSaveButtonText = row.isSecondaryPage
+        ? row.pageKey === "album-detail"
+          ? "保存默认名称"
+          : "保存页面标题"
+        : row.showPrimaryBetaTitleEdit
+          ? "保存顶部标题"
+          : "保存页面信息";
       const quickAction = resolveQuickActionMeta(row, channel);
       row.quickActionType = quickAction.type;
       row.quickActionLabel = quickAction.label;
@@ -1491,37 +1666,13 @@ Component({
     const pageKey = normalizeText(dataset.pageKey);
     const row = this.findRow(pageKey);
     if (!row) return;
-    const savedRule = createRuleForm(row.channels[this.data.channel], row);
-    const nextRule = row.isSecondaryPage
-      ? Object.assign({}, savedRule, {
-          navText: normalizeText(row.currentRule.navText),
-          guestNavText: normalizeText(row.currentRule.navText),
-          headerTitle: normalizeText(row.currentRule.navText),
-        })
-      : Object.assign({}, savedRule, {
-          headerTitle: normalizeText(row.currentRule.headerTitle),
-          headerSubtitle: normalizeText(row.currentRule.headerSubtitle),
-        });
+    const nextRule = buildDialogEditableRule(row, this.data.channel, row.currentRule);
     void this.persistRule(
       pageKey,
       nextRule,
-      row.isSecondaryPage ? "页面标题已保存" : "标题设置已保存",
+      row.editSaveButtonText || (row.isSecondaryPage ? "页面标题已保存" : "页面信息已保存"),
       `${pageKey}:rule:title`
     );
-  },
-
-  onSaveMenuRule(e) {
-    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
-    const pageKey = normalizeText(dataset.pageKey);
-    const row = this.findRow(pageKey);
-    if (!row) return;
-    if (row.isSecondaryPage) return;
-    const savedRule = createRuleForm(row.channels[this.data.channel], row);
-    const nextRule = Object.assign({}, savedRule, {
-      navText: normalizeText(row.currentRule.navText),
-      guestNavText: normalizeText(row.currentRule.guestNavText),
-    });
-    void this.persistRule(pageKey, nextRule, "菜单设置已保存", `${pageKey}:rule:menu`);
   },
 
   onResetRule(e) {
@@ -1613,7 +1764,11 @@ Component({
     const pageKey = normalizeText(this.data.dialogPageKey);
     const row = this.findRow(pageKey);
     if (!row) return;
-    const success = await this.persistRule(pageKey, row.currentRule, "页面规则已保存");
+    const success = await this.persistRule(
+      pageKey,
+      buildDialogEditableRule(row, this.data.channel, row.currentRule),
+      row.editSaveButtonText || "页面信息已保存"
+    );
     if (success) {
       this.closeActionDialog();
     }
@@ -1659,7 +1814,7 @@ Component({
 
     const success = await this.persistRule(
       pageKey,
-      nextRule,
+      buildDialogEditableRule(row, this.data.channel, nextRule),
       buildQuickActionSuccessNotice(row.pageName, this.data.channel, mode, row.isSecondaryPage)
     );
     if (success) {
@@ -1770,6 +1925,10 @@ Component({
     if (!row) return;
     const code = row.betaCodesVisible.find((item) => item.id === codeId);
     if (!code) return;
+    if (code.readOnly) {
+      this.showNotice("info", code.manageHint || "旧体系兼容码在这里仅支持查看，不支持编辑。");
+      return;
+    }
     this.updateRow(pageKey, (current) => {
       current.betaDraft = {
         codeId: code.id,
@@ -1833,9 +1992,18 @@ Component({
 
   async onDestroyBetaCode(e) {
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const pageKey = normalizeText(dataset.pageKey);
     const codeId = normalizeText(dataset.codeId);
     const betaName = normalizeText(dataset.betaName) || "该内测码";
     if (!codeId) return;
+    const row = this.findRow(pageKey);
+    const code = row && Array.isArray(row.betaCodesVisible)
+      ? row.betaCodesVisible.find((item) => item.id === codeId)
+      : null;
+    if (code && code.readOnly) {
+      this.showNotice("info", code.manageHint || "旧体系兼容码在这里仅支持查看，不支持删除。");
+      return;
+    }
     const confirmed = await new Promise((resolve) => {
       wx.showModal({
         title: "确认删除",

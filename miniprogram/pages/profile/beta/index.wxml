@@ -105,24 +105,69 @@
             <view class="feature-meta-wrap">
               <image class="feature-meta-icon" src="/images/icons/calendar-muted.svg" mode="aspectFit" />
               <text class="feature-meta">{{item.expires_text}}</text>
-            </view>
-            <view class="feature-actions">
-              <button
-                class="submit-btn submit-btn--feature"
-                data-id="{{item.id}}"
-                bindtap="onEnterFeature"
-                loading="{{enteringFeatureId === item.id}}"
-                disabled="{{enteringFeatureId === item.id}}"
-              >
-                <view class="submit-row">
-                  <image class="submit-icon" src="/images/icons/sparkles-brown.svg" mode="aspectFit" />
-                  <text>{{enteringFeatureId === item.id ? '进入中...' : '进入功能'}}</text>
+              <view class="feature-actions">
+                <view
+                  class="feature-action-btn feature-action-btn--secondary {{(unbindingFeatureId === item.id) || (enteringFeatureId !== '') ? 'feature-action-btn--disabled' : ''}}"
+                  data-id="{{item.id}}"
+                  hover-class="feature-action-btn--hover"
+                  hover-stay-time="80"
+                  bindtap="onUnbindFeature"
+                >
+                  <text>{{unbindingFeatureId === item.id ? unbindingButtonText : unbindButtonText}}</text>
                 </view>
-              </button>
+                <view
+                  class="feature-action-btn feature-action-btn--primary feature-action-btn--enter {{(enteringFeatureId === item.id) || (unbindingFeatureId !== '') ? 'feature-action-btn--disabled' : ''}}"
+                  data-id="{{item.id}}"
+                  hover-class="feature-action-btn--hover"
+                  hover-stay-time="80"
+                  bindtap="onEnterFeature"
+                >
+                  <view class="feature-action-btn__content">
+                    <text>{{enteringFeatureId === item.id ? enteringButtonText : enterButtonText}}</text>
+                    <image
+                      wx:if="{{enteringFeatureId !== item.id}}"
+                      class="feature-action-btn__icon"
+                      src="/images/icons/chevrons-right-brown.svg"
+                      mode="aspectFit"
+                    />
+                  </view>
+                </view>
+              </view>
             </view>
           </view>
         </view>
       </view>
     </view>
   </secondary-page-shell>
+
+  <view class="modal-mask motion-fade-in" wx:if="{{unbindTargetFeature}}" bindtap="cancelUnbindFeature"></view>
+  <view class="confirm-modal motion-fade-in" wx:if="{{unbindTargetFeature}}">
+    <view class="confirm-card motion-pop-in" catchtap="noop">
+      <view class="confirm-icon-wrap">
+        <image class="confirm-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
+      </view>
+      <text class="confirm-title">解除内测绑定？</text>
+      <text class="confirm-text">解除后不会删除内测内容，你仍可通过内测码重新进入并再次绑定。</text>
+      <text class="confirm-tip">当前功能：{{unbindTargetFeature.feature_name || '未命名功能'}}</text>
+
+      <view class="confirm-actions">
+        <button
+          class="confirm-btn confirm-btn--ghost"
+          hover-class="confirm-btn--ghost-active"
+          bindtap="cancelUnbindFeature"
+          disabled="{{unbindingFeatureId !== ''}}"
+        >
+          再想想
+        </button>
+        <button
+          class="confirm-btn confirm-btn--primary"
+          hover-class="confirm-btn--primary-active"
+          bindtap="confirmUnbindFeature"
+          disabled="{{unbindingFeatureId !== ''}}"
+        >
+          {{unbindingFeatureId ? '解绑中...' : '确认解除'}}
+        </button>
+      </view>
+    </view>
+  </view>
 </view>

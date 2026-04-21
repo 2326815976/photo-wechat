@@ -354,10 +354,9 @@
                 </view>
               </view>
             </view>
-            </block>
-          </view>
-        </block>
-
+          </block>
+        </view>
+      </block>
         <block wx:if="{{activeSection === 'schedule'}}">
           <view class="booking-panel schedule-panel motion-fade-up">
             <view class="booking-toolbar schedule-toolbar">
@@ -370,13 +369,13 @@
                 >
                   {{blockedDatesRefreshing ? "刷新中..." : "刷新"}}
                 </button>
-                <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onEnterScheduleSelectionMode"
-                  hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{blockedDatesLoading || blockedDatesRefreshing || scheduleBatchDeleting || scheduleActionLoading || !scheduleTotalCount}}"
-                >
-                  批量删除
+                  <button
+                    class="booking-pill-btn booking-pill-btn--danger"
+                    bindtap="onEnterScheduleSelectionMode"
+                    hover-class="booking-pill-btn--danger-active"
+                    disabled="{{blockedDatesLoading || blockedDatesRefreshing || scheduleBatchDeleting || scheduleActionLoading || !scheduleTotalCount}}"
+                  >
+                    批量删除
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
@@ -531,7 +530,7 @@
 
                 <view class="booking-toolbar-actions" wx:if="{{!bookingSelectionMode}}">
                   <button
-                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
+                    class="pose-toolbar-btn pose-toolbar-btn--danger"
                     bindtap="onStartBookingSelection"
                     disabled="{{bookingBatchDeleting || bookingActionLoading || bookingDeletableCount <= 0}}"
                   >
@@ -731,15 +730,61 @@
 
           <block wx:if="{{bookingPanelTab === 'types'}}">
             <view class="booking-panel motion-fade-up">
-              <view class="booking-toolbar booking-toolbar--right">
+              <view class="booking-toolbar booking-toolbar--right booking-toolbar--triple-inline" wx:if="{{!bookingTypeSelectionMode}}">
+                <button
+                  class="booking-pill-btn booking-pill-btn--ghost"
+                  bindtap="onRefreshBookingSection"
+                  hover-class="booking-pill-btn--ghost-active"
+                  disabled="{{bookingTypesLoading || bookingTypesRefreshing || bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0 || bookingTypeBatchDeleting}}"
+                >
+                  {{bookingTypesRefreshing ? "刷新中..." : "刷新"}}
+                </button>
+                <button
+                  class="booking-pill-btn booking-pill-btn--danger"
+                  bindtap="onEnterBookingTypeSelectionMode"
+                  hover-class="booking-pill-btn--danger-active"
+                  disabled="{{bookingTypesLoading || bookingTypesRefreshing || bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0 || bookingTypeBatchDeleting || !bookingTypes.length}}"
+                >
+                  批量删除
+                </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
                   bindtap="onOpenBookingTypeCreateModal"
                   hover-class="booking-pill-btn--primary-active"
-                  disabled="{{bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0}}"
+                  disabled="{{bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0 || bookingTypeBatchDeleting}}"
                 >
                   + 添加类型
                 </button>
+              </view>
+
+              <view class="booking-toolbar booking-toolbar--right" wx:else>
+                <view class="booking-toolbar-actions booking-toolbar-actions--selection booking-toolbar-actions--selection-row booking-toolbar-actions--selection-row-wide">
+                  <button
+                    class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
+                    bindtap="onToggleAllBookingTypes"
+                    hover-class="booking-pill-btn--ghost-active"
+                    disabled="{{bookingTypeBatchDeleting}}"
+                  >
+                    {{bookingTypeAllSelected ? "取消全选" : "全选"}} ({{bookingTypeSelectedCount}}/{{bookingTypes.length}})
+                  </button>
+                  <button
+                    class="booking-pill-btn booking-pill-btn--danger booking-pill-btn--compact"
+                    bindtap="onBatchDeleteBookingTypes"
+                    hover-class="booking-pill-btn--danger-active"
+                    disabled="{{bookingTypeBatchDeleting || !bookingTypeSelectedCount}}"
+                    loading="{{bookingTypeBatchDeleting}}"
+                  >
+                    删除选中 ({{bookingTypeSelectedCount}})
+                  </button>
+                  <button
+                    class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
+                    bindtap="onCancelBookingTypeSelectionMode"
+                    hover-class="booking-pill-btn--ghost-active"
+                    disabled="{{bookingTypeBatchDeleting}}"
+                  >
+                    取消
+                  </button>
+                </view>
               </view>
 
               <view class="admin-loading-card admin-loading-card--inline" wx:if="{{bookingTypesLoading}}">
@@ -756,23 +801,28 @@
               </view>
 
               <view class="booking-config-grid" wx:else>
-                <view class="booking-config-card" wx:for="{{bookingTypes}}" wx:key="id">
+                <view class="booking-config-card {{bookingTypeSelectionMode ? (item.selected ? 'booking-config-card--selected' : 'booking-config-card--selectable') : ''}}" wx:for="{{bookingTypes}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleBookingTypeSelection">
                   <view class="booking-config-card__head">
                     <view class="booking-config-card__main">
-                      <text class="booking-config-card__title">{{item.name}}</text>
+                      <view class="booking-config-card__title-row">
+                        <view class="booking-config-card__check {{item.selected ? 'booking-config-card__check--active' : ''}}" wx:if="{{bookingTypeSelectionMode}}">
+                          <text wx:if="{{item.selected}}">✓</text>
+                        </view>
+                        <text class="booking-config-card__title">{{item.name}}</text>
+                      </view>
                       <text class="booking-config-card__desc" wx:if="{{item.description}}">{{item.description}}</text>
                     </view>
                     <view class="booking-config-state {{item.is_active ? 'booking-config-state--active' : 'booking-config-state--inactive'}}">
                       <text>{{item.activeText}}</text>
                     </view>
                   </view>
-                  <view class="booking-config-card__actions">
+                  <view class="booking-config-card__actions" wx:if="{{!bookingTypeSelectionMode}}">
                     <button
                       class="booking-config-btn booking-config-btn--edit"
                       data-id="{{item.id}}"
                       bindtap="onEditBookingType"
                       hover-class="booking-config-btn--edit-active"
-                      disabled="{{bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0}}"
+                      disabled="{{bookingTypeSaving || bookingTypeDeletingId !== 0 || bookingTypeTogglingId !== 0 || bookingTypeBatchDeleting}}"
                     >
                       编辑
                     </button>
@@ -782,7 +832,7 @@
                       bindtap="onOpenBookingTypeDeleteConfirm"
                       hover-class="booking-config-btn--delete-active"
                       loading="{{bookingTypeDeletingId === item.id}}"
-                      disabled="{{bookingTypeDeletingId === item.id || bookingTypeSaving || bookingTypeTogglingId !== 0}}"
+                      disabled="{{bookingTypeDeletingId === item.id || bookingTypeSaving || bookingTypeTogglingId !== 0 || bookingTypeBatchDeleting}}"
                     >
                       删除
                     </button>
@@ -792,7 +842,7 @@
                       bindtap="onToggleBookingType"
                       hover-class="{{item.is_active ? 'booking-config-btn--disable-active' : 'booking-config-btn--enable-active'}}"
                       loading="{{bookingTypeTogglingId === item.id}}"
-                      disabled="{{bookingTypeTogglingId !== 0 || bookingTypeDeletingId !== 0 || bookingTypeSaving}}"
+                      disabled="{{bookingTypeTogglingId !== 0 || bookingTypeDeletingId !== 0 || bookingTypeSaving || bookingTypeBatchDeleting}}"
                     >
                       {{item.is_active ? "禁用" : "启用"}}
                     </button>
@@ -804,15 +854,61 @@
 
           <block wx:if="{{bookingPanelTab === 'cities'}}">
             <view class="booking-panel motion-fade-up">
-              <view class="booking-toolbar booking-toolbar--right">
+              <view class="booking-toolbar booking-toolbar--right booking-toolbar--triple-inline" wx:if="{{!citySelectionMode}}">
+                <button
+                  class="booking-pill-btn booking-pill-btn--ghost"
+                  bindtap="onRefreshBookingSection"
+                  hover-class="booking-pill-btn--ghost-active"
+                  disabled="{{citiesLoading || citiesRefreshing || citySaving || cityDeletingId !== 0 || cityTogglingId !== 0 || cityBatchDeleting}}"
+                >
+                  {{citiesRefreshing ? "刷新中..." : "刷新"}}
+                </button>
+                <button
+                  class="booking-pill-btn booking-pill-btn--danger"
+                  bindtap="onEnterCitySelectionMode"
+                  hover-class="booking-pill-btn--danger-active"
+                  disabled="{{citiesLoading || citiesRefreshing || citySaving || cityDeletingId !== 0 || cityTogglingId !== 0 || cityBatchDeleting || !allowedCities.length}}"
+                >
+                  批量删除
+                </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
                   bindtap="onOpenCityCreateModal"
                   hover-class="booking-pill-btn--primary-active"
-                  disabled="{{citySaving || cityDeletingId !== 0 || cityTogglingId !== 0}}"
+                  disabled="{{citySaving || cityDeletingId !== 0 || cityTogglingId !== 0 || cityBatchDeleting}}"
                 >
                   + 添加城市
                 </button>
+              </view>
+
+              <view class="booking-toolbar booking-toolbar--right" wx:else>
+                <view class="booking-toolbar-actions booking-toolbar-actions--selection booking-toolbar-actions--selection-row booking-toolbar-actions--selection-row-wide">
+                  <button
+                    class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
+                    bindtap="onToggleAllCities"
+                    hover-class="booking-pill-btn--ghost-active"
+                    disabled="{{cityBatchDeleting}}"
+                  >
+                    {{cityAllSelected ? "取消全选" : "全选"}} ({{citySelectedCount}}/{{allowedCities.length}})
+                  </button>
+                  <button
+                    class="booking-pill-btn booking-pill-btn--danger booking-pill-btn--compact"
+                    bindtap="onBatchDeleteCities"
+                    hover-class="booking-pill-btn--danger-active"
+                    disabled="{{cityBatchDeleting || !citySelectedCount}}"
+                    loading="{{cityBatchDeleting}}"
+                  >
+                    删除选中 ({{citySelectedCount}})
+                  </button>
+                  <button
+                    class="booking-pill-btn booking-pill-btn--ghost booking-pill-btn--compact"
+                    bindtap="onCancelCitySelectionMode"
+                    hover-class="booking-pill-btn--ghost-active"
+                    disabled="{{cityBatchDeleting}}"
+                  >
+                    取消
+                  </button>
+                </view>
               </view>
 
               <view class="admin-loading-card admin-loading-card--inline" wx:if="{{citiesLoading}}">
@@ -829,10 +925,15 @@
               </view>
 
               <view class="booking-config-grid" wx:else>
-                <view class="booking-config-card" wx:for="{{allowedCities}}" wx:key="id">
+                <view class="booking-config-card {{citySelectionMode ? (item.selected ? 'booking-config-card--selected' : 'booking-config-card--selectable') : ''}}" wx:for="{{allowedCities}}" wx:key="id" data-id="{{item.id}}" bindtap="onToggleCitySelection">
                   <view class="booking-config-card__head">
                     <view class="booking-config-card__main">
-                      <text class="booking-config-card__title">{{item.city_name}}</text>
+                      <view class="booking-config-card__title-row">
+                        <view class="booking-config-card__check {{item.selected ? 'booking-config-card__check--active' : ''}}" wx:if="{{citySelectionMode}}">
+                          <text wx:if="{{item.selected}}">✓</text>
+                        </view>
+                        <text class="booking-config-card__title">{{item.city_name}}</text>
+                      </view>
                       <text class="booking-config-card__desc" wx:if="{{item.province}}">{{item.province}}</text>
                       <text class="booking-config-card__meta" wx:if="{{item.city_code}}">代码：{{item.city_code}}</text>
                       <text class="booking-config-card__meta" wx:if="{{item.locationText}}">{{item.locationText}}</text>
@@ -841,13 +942,13 @@
                       <text>{{item.activeText}}</text>
                     </view>
                   </view>
-                  <view class="booking-config-card__actions">
+                  <view class="booking-config-card__actions" wx:if="{{!citySelectionMode}}">
                     <button
                       class="booking-config-btn booking-config-btn--edit"
                       data-id="{{item.id}}"
                       bindtap="onEditAllowedCity"
                       hover-class="booking-config-btn--edit-active"
-                      disabled="{{citySaving || cityDeletingId !== 0 || cityTogglingId !== 0}}"
+                      disabled="{{citySaving || cityDeletingId !== 0 || cityTogglingId !== 0 || cityBatchDeleting}}"
                     >
                       编辑
                     </button>
@@ -857,7 +958,7 @@
                       bindtap="onOpenCityDeleteConfirm"
                       hover-class="booking-config-btn--delete-active"
                       loading="{{cityDeletingId === item.id}}"
-                      disabled="{{cityDeletingId === item.id || citySaving || cityTogglingId !== 0}}"
+                      disabled="{{cityDeletingId === item.id || citySaving || cityTogglingId !== 0 || cityBatchDeleting}}"
                     >
                       删除
                     </button>
@@ -867,7 +968,7 @@
                       bindtap="onToggleAllowedCity"
                       hover-class="{{item.is_active ? 'booking-config-btn--disable-active' : 'booking-config-btn--enable-active'}}"
                       loading="{{cityTogglingId === item.id}}"
-                      disabled="{{cityTogglingId !== 0 || cityDeletingId !== 0 || citySaving}}"
+                      disabled="{{cityTogglingId !== 0 || cityDeletingId !== 0 || citySaving || cityBatchDeleting}}"
                     >
                       {{item.is_active ? "禁用" : "启用"}}
                     </button>
@@ -892,10 +993,10 @@
               <view class="about-grid">
               <view class="about-card about-card--form">
                 <view class="booking-modal__body">
-                  <view class="booking-modal__field">
+                  <view class="booking-modal__field about-field about-field--auto-input">
                     <text class="booking-modal__label">作者名称</text>
                     <input
-                      class="booking-modal__input"
+                      class="booking-modal__input about-inline-input"
                       value="{{aboutSettings.author_name}}"
                       data-field="author_name"
                       bindinput="onAboutInput"
@@ -905,10 +1006,10 @@
                     />
                   </view>
 
-                  <view class="booking-modal__field">
+                  <view class="booking-modal__field about-field about-field--auto-input">
                     <text class="booking-modal__label">手机号（选填）</text>
                     <input
-                      class="booking-modal__input"
+                      class="booking-modal__input about-inline-input"
                       value="{{aboutSettings.phone}}"
                       data-field="phone"
                       bindinput="onAboutInput"
@@ -918,10 +1019,10 @@
                     />
                   </view>
 
-                  <view class="booking-modal__field">
+                  <view class="booking-modal__field about-field about-field--auto-input">
                     <text class="booking-modal__label">微信号（选填）</text>
                     <input
-                      class="booking-modal__input"
+                      class="booking-modal__input about-inline-input"
                       value="{{aboutSettings.wechat}}"
                       data-field="wechat"
                       bindinput="onAboutInput"
@@ -931,10 +1032,10 @@
                     />
                   </view>
 
-                  <view class="booking-modal__field">
+                  <view class="booking-modal__field about-field about-field--auto-input">
                     <text class="booking-modal__label">邮箱（选填）</text>
                     <input
-                      class="booking-modal__input"
+                      class="booking-modal__input about-inline-input"
                       value="{{aboutSettings.email}}"
                       data-field="email"
                       bindinput="onAboutInput"
@@ -977,12 +1078,13 @@
                     <textarea
                       class="booking-modal__textarea about-textarea"
                       value="{{aboutSettings.author_message}}"
+                      style="height: {{aboutMessageHeightRpx}}rpx;"
                       data-field="author_message"
                       bindinput="onAboutInput"
+                      bindlinechange="onAboutMessageLineChange"
                       placeholder="写给用户的一段话"
                       placeholder-class="booking-modal__placeholder"
                       maxlength="2000"
-                      auto-height="{{true}}"
                     />
                   </view>
                 </view>
@@ -1057,7 +1159,7 @@
                     {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
                   </button>
                   <button
-                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
+                    class="pose-toolbar-btn pose-toolbar-btn--danger"
                     bindtap="onEnterPoseSelectionMode"
                   >
                     批量删除
@@ -1157,14 +1259,15 @@
                           data-id="{{item.id}}"
                           catchtap="onOpenPoseEditModal"
                         >
-                          <text class="pose-card-action-btn__icon">✎</text>
+                          <image class="pose-card-action-btn__img" src="/images/icons/edit-white.svg" mode="aspectFit" />
                         </view>
                         <view
                           class="pose-card-action-btn pose-card-action-btn--delete {{poseDeletingId === item.id || poseBatchDeleting ? 'pose-card-action-btn--disabled' : ''}}"
                           data-id="{{item.id}}"
                           catchtap="onDeletePose"
                         >
-                          <text class="pose-card-action-btn__icon">{{poseDeletingId === item.id ? "…" : "🗑️"}}</text>
+                          <text class="pose-card-action-btn__loading" wx:if="{{poseDeletingId === item.id}}">…</text>
+                          <image wx:else class="pose-card-action-btn__img" src="/images/icons/trash-white.svg" mode="aspectFit" />
                         </view>
                       </view>
                     </view>
@@ -1205,7 +1308,7 @@
                     {{posesLoading || posesRefreshing || poseTagsLoading || poseTagsRefreshing ? "刷新中..." : "刷新"}}
                   </button>
                   <button
-                    class="pose-toolbar-btn pose-toolbar-btn--ghost"
+                    class="pose-toolbar-btn pose-toolbar-btn--danger"
                     bindtap="onEnterPoseTagSelectionMode"
                   >
                     批量删除
@@ -1451,20 +1554,12 @@
             <view class="booking-toolbar album-toolbar">
               <view class="booking-toolbar-actions booking-toolbar-actions--right" wx:if="{{!albumSelectionMode}}">
                 <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
+                  class="booking-pill-btn booking-pill-btn--danger"
                   bindtap="onEnterAlbumSelectionMode"
-                  hover-class="booking-pill-btn--ghost-active"
+                  hover-class="booking-pill-btn--danger-active"
                   disabled="{{albumsLoading || !albumTotalCount || albumActionLoading || albumBatchDeleting}}"
                 >
                   批量删除
-                </button>
-                <button
-                  class="booking-pill-btn booking-pill-btn--ghost"
-                  bindtap="onOpenGalleryWallAlbumDetail"
-                  hover-class="booking-pill-btn--ghost-active"
-                  disabled="{{albumActionLoading || albumBatchDeleting || albumCreating || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId || albumDonationUpdatingId}}"
-                >
-                  照片墙管理器
                 </button>
                 <button
                   class="booking-pill-btn booking-pill-btn--primary"
@@ -1585,9 +1680,8 @@
                 <view class="album-card__body">
                   <view class="album-card__title-row">
                     <view class="album-card__title-wrap">
-                      <text class="album-card__title">{{item.title}}</text>
-                      <view class="album-card__meta-row">
-                        <text class="album-card__meta">{{item.createdDateText}}</text>
+                      <view class="album-card__title-line">
+                        <text class="album-card__title">{{item.title}}</text>
                         <view
                           wx:if="{{item.expiresAtText}}"
                           class="album-card__expiry-badge {{item.expired ? 'album-card__expiry-badge--expired' : (item.expirySoon ? 'album-card__expiry-badge--soon' : 'album-card__expiry-badge--normal')}}"
@@ -1595,6 +1689,9 @@
                           <text>到期 {{item.expiresDateText}}</text>
                           <text wx:if="{{item.daysRemaining !== null}}"> · {{item.daysRemaining > 0 ? item.daysRemaining : 0}}天</text>
                         </view>
+                      </view>
+                      <view class="album-card__meta-row">
+                        <text class="album-card__meta">{{item.createdDateText}}</text>
                       </view>
                     </view>
 
@@ -1767,216 +1864,225 @@
 
         <block wx:if="{{activeSection === 'releases'}}">
           <view class="release-page motion-fade-up">
-            <block wx:if="{{releaseMode === 'list'}}">
-              <view class="release-header">
-                <view class="release-header__main">
-                  <text class="release-header__title">{{activeSectionTitle}}</text>
-                  <text class="release-header__desc">{{activeSectionDesc}}</text>
-                </view>
-                <button
-                  class="release-primary-btn"
-                  bindtap="onOpenReleaseCreate"
-                  disabled="{{releaseCreating || releaseDeletingId}}"
-                >
-                  <image class="release-primary-btn__icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
-                  <text class="release-primary-btn__text">发布版本</text>
-                </button>
+            <view class="release-header">
+              <view class="release-header__main">
+                <text class="release-header__title">{{activeSectionTitle}}</text>
+                <text class="release-header__desc">{{activeSectionDesc}}</text>
               </view>
-
-              <view class="admin-loading-card admin-loading-card--inline" wx:if="{{releasesLoading}}">
-                <view class="admin-loading-card__orb">
-                  <view class="admin-loading-card__spinner"></view>
-                </view>
-                <text class="admin-loading-card__title">拾光中...</text>
-                <text class="admin-loading-card__desc">正在同步已发布版本与更新说明，请稍候。</text>
-              </view>
-
-              <view class="release-empty" wx:elif="{{!releases.length}}">
-                <text class="release-empty__icon">📦</text>
-                <text class="release-empty__text">暂无发布版本</text>
-              </view>
-
-              <view class="release-list" wx:else>
-                <view
-                  class="release-card motion-fade-up"
-                  wx:for="{{releases}}"
-                  wx:key="id"
-                  style="animation-delay: {{140 + (index % 8) * 35}}ms;"
-                >
-                  <view class="release-card__head">
-                    <view class="release-card__meta">
-                      <view class="release-card__icon">
-                        <image class="release-card__icon-img" src="/images/icons/phone-brown.svg" mode="aspectFit" />
-                      </view>
-                      <view class="release-card__title-wrap">
-                        <view class="release-card__title-row">
-                          <text class="release-card__title">版本 {{item.version}}</text>
-                          <text class="release-chip release-chip--platform {{item.platformClass}}">{{item.platform}}</text>
-                          <text class="release-chip release-chip--force" wx:if="{{item.forceUpdate}}">🔒 强制更新</text>
-                        </view>
-                        <text class="release-card__date">发布于{{item.createdAtDisplay}}</text>
-                      </view>
-                    </view>
-                    <button
-                      class="release-icon-btn release-icon-btn--danger"
-                      data-id="{{item.id}}"
-                      bindtap="onOpenReleaseDeleteModal"
-                      disabled="{{releaseDeletingId}}"
-                    >
-                      <image class="release-icon-btn__img" src="/images/icons/trash-red.svg" mode="aspectFit" />
-                    </button>
-                  </view>
-
-                  <view class="release-log" wx:if="{{item.updateLog}}">
-                    <text class="release-log__text">{{item.updateLog}}</text>
-                  </view>
-
-                  <button
-                    class="release-primary-btn release-primary-btn--full"
-                    data-id="{{item.id}}"
-                    bindtap="onCopyReleaseDownload"
-                  >
-                    <image class="release-primary-btn__icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
-                    <text class="release-primary-btn__text">下载安装包</text>
-                  </button>
-                </view>
-              </view>
-
-              <view
-                class="release-modal-mask motion-fade-in"
-                wx:if="{{releaseDeleteModalOpen}}"
-                bindtap="onCloseReleaseDeleteModal"
+              <button
+                class="release-primary-btn"
+                bindtap="onOpenReleaseCreate"
+                disabled="{{releaseCreating || releaseDeletingId}}"
               >
-                <view class="release-modal motion-pop-in" catchtap="onReleaseModalTap">
-                  <view class="release-modal__icon">
-                    <image class="release-modal__icon-img" src="/images/icons/trash-red.svg" mode="aspectFit" />
-                  </view>
-                  <text class="release-modal__title">删除版本</text>
-                  <text class="release-modal__desc">
-                    确定要删除版本号<text class="release-modal__highlight">{{releaseDeleteTargetVersion}}</text> ({{releaseDeleteTargetPlatform}}) 吗？
-                  </text>
-                  <view class="release-modal__actions">
-                    <button
-                      class="release-ghost-btn"
-                      bindtap="onCloseReleaseDeleteModal"
-                      disabled="{{releaseDeletingId}}"
-                    >
-                      取消
-                    </button>
-                    <button
-                      class="release-danger-btn"
-                      bindtap="onConfirmDeleteRelease"
-                      disabled="{{releaseDeletingId}}"
-                    >
-                      {{releaseDeletingId ? "删除中..." : "确认删除"}}
-                    </button>
-                  </view>
-                </view>
+                <image class="release-primary-btn__icon" src="/images/icons/plus-brown.svg" mode="aspectFit" />
+                <text class="release-primary-btn__text">发布版本</text>
+              </button>
+            </view>
+
+            <view class="admin-loading-card admin-loading-card--inline" wx:if="{{releasesLoading}}">
+              <view class="admin-loading-card__orb">
+                <view class="admin-loading-card__spinner"></view>
               </view>
-            </block>
+              <text class="admin-loading-card__title">拾光中...</text>
+              <text class="admin-loading-card__desc">正在同步已发布版本与更新说明，请稍候。</text>
+            </view>
 
-            <block wx:elif="{{releaseMode === 'create'}}">
-              <view class="release-new-header">
-                <button
-                  class="release-back-btn"
-                  bindtap="onBackReleaseList"
-                  disabled="{{releaseCreating}}"
-                >
-                  <image class="release-back-btn__icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
-                </button>
-                <view class="release-new-header__main">
-                  <text class="release-new-header__title">发布新版本号🚀</text>
-                  <text class="release-new-header__desc">上传应用安装包</text>
-                </view>
-              </view>
+            <view class="release-empty" wx:elif="{{!releases.length}}">
+              <text class="release-empty__icon">📦</text>
+              <text class="release-empty__text">暂无发布版本</text>
+            </view>
 
-              <view class="release-form">
-                <view class="release-field">
-                  <text class="release-field__label">
-                    版本号<text class="release-required">*</text>
-                  </text>
-                  <input
-                    class="release-input"
-                    value="{{releaseVersion}}"
-                    placeholder="例如: 1.0.0"
-                    bindinput="onReleaseVersionInput"
-                  />
-                </view>
-
-                <view class="release-field">
-                  <text class="release-field__label">
-                    平台 <text class="release-required">*</text>
-                  </text>
-                  <picker
-                    mode="selector"
-                    range="{{releasePlatformOptions}}"
-                    value="{{releasePlatformIndex}}"
-                    bindchange="onReleasePlatformChange"
-                  >
-                    <view class="release-select">
-                      <text class="release-select__text">{{releasePlatformOptions[releasePlatformIndex]}}</text>
-                      <image class="release-select__chevron" src="/images/icons/chevron-down-brown.svg" mode="aspectFit" />
+            <view class="release-list" wx:else>
+              <view
+                class="release-card motion-fade-up"
+                wx:for="{{releases}}"
+                wx:key="id"
+                style="animation-delay: {{140 + (index % 8) * 35}}ms;"
+              >
+                <view class="release-card__head">
+                  <view class="release-card__meta">
+                    <view class="release-card__icon">
+                      <image class="release-card__icon-img" src="/images/icons/phone-brown.svg" mode="aspectFit" />
                     </view>
-                  </picker>
-                </view>
-
-                <view class="release-field">
-                  <text class="release-field__label">更新日志</text>
-                  <textarea
-                    class="release-textarea"
-                    value="{{releaseUpdateLog}}"
-                    placeholder="描述本次更新的内容..."
-                    maxlength="1000"
-                    bindinput="onReleaseUpdateLogInput"
-                  />
-                </view>
-
-                <view class="release-force">
-                  <view class="release-force__main">
-                    <text class="release-force__title">强制更新 🔒</text>
-                    <text class="release-force__desc">开启后，用户必须更新才能继续使用应用（弹窗不可关闭）</text>
+                    <view class="release-card__title-wrap">
+                      <view class="release-card__title-row">
+                        <text class="release-card__title">版本 {{item.version}}</text>
+                        <text class="release-chip release-chip--platform {{item.platformClass}}">{{item.platform}}</text>
+                        <text class="release-chip release-chip--force" wx:if="{{item.forceUpdate}}">🔒 强制更新</text>
+                      </view>
+                      <text class="release-card__date">发布于{{item.createdAtDisplay}}</text>
+                    </view>
                   </view>
-                  <view
-                    class="release-toggle {{releaseForceUpdate ? 'release-toggle--on' : ''}}"
-                    bindtap="onToggleReleaseForceUpdate"
-                  >
-                    <view class="release-toggle__thumb {{releaseForceUpdate ? 'release-toggle__thumb--on' : ''}}"></view>
-                  </view>
-                </view>
-
-                <view class="release-field">
-                  <text class="release-field__label">
-                    安装包文件<text class="release-required">*</text>
-                  </text>
                   <button
-                    class="release-upload-btn"
-                    catchtap="chooseReleaseFile"
-                    disabled="{{releaseCreating}}"
+                    class="release-icon-btn release-icon-btn--danger"
+                    data-id="{{item.id}}"
+                    bindtap="onOpenReleaseDeleteModal"
+                    disabled="{{releaseDeletingId}}"
                   >
-                    <image class="release-upload-btn__icon" src="/images/icons/upload-brown.svg" mode="aspectFit" />
-                    <text class="release-upload-btn__text">{{releaseFileName || "点击选择文件"}}</text>
+                    <image class="release-icon-btn__img" src="/images/icons/trash-red.svg" mode="aspectFit" />
                   </button>
-                  <text class="release-help" wx:if="{{releaseFileName}}">
-                    文件大小: {{releaseFileSizeText || "未知大小"}}
-                  </text>
+                </view>
+
+                <view class="release-log" wx:if="{{item.updateLog}}">
+                  <text class="release-log__text">{{item.updateLog}}</text>
                 </view>
 
                 <button
                   class="release-primary-btn release-primary-btn--full"
-                  bindtap="createRelease"
-                  hover-class="release-primary-btn--active"
-                  loading="{{releaseCreating}}"
-                  disabled="{{releaseCreating}}"
+                  data-id="{{item.id}}"
+                  bindtap="onCopyReleaseDownload"
                 >
-                  {{releaseCreating ? "发布中..." : "发布版本"}}
+                  <image class="release-primary-btn__icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
+                  <text class="release-primary-btn__text">下载安装包</text>
                 </button>
               </view>
-            </block>
+            </view>
+
           </view>
-        </block>
+      </block>
       </view>
     </view>
   </scroll-view>
+
+  <view
+    class="release-modal-mask motion-fade-in"
+    wx:if="{{activeSection === 'releases' && releaseDeleteModalOpen}}"
+    bindtap="onCloseReleaseDeleteModal"
+  >
+    <view class="release-modal motion-pop-in" catchtap="onReleaseModalTap">
+      <view class="release-modal__icon">
+        <image class="release-modal__icon-img" src="/images/icons/trash-red.svg" mode="aspectFit" />
+      </view>
+      <text class="release-modal__title">删除版本</text>
+      <text class="release-modal__desc">
+        确定要删除版本号<text class="release-modal__highlight">{{releaseDeleteTargetVersion}}</text> ({{releaseDeleteTargetPlatform}}) 吗？
+      </text>
+      <view class="release-modal__actions">
+        <button
+          class="release-ghost-btn"
+          bindtap="onCloseReleaseDeleteModal"
+          disabled="{{releaseDeletingId}}"
+        >
+          取消
+        </button>
+        <button
+          class="release-danger-btn"
+          bindtap="onConfirmDeleteRelease"
+          disabled="{{releaseDeletingId}}"
+        >
+          {{releaseDeletingId ? "删除中..." : "确认删除"}}
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <view class="booking-modal-mask" wx:if="{{activeSection === 'releases' && releaseMode === 'create'}}" bindtap="onBackReleaseList">
+    <view class="booking-modal booking-modal--form album-modal album-create-modal release-create-modal motion-pop-in" catchtap="onReleaseModalTap">
+      <view class="booking-modal__head">
+        <text class="booking-modal__title">发布版本 📦</text>
+        <view class="booking-modal__close" bindtap="onBackReleaseList">
+          <text>✕</text>
+        </view>
+      </view>
+      <view class="booking-modal__body album-create-modal__body release-create-modal__body">
+        <view class="album-create-section">
+          <text class="album-create-section__title">基础信息</text>
+          <view class="booking-modal__field">
+            <text class="booking-modal__label">
+              版本号 <text class="booking-modal__required">*</text>
+            </text>
+            <input
+              class="booking-modal__input"
+              value="{{releaseVersion}}"
+              placeholder="例如：1.0.0"
+              placeholder-class="booking-modal__placeholder"
+              bindinput="onReleaseVersionInput"
+            />
+          </view>
+
+          <view class="booking-modal__field">
+            <text class="booking-modal__label">
+              平台 <text class="booking-modal__required">*</text>
+            </text>
+            <picker
+              mode="selector"
+              range="{{releasePlatformOptions}}"
+              value="{{releasePlatformIndex}}"
+              bindchange="onReleasePlatformChange"
+            >
+              <view class="booking-city-picker release-create-select">
+                <view class="booking-city-picker__main">
+                  <text class="booking-city-picker__value">{{releasePlatformOptions[releasePlatformIndex]}}</text>
+                </view>
+                <image class="release-create-select__chevron" src="/images/icons/chevron-down-brown.svg" mode="aspectFit" />
+              </view>
+            </picker>
+          </view>
+          <text class="album-create-section__tip">版本号建议使用 x.y.z 形式，平台会决定这次发布对应的客户端。</text>
+        </view>
+
+        <view class="album-create-section">
+          <text class="album-create-section__title">更新日志</text>
+          <view class="album-create-plain-tip">填写本次发布的主要更新点，用户更新时会看到这段说明。</view>
+          <view class="booking-modal__field">
+            <textarea
+              class="booking-modal__textarea release-create-textarea"
+              value="{{releaseUpdateLog}}"
+              placeholder="描述本次更新的内容..."
+              placeholder-class="booking-modal__placeholder"
+              maxlength="1000"
+              bindinput="onReleaseUpdateLogInput"
+            />
+          </view>
+        </view>
+
+        <view class="album-create-section album-create-section--soft">
+          <view class="switch-row">
+            <view class="switch-row__main">
+              <text class="switch-row__title">强制更新</text>
+              <text class="switch-row__desc">开启后，用户需要完成更新后才能继续使用应用。</text>
+            </view>
+            <switch
+              checked="{{releaseForceUpdate}}"
+              bindchange="onReleaseForceUpdateChange"
+              color="#FFC857"
+            />
+          </view>
+          <view class="album-create-plain-tip">
+            {{releaseForceUpdate ? "已开启强制更新，旧版本用户需要更新后才能继续使用。" : "未开启强制更新，旧版本用户仍可继续使用。"}}
+          </view>
+        </view>
+
+        <view class="album-create-section">
+          <text class="album-create-section__title">安装包</text>
+          <view class="release-create-upload-card">
+            <button
+              class="album-create-upload-btn release-create-upload-btn"
+              catchtap="chooseReleaseFile"
+              hover-class="album-create-upload-btn--active"
+              disabled="{{releaseCreating}}"
+            >
+              <image class="album-create-upload-icon" src="/images/icons/upload-brown.svg" mode="aspectFit" />
+              <text>{{releaseFileName ? "重新选择安装包" : "点击选择文件"}}</text>
+            </button>
+            <text class="album-create-upload-hint" wx:if="{{releaseFileName}}">
+              {{releaseFileName}} · {{releaseFileSizeText || "未知大小"}}
+            </text>
+            <text class="album-create-upload-hint" wx:else>请选择本次发布对应平台的安装包文件。</text>
+          </view>
+        </view>
+      </view>
+      <button
+        class="booking-modal__submit album-create-modal__submit release-create-submit"
+        bindtap="createRelease"
+        hover-class="booking-modal__submit--active"
+        loading="{{releaseCreating}}"
+        disabled="{{releaseCreating}}"
+      >
+        {{releaseCreating ? "发布中..." : "确认发布"}}
+      </button>
+    </view>
+  </view>
 
   <view class="pose-modal-mask pose-editor-modal-mask" wx:if="{{activeSection === 'poses' && poseCreateModalOpen}}" bindtap="onClosePoseCreateModal">
     <view class="pose-modal pose-modal--editor" catchtap="onPoseModalTap">

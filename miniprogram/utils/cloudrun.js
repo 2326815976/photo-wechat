@@ -335,7 +335,53 @@ function parseMaybeJson(value) {
   }
 }
 
-function resolveErrorMessage(payload, statusCode, fallback) {
+function looksLikeHtmlDocument(value) {
+  if (typeof value !== "string") return false;
+  const text = String(value || "").trim();
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return (
+    lower.startsWith("<!doctype html") ||
+    lower.startsWith("<html") ||
+    lower.includes("<html") ||
+    lower.includes("</html>") ||
+    lower.includes("<body") ||
+    lower.includes("</body>") ||
+    lower.includes("<head") ||
+    lower.includes("</head>") ||
+    lower.includes("<script") ||
+    lower.includes("</script>") ||
+    lower.includes("_next/static/") ||
+    lower.includes("__next")
+  );
+}
+
+function resolveHtmlDocumentErrorMessage(statusCode, fallback, options) {
+  const code = normalizeStatusCode(statusCode);
+  const context = options && typeof options === "object" ? options : {};
+  const path = String(context.path || "").trim();
+  const method = String(context.method || "GET").trim().toUpperCase();
+
+  if (code === 401) {
+    return "登录状态已失效，请重新登录后重试";
+  }
+  if (
+    (code === 404 || code === 405) &&
+    method === "DELETE" &&
+    path.startsWith("/api/page-center/beta/bindings/")
+  ) {
+    return "解绑服务暂不可用，请先发布 photo 后端最新版本";
+  }
+  if (code === 404 || code === 405) {
+    return "后端接口暂不可用，请确认已发布服务端最新版本";
+  }
+  if (code >= 500) {
+    return "后端服务暂不可用，请稍后重试";
+  }
+  return String(fallback || (code ? `请求失败（${code}）` : "请求失败"));
+}
+
+function resolveErrorMessage(payload, statusCode, fallback, options) {
   const data = parseMaybeJson(payload);
   if (data && typeof data === "object") {
     const objectMessage =
@@ -345,6 +391,9 @@ function resolveErrorMessage(payload, statusCode, fallback) {
     }
   }
   if (typeof data === "string" && data.trim()) {
+    if (looksLikeHtmlDocument(data)) {
+      return resolveHtmlDocumentErrorMessage(statusCode, fallback, options);
+    }
     return data;
   }
   return String(fallback || `请求失败（${statusCode}）`);
@@ -657,7 +706,7 @@ async function requestJson(path, init) {
 
   const buildHttpError = (res, statusCode, parsedData) => {
     const apiPath = String(path || "");
-    const message = resolveErrorMessage(parsedData, statusCode, `请求失败（${statusCode}）`);
+    const message = resolveErrorMessage(parsedData, statusCode, `请求失败（${statusCode}）`, { path: apiPath, method });
     const payloadErrorInfo = extractPayloadErrorInfo(parsedData) || {};
     const hint =
       statusCode === 404

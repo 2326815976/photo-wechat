@@ -1,4 +1,4 @@
-﻿<view>
+<view>
   <view class="boot-loading motion-fade-up motion-delay-2" wx:if="{{!serviceMissing && !backendReady}}">
     <view class="admin-loading-card admin-loading-card--page">
       <view class="admin-loading-card__orb">
@@ -9,141 +9,158 @@
     </view>
   </view>
 
+  <view
+    wx:if="{{backendReady}}"
+    class="page-back-hitbox"
+    style="top: {{safeTop}}px;"
+    catchtap="onForceBack"
+  ></view>
+
   <secondary-page-shell
     wx:if="{{backendReady}}"
     shell-class="page"
     title="摆姿推荐"
-    managedPageKey="pose"
     fallbackRoute="{{pageFallbackRoute}}"
     fallbackTab="{{pageFallbackTab}}"
-    preferFallback="{{pageIsStandalone}}"
-    content-class="content {{pageIsStandalone ? 'content--standalone' : ''}}"
+    preferFallback="{{true}}"
+    content-class="content"
+    useScrollView="{{false}}"
+    enableFlex="{{true}}"
   >
-    <!-- 配置缺失提示 -->
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <!-- 标签栏 -->
-    <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}" style="top: {{tagbarStickyTop}}px;">
-      <scroll-view class="tagbar-scroll" scroll-x show-scrollbar="{{false}}">
-        <view class="tagbar-row">
-          <view
-            class="tag-btn {{selectedTagsMap[item.name] ? 'tag-btn--active' : ''}}"
-            hover-class="tag-btn--touch"
-            hover-stay-time="80"
-            wx:for="{{displayTags}}"
-            wx:key="id"
-            data-name="{{item.name}}"
-            bindtap="onToggleTag"
-          >
-            {{item.name}}
-          </view>
-        </view>
-      </scroll-view>
-
-      <view class="tag-all-btn" hover-class="tag-all-btn--active" hover-stay-time="80" wx:if="{{tags.length > 0}}" bindtap="openTagSelector">全部</view>
-    </view>
-
-    <!-- 骨架屏 -->
-    <view class="skeleton-wrap motion-fade-up motion-delay-2" wx:if="{{!currentPose}}">
-      <view class="skeleton-tags-row">
-        <view class="skeleton-tags-scroll">
-          <view class="skeleton-tags-inner">
+    <block wx:else>
+      <view class="tagbar {{pageReady ? 'tagbar--enter' : ''}}" wx:if="{{currentPose}}">
+        <scroll-view class="tagbar-scroll" scroll-x show-scrollbar="{{false}}">
+          <view class="tagbar-row">
             <view
-              class="skeleton-tag"
-              wx:for="{{skeletonTags}}"
-              wx:key="*this"
-              style="width: {{120 + (index % 3) * 40}}rpx; animation-delay: {{index * 0.05}}s;"
-            ></view>
+              class="tag-btn {{selectedTagsMap[item.name] ? 'tag-btn--active' : ''}}"
+              hover-class="tag-btn--touch"
+              hover-stay-time="80"
+              wx:for="{{displayTags}}"
+              wx:key="id"
+              data-name="{{item.name}}"
+              bindtap="onToggleTag"
+            >
+              {{item.name}}
+            </view>
           </view>
+        </scroll-view>
+
+        <view
+          class="tag-all-btn"
+          hover-class="tag-all-btn--active"
+          hover-stay-time="80"
+          wx:if="{{tags.length > 0}}"
+          bindtap="openTagSelector"
+        >
+          全部
         </view>
-        <view class="skeleton-all"></view>
       </view>
 
-      <view class="skeleton-pose">
-        <view class="skeleton-tape"></view>
-        <view class="skeleton-card">
-          <text class="skeleton-doodle">📷</text>
-          <view class="skeleton-img">
-            <view class="skeleton-shimmer"></view>
+      <view class="skeleton-wrap motion-fade-up motion-delay-2" wx:if="{{!currentPose}}">
+        <view class="skeleton-tags-row">
+          <view class="skeleton-tags-scroll">
+            <view class="skeleton-tags-inner">
+              <view
+                class="skeleton-tag"
+                wx:for="{{skeletonTags}}"
+                wx:key="*this"
+                style="width: {{120 + (index % 3) * 40}}rpx; animation-delay: {{index * 0.05}}s;"
+              ></view>
+            </view>
           </view>
-          <view class="skeleton-chips">
+          <view class="skeleton-all"></view>
+        </view>
+
+        <view class="skeleton-pose">
+          <view class="skeleton-tape"></view>
+          <view class="skeleton-card">
+            <text class="skeleton-doodle">📷</text>
+            <view class="skeleton-img">
+              <view class="skeleton-shimmer"></view>
+            </view>
+            <view class="skeleton-chips">
+              <view
+                class="skeleton-chip"
+                wx:for="{{skeletonChips}}"
+                wx:key="*this"
+                style="animation-delay: {{index * 0.1}}s;"
+              ></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="pose-wrap" wx:if="{{currentPose}}" animation="{{poseWrapAnimation}}">
+        <view class="tape"></view>
+        <view class="pose-card">
+          <view class="pose-doodle">📷</view>
+          <view class="pose-img-wrap" bindtap="openFullscreen">
+            <image
+              class="pose-img {{poseImageLoaded ? 'pose-img--loaded' : ''}}"
+              src="{{currentPose.image_url_resolved}}"
+              mode="aspectFit"
+              bindload="onPoseImageLoad"
+              binderror="onPoseImageError"
+            />
+            <view class="pose-img-loading" wx:if="{{!currentPose.image_url_resolved || !poseImageLoaded}}">
+              <block wx:if="{{poseImageLoadFailed || !currentPose.image_url_resolved}}">
+                <view class="pose-img-loading__center pose-img-loading__center--error">
+                  <text class="pose-img-loading__camera pose-img-loading__camera--error">📸</text>
+                  <text class="pose-img-loading__title">图片开小差了</text>
+                  <text class="pose-img-loading__desc">稍后再试试</text>
+                </view>
+              </block>
+              <block wx:else>
+                <text class="pose-img-loading__ambient pose-img-loading__ambient--left">✨</text>
+                <text class="pose-img-loading__ambient pose-img-loading__ambient--right">💫</text>
+                <view class="pose-img-loading__center">
+                  <view class="pose-img-loading__camera-wrap">
+                    <text class="pose-img-loading__camera">📷</text>
+                    <text class="pose-img-loading__spark">✨</text>
+                  </view>
+                  <text class="pose-img-loading__title">拾光中...</text>
+                </view>
+              </block>
+            </view>
+          </view>
+          <view class="pose-tags">
             <view
-              class="skeleton-chip"
-              wx:for="{{skeletonChips}}"
+              class="pose-chip pose-chip--enter chip-{{index % 5}}"
+              wx:for="{{currentPose.tags}}"
               wx:key="*this"
               style="animation-delay: {{index * 0.1}}s;"
-            ></view>
+            >
+              {{item}}
+            </view>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 摆姿卡片 -->
-    <view class="pose-wrap" wx:if="{{currentPose}}" animation="{{poseWrapAnimation}}">
-      <view class="tape"></view>
-      <view class="pose-card">
-        <view class="pose-doodle">📷</view>
-        <view class="pose-img-wrap" bindtap="openFullscreen">
+      <view class="bottom {{pageReady ? 'bottom--enter' : ''}}">
+        <view
+          class="shuffle-btn {{isAnimating ? 'shuffle-btn--disabled' : ''}}"
+          hover-class="shuffle-btn--active"
+          hover-stay-time="80"
+          bindtap="onShuffle"
+        >
           <image
-            class="pose-img {{poseImageLoaded ? 'pose-img--loaded' : ''}}"
-            src="{{currentPose.image_url_resolved}}"
-            mode="aspectFill"
-            bindload="onPoseImageLoad"
-            binderror="onPoseImageError"
+            class="shuffle-icon {{isAnimating ? 'shuffle-icon--spin' : ''}}"
+            src="{{isAnimating ? '/images/icons/rotate-ccw-brown.svg' : '/images/icons/sparkles-brown.svg'}}"
+            mode="aspectFit"
           />
-          <view class="pose-img-loading" wx:if="{{!poseImageLoaded}}">
-            <block wx:if="{{poseImageLoadFailed}}">
-              <view class="pose-img-loading__center pose-img-loading__center--error">
-                <text class="pose-img-loading__camera pose-img-loading__camera--error">📸</text>
-                <text class="pose-img-loading__title">图片开小差了</text>
-                <text class="pose-img-loading__desc">稍后再试试</text>
-              </view>
-            </block>
-            <block wx:else>
-              <text class="pose-img-loading__ambient pose-img-loading__ambient--left">✨</text>
-              <text class="pose-img-loading__ambient pose-img-loading__ambient--right">💫</text>
-              <view class="pose-img-loading__center">
-                <view class="pose-img-loading__camera-wrap">
-                  <text class="pose-img-loading__camera">📷</text>
-                  <text class="pose-img-loading__spark">✨</text>
-                </view>
-                <text class="pose-img-loading__title">拾光中...</text>
-              </view>
-            </block>
-          </view>
         </view>
-        <view class="pose-tags">
-          <view
-            class="pose-chip pose-chip--enter chip-{{index % 5}}"
-            wx:for="{{currentPose.tags}}"
-            wx:key="*this"
-            style="animation-delay: {{index * 0.1}}s;"
-          >
-            {{item}}
-          </view>
-        </view>
+        <text class="shuffle-text">{{isAnimating ? '正在切换...' : '点击换个姿势'}}</text>
       </view>
-    </view>
-
-    <!-- 底部操作 -->
-    <view class="bottom {{pageReady ? 'bottom--enter' : ''}}">
-      <view class="shuffle-btn {{isAnimating ? 'shuffle-btn--disabled' : ''}}" hover-class="shuffle-btn--active" hover-stay-time="80" bindtap="onShuffle">
-        <image
-          class="shuffle-icon {{isAnimating ? 'shuffle-icon--spin' : ''}}"
-          src="{{isAnimating ? '/images/icons/rotate-ccw-brown.svg' : '/images/icons/sparkles-brown.svg'}}"
-          mode="aspectFit"
-        />
-      </view>
-      <text class="shuffle-text">{{isAnimating ? '正在切换...' : '点击换个姿势'}}</text>
-    </view>
+    </block>
   </secondary-page-shell>
 
-  <!-- 标签选择器（Web 同款：固定在页头下方） -->
   <view class="tag-selector-mask tag-selector-mask--enter motion-fade-in" wx:if="{{showTagSelector}}" bindtap="closeTagSelector"></view>
-  <view class="tag-selector tag-selector--enter" wx:if="{{showTagSelector}}" style="top: {{safeTop + 72}}px;">
+  <view class="tag-selector tag-selector--enter" wx:if="{{showTagSelector}}" style="top: {{safeTop + 76}}px;">
     <view class="tag-selector-card motion-pop-in" catchtap="noop">
       <view class="tag-selector-header">
         <text class="tag-selector-title">选择标签</text>
@@ -190,5 +207,4 @@
       </view>
     </view>
   </view>
-
 </view>
