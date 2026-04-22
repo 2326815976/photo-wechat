@@ -325,6 +325,14 @@ function formatDateTime(value) {
   return `${parts.year}/${pad2(parts.month)}/${pad2(parts.day)} ${pad2(parts.hour)}:${pad2(parts.minute)}:${pad2(parts.second)}`;
 }
 
+function formatCompactDateTime(value) {
+  const date = parseDateTimeUTC8(value);
+  if (!date) return String(value || "");
+  const parts = getUTC8DateParts(date);
+  if (!parts) return String(value || "");
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)} ${pad2(parts.hour)}:${pad2(parts.minute)}`;
+}
+
 function formatDateDisplay(value) {
   const date = parseDateTimeUTC8(value);
   if (!date) return "";
@@ -1295,6 +1303,10 @@ function normalizeAdminUserRow(row, currentUserId) {
   const wechat = String((source && source.wechat) || "").trim();
   const displayName = name || phone || email || wechat || `用户 ${id.slice(0, 8)}`;
   const isCurrentAdmin = String(currentUserId || "").trim() === id;
+  const disabledAt = source && (source.disabledAt || source.disabled_at);
+  const createdAt = source && (source.createdAt || source.created_at);
+  const lastActiveAt = source && (source.lastActiveAt || source.last_active_at);
+  const lastSessionAt = source && (source.lastSessionAt || source.last_session_at);
 
   return {
     id,
@@ -1307,10 +1319,10 @@ function normalizeAdminUserRow(row, currentUserId) {
     roleText: role === "admin" ? "管理员" : "普通用户",
     isDisabled,
     statusText: isDisabled ? "已禁用" : "正常",
-    disabledAtText: formatDateTime(source && (source.disabledAt || source.disabled_at)),
-    createdAtText: formatDateTime(source && (source.createdAt || source.created_at)),
-    lastActiveAtText: formatDateTime(source && (source.lastActiveAt || source.last_active_at)),
-    lastSessionAtText: formatDateTime(source && (source.lastSessionAt || source.last_session_at)),
+    disabledAtText: formatCompactDateTime(disabledAt),
+    createdAtText: formatCompactDateTime(createdAt),
+    lastActiveAtText: formatCompactDateTime(lastActiveAt || lastSessionAt),
+    lastSessionAtText: formatCompactDateTime(lastSessionAt),
     albumCount: toSafeNumber(source && (source.albumCount || source.album_count), 0),
     bookingCount: toSafeNumber(source && (source.bookingCount || source.booking_count), 0),
     canManage: role !== "admin" && !isCurrentAdmin,

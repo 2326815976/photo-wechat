@@ -104,10 +104,13 @@
 
 .author-sub {
   display: block;
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  line-height: 1.6;
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  line-height: 1.4;
   color: rgba(93, 64, 55, 0.58);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-box {

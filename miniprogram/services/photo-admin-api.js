@@ -2577,9 +2577,9 @@ async function saveAdminAboutSettings(payload) {
 
   const values = {
     author_name: authorName || null,
-    phone: phone || null,
-    wechat: wechat || null,
-    email: email || null,
+    phone,
+    wechat,
+    email,
     donation_qr_code: donationQrCode || null,
     author_message: authorMessage || null,
   };

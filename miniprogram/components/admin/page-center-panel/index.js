@@ -1412,13 +1412,13 @@ Component({
         timeout: 10000,
       });
       if (response && response.error) {
-        throw new Error(String(response.error || "???????"));
+        throw new Error(String(response.error || "删除内测码失败"));
       }
       this.setData({ betaDeleteConfirm: null });
       await this.loadOverview();
-      this.showNotice("success", normalizeText(response && response.message) || "??????");
+      this.showNotice("success", normalizeText(response && response.message) || "内测码已删除");
     } catch (error) {
-      this.showNotice("error", readErrorMessage(error, "???????"));
+      this.showNotice("error", readErrorMessage(error, "删除内测码失败"));
     } finally {
       this.setData({ savingKey: "" });
     }
@@ -2045,16 +2045,12 @@ Component({
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const pageKey = normalizeText(dataset.pageKey);
     const codeId = normalizeText(dataset.codeId);
-    const betaName = normalizeText(dataset.betaName) || "????";
+    const betaName = normalizeText(dataset.betaName) || "未命名内测码";
     if (!codeId) return;
     const row = this.findRow(pageKey);
     const code = row && Array.isArray(row.betaCodesVisible)
       ? row.betaCodesVisible.find((item) => item.id === codeId)
       : null;
-    if (code && code.readOnly) {
-      this.showNotice("info", code.manageHint || "?????????????????????");
-      return;
-    }
     this.setData({
       betaDeleteConfirm: {
         pageKey,
