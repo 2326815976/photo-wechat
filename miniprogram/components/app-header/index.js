@@ -97,6 +97,9 @@ Component({
 
       const app = typeof getApp === "function" ? getApp() : null;
       const globalData = app && app.globalData ? app.globalData : {};
+      if (!Boolean(globalData.auditConfigReady)) {
+        return { title: "", subtitle: "" };
+      }
       const runtimeConfig = globalData.runtimeConfig && typeof globalData.runtimeConfig === "object"
         ? globalData.runtimeConfig
         : {};

@@ -302,6 +302,17 @@ function clearSessionCache() {
   pendingSessionRequest = null;
 }
 
+function primeSessionCache(payload) {
+  if (!payload || typeof payload !== "object") {
+    clearSessionCache();
+    return null;
+  }
+  cachedSessionPayload = payload;
+  cachedSessionAt = Date.now();
+  pendingSessionRequest = null;
+  return cachedSessionPayload;
+}
+
 async function getSession(options) {
   const opts = options && typeof options === "object" ? options : {};
   const force = Boolean(opts.force || opts.forceRefresh);
@@ -361,8 +372,9 @@ async function loginWithPassword(phone, password) {
     method: "POST",
     data: { phone, password },
   });
-  clearSessionCache();
-  return ensureSuccessPayload(payload, "登录失败");
+  const successPayload = ensureSuccessPayload(payload, "登录失败");
+  primeSessionCache(successPayload);
+  return successPayload;
 }
 
 async function loginWithMiniProgram(code, profile) {
@@ -385,8 +397,9 @@ async function loginWithMiniProgram(code, profile) {
     method: "POST",
     data: payload,
   });
-  clearSessionCache();
-  return ensureSuccessPayload(response, "微信登录失败");
+  const successPayload = ensureSuccessPayload(response, "微信登录失败");
+  primeSessionCache(successPayload);
+  return successPayload;
 }
 
 async function issueCaptcha() {
@@ -431,8 +444,9 @@ async function registerWithPassword(phone, password, captchaId, captchaToken) {
       captchaToken,
     },
   });
-  clearSessionCache();
-  return ensureSuccessPayload(payload, "注册失败");
+  const successPayload = ensureSuccessPayload(payload, "注册失败");
+  primeSessionCache(successPayload);
+  return successPayload;
 }
 
 async function logout() {
@@ -468,4 +482,5 @@ module.exports = {
   requestJson,
   requestUpload,
   clearSessionCache,
+  primeSessionCache,
 };

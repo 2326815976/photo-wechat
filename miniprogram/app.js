@@ -162,6 +162,26 @@ function saveCachedRuntimeConfig(runtimeConfig) {
   }
 }
 
+function hasConfiguredCloudRunService(globalData) {
+  return Boolean(String((globalData && globalData.cloudRunService) || "").trim());
+}
+
+function resolveMiniProgramAppId() {
+  try {
+    if (wx && typeof wx.getAccountInfoSync === "function") {
+      const accountInfo = wx.getAccountInfoSync();
+      const runtimeAppId = String(
+        (accountInfo && accountInfo.miniProgram && accountInfo.miniProgram.appId) || ""
+      ).trim();
+      if (runtimeAppId) {
+        return runtimeAppId;
+      }
+    }
+  } catch (error) {
+  }
+  return String(config.appId || "").trim();
+}
+
 function isDevtoolsEnvironment() {
   try {
     if (wx && typeof wx.getDeviceInfo === "function") {
@@ -714,15 +734,15 @@ App({
       return Promise.resolve(this.globalData.runtimeConfig);
     }
 
-    const service = String((this.globalData && this.globalData.cloudRunService) || "").trim();
-    if (!service) {
+    const serviceConfigured = hasConfiguredCloudRunService(this.globalData);
+    if (!serviceConfigured) {
       const cached = loadCachedRuntimeConfig();
       const fallback = cached || buildRuntimeConfigPreset("standard");
       const applied = this.applyRuntimeConfig(fallback, {
         notify: true,
         persistCache: Boolean(cached),
-        markFetchedAt: Boolean(cached),
-        markReady: Boolean(cached),
+        markFetchedAt: true,
+        markReady: true,
       });
       this.auditConfigPromise = Promise.resolve(applied).finally(() => {
         this.auditConfigPromise = null;
@@ -742,10 +762,10 @@ App({
         const cached = loadCachedRuntimeConfig();
         const fallback = cached || buildRuntimeConfigPreset("standard");
         const applied = this.applyRuntimeConfig(fallback, {
-          notify: true,
+          notify: false,
           persistCache: Boolean(cached),
-          markFetchedAt: Boolean(cached),
-          markReady: Boolean(cached),
+          markFetchedAt: false,
+          markReady: false,
         });
 
         try {
@@ -767,11 +787,12 @@ App({
   onLaunch: function () {
     const cachedRuntimeConfig = loadCachedRuntimeConfig();
     const bootRuntimeConfig = cachedRuntimeConfig || buildRuntimeConfigPreset("standard");
+    const serviceConfigured = hasConfiguredCloudRunService(this.globalData);
     this.applyRuntimeConfig(bootRuntimeConfig, {
       notify: false,
       persistCache: Boolean(cachedRuntimeConfig),
-      markFetchedAt: Boolean(cachedRuntimeConfig),
-      markReady: Boolean(cachedRuntimeConfig),
+      markFetchedAt: !serviceConfigured,
+      markReady: !serviceConfigured,
     });
 
     try {
@@ -785,20 +806,26 @@ App({
     if (!wx.cloud) {
       console.error("请使用 2.2.3 或以上的基础库以使用云能力");
       const fallback = cachedRuntimeConfig || buildRuntimeConfigPreset("standard");
+      const canUseLocalRuntimeConfig = !serviceConfigured;
       const applied = this.applyRuntimeConfig(fallback, {
-        notify: true,
+        notify: canUseLocalRuntimeConfig,
         persistCache: Boolean(cachedRuntimeConfig),
-        markFetchedAt: Boolean(cachedRuntimeConfig),
-        markReady: Boolean(cachedRuntimeConfig),
+        markFetchedAt: canUseLocalRuntimeConfig,
+        markReady: canUseLocalRuntimeConfig,
       });
       this.auditConfigPromise = Promise.resolve(applied);
       return;
     }
 
-    wx.cloud.init({
+    const cloudInitOptions = {
       env: this.globalData.env,
       traceUser: true,
-    });
+    };
+    const resolvedAppId = resolveMiniProgramAppId();
+    if (resolvedAppId) {
+      cloudInitOptions.appid = resolvedAppId;
+    }
+    wx.cloud.init(cloudInitOptions);
 
     if (this.globalData.cloudRunServiceInferred) {
       console.warn(
@@ -826,4 +853,3 @@ App({
     }
   },
 });
-

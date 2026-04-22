@@ -46,52 +46,42 @@
         </view>
       </view>
 
-      <view class="card motion-fade-up motion-delay-4">
+      <view class="card motion-fade-up motion-delay-4" wx:if="{{contactItems.length > 0}}">
         <text class="section-title">联系方式</text>
-        <view wx:if="{{contactItems.length > 0}}">
-          <view class="contact-item" wx:for="{{contactItems}}" wx:key="key">
-            <image class="contact-icon" src="{{item.iconSrc}}" mode="aspectFit" />
-            <view class="contact-main">
-              <text class="contact-label">{{item.label}}</text>
-              <text class="contact-value {{item.breakAll ? 'contact-value--break' : ''}}">{{item.value}}</text>
-            </view>
-            <view
-              class="contact-copy"
-              hover-class="contact-copy--active"
-              hover-stay-time="80"
-              data-label="{{item.label}}"
-              data-value="{{item.value}}"
-              bindtap="onCopyContact"
-            >
-              复制
-            </view>
+        <view class="contact-item" wx:for="{{contactItems}}" wx:key="key">
+          <image class="contact-icon" src="{{item.iconSrc}}" mode="aspectFit" />
+          <view class="contact-main">
+            <text class="contact-label">{{item.label}}</text>
+            <text class="contact-value {{item.breakAll ? 'contact-value--break' : ''}}">{{item.value}}</text>
           </view>
-        </view>
-        <view class="empty-card" wx:else>
-          <text class="empty-card__text">暂未填写联系方式</text>
+          <view
+            class="contact-copy"
+            hover-class="contact-copy--active"
+            hover-stay-time="80"
+            data-label="{{item.label}}"
+            data-value="{{item.value}}"
+            bindtap="onCopyContact"
+          >
+            复制
+          </view>
         </view>
       </view>
 
-      <view class="card motion-fade-up motion-delay-5">
+      <view class="card motion-fade-up motion-delay-5" wx:if="{{about.donation_qr_code}}">
         <view class="section-head">
           <image class="section-head__icon" src="/images/icons/heart-orange.svg" mode="aspectFit" />
           <text class="section-head__title">赞赏支持</text>
         </view>
 
-        <view wx:if="{{about.donation_qr_code}}">
-          <view class="qr-wrap" bindtap="onPreviewDonationQr">
-            <image
-              class="qr-image"
-              src="{{about.donation_qr_code}}"
-              mode="widthFix"
-              show-menu-by-longpress="{{true}}"
-            />
-          </view>
-          <text class="qr-tip">如果这份内容对你有帮助，欢迎扫码支持一下 ✨</text>
+        <view class="qr-wrap" bindtap="onPreviewDonationQr">
+          <image
+            class="qr-image"
+            src="{{about.donation_qr_code}}"
+            mode="widthFix"
+            show-menu-by-longpress="{{true}}"
+          />
         </view>
-        <view class="empty-card" wx:else>
-          <text class="empty-card__text">暂未上传赞赏码</text>
-        </view>
+        <text class="qr-tip">如果这份内容对你有帮助，欢迎扫码支持一下 ✨</text>
       </view>
 
       <view class="empty-card empty-card--standalone motion-fade-up motion-delay-6" wx:if="{{showEmptyState}}">

@@ -62,17 +62,24 @@ Page({
     phoneLoginEnabled: false,
     wechatLoginEnabled: true,
     pageTitle: "登录",
-    registerEntryVisible: true,
+    registerEntryVisible: false,
     registerEntryLabel: "注册",
   },
 
-  applyRuntimeConfig(runtimeConfig) {
+  applyRuntimeConfig(runtimeConfig, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const auditConfigReady =
+      !Object.prototype.hasOwnProperty.call(opts, "auditConfigReady") ||
+      Boolean(opts.auditConfigReady);
     const normalized = normalizeRuntimeConfig(runtimeConfig);
-    const authMode = String(normalized.authMode || "phone_password");
-    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
-    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
-    const loginAccess = getManagedPageAccess(normalized, "login");
-    const registerAccess = getManagedPageAccess(normalized, "register");
+    const authMode = auditConfigReady ? String(normalized.authMode || "phone_password") : "wechat_only";
+    const phoneLoginEnabled =
+      auditConfigReady && (authMode === "phone_password" || authMode === "mixed");
+    const wechatLoginEnabled = auditConfigReady
+      ? authMode === "wechat_only" || authMode === "mixed"
+      : true;
+    const loginAccess = auditConfigReady ? getManagedPageAccess(normalized, "login") : null;
+    const registerAccess = auditConfigReady ? getManagedPageAccess(normalized, "register") : null;
     const pageTitle =
       String((loginAccess && (loginAccess.headerTitle || loginAccess.navText)) || "").trim() || "登录";
     const registerEntryVisible =
@@ -99,8 +106,9 @@ Page({
     const globalData = app && app.globalData ? app.globalData : {};
     const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !String(globalData.cloudRunService || "").trim();
+    const auditConfigReady = Boolean(globalData.auditConfigReady);
     this.setData({ safeTop, serviceMissing });
-    this.applyRuntimeConfig(globalData.runtimeConfig || null);
+    this.applyRuntimeConfig(globalData.runtimeConfig || null, { auditConfigReady });
 
     if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
       this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((runtimeConfig) => {
@@ -123,7 +131,8 @@ Page({
     this.applyRuntimeConfig(
       app && app.globalData
         ? app.globalData.runtimeConfig || null
-        : null
+        : null,
+      { auditConfigReady: Boolean(app && app.globalData && app.globalData.auditConfigReady) }
     );
     await this.guardManagedAccess();
   },
@@ -350,7 +359,7 @@ Page({
     try {
       const [loginRes, profile] = await Promise.all([
         wxLogin(),
-        requestWechatUserProfile({ desc: "用于完善登录后的头像与昵称" }),
+        requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
       ]);
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {

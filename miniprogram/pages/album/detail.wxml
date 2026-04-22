@@ -91,7 +91,7 @@
             class="tool-btn tool-btn--primary {{selectedCount > 0 ? 'tool-btn--primary-selected' : ''}}"
             hover-class="tool-btn--touch"
             bindtap="handleBatchDownload"
-            disabled="{{batchLoading || switchingFolderLoading}}"
+            disabled="{{downloadProgressRunning || batchLoading || switchingFolderLoading}}"
           >
             <image class="tool-icon" src="/images/icons/download-brown.svg" mode="aspectFit" />
             <text wx:if="{{selectedCount > 0}}">下载</text>
@@ -104,7 +104,7 @@
             hover-class="tool-btn--touch"
             wx:if="{{selectedCount > 0}}"
             bindtap="handleBatchDelete"
-            disabled="{{batchLoading || switchingFolderLoading}}"
+            disabled="{{downloadProgressRunning || batchLoading || switchingFolderLoading}}"
           >
             <image class="tool-icon tool-icon--danger" src="/images/icons/trash-red.svg" mode="aspectFit" />
           </button>
@@ -366,6 +366,24 @@
         <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closeDeleteConfirm">取消</button>
         <button class="confirm-btn confirm-btn--danger" hover-class="confirm-btn--danger-active" bindtap="confirmBatchDelete">确认删除</button>
       </view>
+    </view>
+  </view>
+
+  <view class="download-progress-card motion-pop-in {{downloadProgressDone ? 'download-progress-card--done' : ''}}" wx:if="{{downloadProgressVisible}}">
+    <view class="download-progress-card__header">
+      <text class="download-progress-card__title">{{downloadProgressTitle || '正在保存照片'}}</text>
+      <text class="download-progress-card__percent" wx:if="{{downloadProgressTotal > 0}}">{{downloadProgressPercent}}%</text>
+    </view>
+    <text class="download-progress-card__message">{{downloadProgressMessage}}</text>
+    <view class="download-progress-card__meta">
+      <text>已完成 {{downloadProgressCurrent}} / {{downloadProgressTotal > 0 ? downloadProgressTotal : '--'}}</text>
+      <text>成功 {{downloadProgressSuccess}} · 失败 {{downloadProgressFail}}</text>
+    </view>
+    <view class="download-progress-card__bar">
+      <view
+        class="download-progress-card__bar-fill {{downloadProgressRunning && downloadProgressTotal === 0 ? 'download-progress-card__bar-fill--indeterminate' : ''}}"
+        style="width: {{downloadProgressTotal > 0 ? downloadProgressPercent : 22}}%;"
+      ></view>
     </view>
   </view>
 

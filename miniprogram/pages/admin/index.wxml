@@ -162,7 +162,7 @@
                 <text class="stats-section__title">用户统计</text>
               </view>
               <view class="stats-cards-grid">
-                <view class="stats-card" wx:for="{{statsView.userCards}}" wx:key="key">
+                <view class="stats-card {{item.action ? 'stats-card--interactive' : ''}}" wx:for="{{statsView.userCards}}" wx:key="key" data-action="{{item.action}}" bindtap="onStatsCardTap">
                   <view class="stats-card__icon" style="background: linear-gradient(135deg, {{item.colorStart}}, {{item.colorEnd}});">
                     <text class="stats-card__icon-text">{{item.icon}}</text>
                   </view>
@@ -357,6 +357,147 @@
           </block>
         </view>
       </block>
+        <block wx:if="{{activeSection === 'users'}}">
+          <view class="user-admin-section motion-fade-up">
+            <view class="user-admin-toolbar">
+              <button class="booking-pill-btn booking-pill-btn--ghost" bindtap="onBackToStatsSection">返回统计</button>
+              <button
+                class="booking-pill-btn booking-pill-btn--primary"
+                bindtap="onRefreshAdminUsers"
+                disabled="{{usersLoading || usersRefreshing || userActionLoading}}"
+              >
+                {{usersLoading || usersRefreshing ? "刷新中..." : "刷新列表"}}
+              </button>
+            </view>
+
+            <view class="stats-empty-card" wx:if="{{usersLoading && !usersReady}}">
+              <text class="stats-empty-card__icon">👥</text>
+              <text class="stats-empty-card__title">正在加载用户列表...</text>
+              <text class="stats-empty-card__desc">请稍候，正在同步后台用户数据。</text>
+            </view>
+
+            <view class="stats-empty-card" wx:elif="{{usersError && !usersReady}}">
+              <text class="stats-empty-card__icon">⚠️</text>
+              <text class="stats-empty-card__title">用户列表加载失败</text>
+              <text class="stats-empty-card__desc">{{usersError}}</text>
+              <button class="stats-empty-card__action" bindtap="onRefreshAdminUsers">重新加载</button>
+            </view>
+
+            <view class="stats-empty-card" wx:elif="{{!usersList.length}}">
+              <text class="stats-empty-card__icon">📭</text>
+              <text class="stats-empty-card__title">暂无用户数据</text>
+              <text class="stats-empty-card__desc">当前还没有可管理的用户账号。</text>
+            </view>
+
+            <view class="user-admin-list" wx:else>
+              <view class="user-admin-card" wx:for="{{usersList}}" wx:key="id">
+                <view class="user-admin-card__head">
+                  <view class="user-admin-card__main">
+                    <text class="user-admin-card__title">{{item.displayName}}</text>
+                    <text class="user-admin-card__desc">用户 ID：{{item.id}}</text>
+                    <text class="user-admin-card__desc" wx:if="{{item.disabledAtText}}">禁用时间：{{item.disabledAtText}}</text>
+                  </view>
+                  <view class="user-admin-card__badges">
+                    <text class="user-admin-card__badge {{item.role === 'admin' ? 'user-admin-card__badge--admin' : ''}}">
+                      {{item.roleText}}
+                    </text>
+                    <text class="user-admin-card__badge user-admin-card__badge--disabled" wx:if="{{item.isDisabled}}">
+                      {{item.statusText}}
+                    </text>
+                    <text class="user-admin-card__badge user-admin-card__badge--current" wx:if="{{item.isCurrentAdmin}}">
+                      当前账号
+                    </text>
+                  </view>
+                </view>
+
+                <view class="user-admin-metrics">
+                  <view class="user-admin-metric">
+                    <text class="user-admin-metric__label">注册时间</text>
+                    <text class="user-admin-metric__value">{{item.createdAtText || '—'}}</text>
+                  </view>
+                  <view class="user-admin-metric">
+                    <text class="user-admin-metric__label">最近活跃</text>
+                    <text class="user-admin-metric__value">{{item.lastActiveAtText || '—'}}</text>
+                  </view>
+                  <view class="user-admin-metric">
+                    <text class="user-admin-metric__label">最近会话</text>
+                    <text class="user-admin-metric__value">{{item.lastSessionAtText || '—'}}</text>
+                  </view>
+                  <view class="user-admin-metric">
+                    <text class="user-admin-metric__label">预约 / 相册</text>
+                    <text class="user-admin-metric__value">{{item.bookingCount}} / {{item.albumCount}}</text>
+                  </view>
+                </view>
+
+                <view class="user-admin-contact">
+                  <view class="user-admin-contact__row">
+                    <text class="user-admin-contact__label">手机号</text>
+                    <text class="user-admin-contact__value">{{item.phone || '未填写'}}</text>
+                  </view>
+                  <view class="user-admin-contact__row">
+                    <text class="user-admin-contact__label">邮箱</text>
+                    <text class="user-admin-contact__value">{{item.email || '未填写'}}</text>
+                  </view>
+                  <view class="user-admin-contact__row">
+                    <text class="user-admin-contact__label">微信号</text>
+                    <text class="user-admin-contact__value">{{item.wechat || '未填写'}}</text>
+                  </view>
+                </view>
+
+                <view class="user-admin-actions" wx:if="{{item.canManage}}">
+                  <button
+                    class="user-admin-action user-admin-action--primary"
+                    data-id="{{item.id}}"
+                    bindtap="onToggleAdminUserDisabled"
+                    disabled="{{userActionLoading && userActionTargetId === item.id}}"
+                  >
+                    {{userActionLoading && userActionTargetId === item.id ? "处理中..." : (item.isDisabled ? "恢复账号" : "禁用账号")}}
+                  </button>
+                  <button
+                    class="user-admin-action user-admin-action--danger"
+                    data-id="{{item.id}}"
+                    bindtap="onPromptDeleteAdminUser"
+                    disabled="{{userActionLoading && userActionTargetId === item.id}}"
+                  >
+                    删除账号
+                  </button>
+                </view>
+
+                <text class="user-admin-card__hint" wx:else>
+                  {{item.isCurrentAdmin ? "当前登录管理员不支持在此处进行禁用或删除操作。" : "管理员账号默认受保护，不支持后台禁用或删除。"}}
+                </text>
+              </view>
+            </view>
+          </view>
+        </block>
+        <view class="booking-modal-mask" wx:if="{{userDeleteConfirmOpen}}" bindtap="onCloseAdminUserDeleteConfirm">
+          <view class="booking-confirm-modal" catchtap="onUserModalTap">
+            <view class="booking-confirm-modal__head">
+              <view class="booking-confirm-modal__icon booking-confirm-modal__icon--danger">!</view>
+              <text class="booking-confirm-modal__title">确认删除账号</text>
+              <text class="booking-confirm-modal__desc">
+                确定要删除「<text class="booking-confirm-modal__accent">{{userDeletingTargetName}}</text>」吗？
+              </text>
+              <text class="booking-confirm-modal__warn">该操作会同步删除资料、预约与关联资源，且不可撤销。</text>
+            </view>
+            <view class="booking-confirm-modal__actions">
+              <button
+                class="booking-confirm-modal__btn booking-confirm-modal__btn--ghost"
+                bindtap="onCloseAdminUserDeleteConfirm"
+                disabled="{{userActionLoading && userActionTargetId === userDeletingTargetId}}"
+              >
+                取消
+              </button>
+              <button
+                class="booking-confirm-modal__btn booking-confirm-modal__btn--danger"
+                bindtap="confirmDeleteAdminUser"
+                disabled="{{userActionLoading && userActionTargetId === userDeletingTargetId}}"
+              >
+                {{userActionLoading && userActionTargetId === userDeletingTargetId ? "删除中..." : "确认删除"}}
+              </button>
+            </view>
+          </view>
+        </view>
         <block wx:if="{{activeSection === 'schedule'}}">
           <view class="booking-panel schedule-panel motion-fade-up">
             <view class="booking-toolbar schedule-toolbar">
@@ -1075,17 +1216,18 @@
 
                   <view class="booking-modal__field">
                     <text class="booking-modal__label">作者留言</text>
-                    <textarea
-                      class="booking-modal__textarea about-textarea"
-                      value="{{aboutSettings.author_message}}"
-                      style="height: {{aboutMessageHeightRpx}}rpx;"
-                      data-field="author_message"
-                      bindinput="onAboutInput"
-                      bindlinechange="onAboutMessageLineChange"
-                      placeholder="写给用户的一段话"
-                      placeholder-class="booking-modal__placeholder"
-                      maxlength="2000"
-                    />
+                    <view class="about-textarea-wrap">
+                      <view class="booking-modal__textarea about-textarea about-textarea--mirror">{{aboutAuthorMessageMirrorText}}</view>
+                      <textarea
+                        class="booking-modal__textarea about-textarea about-textarea--input"
+                        value="{{aboutSettings.author_message}}"
+                        data-field="author_message"
+                        bindinput="onAboutInput"
+                        placeholder="写给用户的一段话"
+                        placeholder-class="booking-modal__placeholder"
+                        maxlength="2000"
+                      ></textarea>
+                    </view>
                   </view>
                 </view>
 
@@ -1134,20 +1276,6 @@
                 </view>
               </view>
 
-              <view class="pose-tabs-bar__actions" wx:if="{{posePanelTab === 'poses' && !poseSelectionMode}}">
-                <button
-                  class="pose-toolbar-btn pose-toolbar-btn--danger pose-toolbar-btn--compact"
-                  bindtap="onEnterPoseSelectionMode"
-                >
-                  批量删除
-                </button>
-                <button
-                  class="pose-toolbar-btn pose-toolbar-btn--primary pose-toolbar-btn--compact"
-                  bindtap="onOpenPoseCreateModal"
-                >
-                  新增摆姿
-                </button>
-              </view>
 
               <view class="pose-tabs-bar__actions" wx:if="{{posePanelTab === 'tags' && !poseTagSelectionMode}}">
                 <button
@@ -1166,7 +1294,7 @@
             </view>
 
             <block wx:if="{{posePanelTab === 'poses'}}">
-              <view class="pose-toolbar">
+              <view class="pose-toolbar {{!poseSelectionMode ? 'pose-toolbar--with-actions' : ''}}">
                 <scroll-view class="pose-filter-scroll" scroll-x="true" enable-flex="true">
                   <view class="pose-filter-row">
                     <text class="pose-filter-row__icon">🏷️</text>
@@ -1181,6 +1309,21 @@
                     </view>
                   </view>
                 </scroll-view>
+
+                <view class="pose-toolbar-actions pose-toolbar-actions--pair" wx:if="{{!poseSelectionMode}}">
+                  <button
+                    class="pose-toolbar-btn pose-toolbar-btn--danger pose-toolbar-btn--compact"
+                    bindtap="onEnterPoseSelectionMode"
+                  >
+                    批量删除
+                  </button>
+                  <button
+                    class="pose-toolbar-btn pose-toolbar-btn--primary pose-toolbar-btn--compact"
+                    bindtap="onOpenPoseCreateModal"
+                  >
+                    新增摆姿
+                  </button>
+                </view>
 
                 <view class="pose-toolbar-actions" wx:if="{{poseSelectionMode}}">
                   <button
@@ -1670,38 +1813,41 @@
                     <view class="album-card__title-wrap">
                       <view class="album-card__title-line">
                         <text class="album-card__title">{{item.title}}</text>
-                        <view
-                          wx:if="{{item.expiresAtText}}"
-                          class="album-card__expiry-badge {{item.expired ? 'album-card__expiry-badge--expired' : (item.expirySoon ? 'album-card__expiry-badge--soon' : 'album-card__expiry-badge--normal')}}"
-                        >
-                          <text>到期 {{item.expiresDateText}}</text>
-                          <text wx:if="{{item.daysRemaining !== null}}"> · {{item.daysRemaining > 0 ? item.daysRemaining : 0}}天</text>
-                        </view>
                       </view>
                       <view class="album-card__meta-row">
                         <text class="album-card__meta">{{item.createdDateText}}</text>
                       </view>
                     </view>
 
-                    <view class="album-card__quick-actions" wx:if="{{!albumSelectionMode}}">
-                      <button
-                        class="album-mini-btn album-mini-btn--edit"
-                        data-id="{{item.id}}"
-                        bindtap="onOpenAlbumTitleModal"
-                        hover-class="album-mini-btn--active"
-                        disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
+                    <view class="album-card__head-actions" wx:if="{{item.expiresAtText || !albumSelectionMode}}">
+                      <view
+                        wx:if="{{item.expiresAtText}}"
+                        class="album-card__expiry-badge {{item.expired ? 'album-card__expiry-badge--expired' : (item.expirySoon ? 'album-card__expiry-badge--soon' : 'album-card__expiry-badge--normal')}}"
                       >
-                        <text>✎</text>
-                      </button>
-                      <button
-                        class="album-mini-btn album-mini-btn--danger"
-                        data-id="{{item.id}}"
-                        bindtap="onOpenAlbumDeleteConfirm"
-                        hover-class="album-mini-btn--active"
-                        disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
-                      >
-                        <image class="album-mini-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
-                      </button>
+                        <text>到期 {{item.expiresDateText}}</text>
+                        <text wx:if="{{item.daysRemaining !== null}}"> · {{item.daysRemaining > 0 ? item.daysRemaining : 0}}天</text>
+                      </view>
+
+                      <view class="album-card__quick-actions" wx:if="{{!albumSelectionMode}}">
+                        <button
+                          class="album-mini-btn album-mini-btn--edit"
+                          data-id="{{item.id}}"
+                          bindtap="onOpenAlbumTitleModal"
+                          hover-class="album-mini-btn--active"
+                          disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
+                        >
+                          <text>✎</text>
+                        </button>
+                        <button
+                          class="album-mini-btn album-mini-btn--danger"
+                          data-id="{{item.id}}"
+                          bindtap="onOpenAlbumDeleteConfirm"
+                          hover-class="album-mini-btn--active"
+                          disabled="{{albumActionLoading || albumTitleSaving || albumKeySaving || albumRecipientSaving || albumExpirySaving || albumCoverUpdatingId === item.id || albumDonationUpdatingId === item.id}}"
+                        >
+                          <image class="album-mini-btn__icon" src="/images/icons/trash-red.svg" mode="aspectFit" />
+                        </button>
+                      </view>
                     </view>
                   </view>
 

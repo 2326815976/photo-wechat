@@ -48,6 +48,9 @@ function readPagePresentationFromApp(app) {
 
 function readRuntimeConfigFromApp(app) {
   const globalData = app && app.globalData ? app.globalData : {};
+  if (!Boolean(globalData.auditConfigReady)) {
+    return null;
+  }
   return globalData.runtimeConfig || null;
 }
 

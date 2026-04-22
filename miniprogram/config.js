@@ -28,6 +28,9 @@ const resolvedStorageDomain = String(
   runtimeConfig.storageDomain || "https://736c-slogan-3gf3tz4nf12fa5ef-1403937484.tcb.qcloud.la"
 );
 const resolvedCloudbaseEnvId = String(runtimeConfig.cloudbaseEnvId || "slogan-3gf3tz4nf12fa5ef");
+const resolvedMiniProgramAppId = normalizeText(
+  runtimeConfig.appId || runtimeConfig.appid || "wxac727433072d5322"
+);
 const resolvedAppUrl = normalizeUrl(
   runtimeConfig.appUrl ||
     runtimeConfig.APP_URL ||
@@ -84,6 +87,8 @@ const resolvedFonts =
 module.exports = {
   // CloudBase 环境 ID（来自 demo/photo/.env.local 的 CLOUDBASE_ID）
   cloudbaseEnvId: resolvedCloudbaseEnvId,
+
+  appId: resolvedMiniProgramAppId,
 
   // 云托管服务名称（callContainer 必填：X-WX-SERVICE）
   cloudRunService: inferredCloudRunService,

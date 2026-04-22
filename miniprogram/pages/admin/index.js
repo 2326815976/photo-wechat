@@ -1,6 +1,9 @@
 const {
   requireAdminSession,
   getAdminDashboardStats,
+  listAdminUsers,
+  toggleAdminUserDisabled,
+  deleteAdminUser,
   runAdminMaintenanceTasks,
   listAdminBlockedDates,
   createAdminBlockedDate,
@@ -90,13 +93,6 @@ const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
 const ADMIN_GALLERY_UPLOAD_DRAFT_KEY = "admin_gallery_upload_draft_v1";
 const ADMIN_GALLERY_UPLOAD_DRAFT_TTL_MS = 30 * 60 * 1000;
 const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
-const ABOUT_MESSAGE_FONT_SIZE_RPX = 24;
-const ABOUT_MESSAGE_LINE_HEIGHT = 1.45;
-const ABOUT_MESSAGE_VERTICAL_PADDING_RPX = 12;
-const ABOUT_MESSAGE_ESTIMATED_CHARS_PER_LINE = 18;
-const ABOUT_MESSAGE_BASE_HEIGHT_RPX = Math.round(
-  ABOUT_MESSAGE_FONT_SIZE_RPX * ABOUT_MESSAGE_LINE_HEIGHT + ABOUT_MESSAGE_VERTICAL_PADDING_RPX
-);
 function resolveAppPublicUrl() {
   return FIXED_PUBLIC_ORIGIN;
 }
@@ -142,6 +138,11 @@ const ADMIN_SECTION_META = {
     title: "小程序页面管理",
     desc: "管理小程序页面发布与入口",
   },
+};
+
+ADMIN_SECTION_META.users = {
+  title: "用户管理 👥",
+  desc: "查看全部用户并执行账号禁用、删除等操作",
 };
 
 const ADMIN_NAV_ITEMS = [
@@ -1042,37 +1043,17 @@ function sanitizeAboutSettings(input) {
   };
 }
 
+function buildTextareaMirrorText(value) {
+  const normalized = String(value == null ? "" : value).replace(/\r\n/g, "\n");
+  return normalized ? `${normalized}\u200b` : " ";
+}
+
 function buildAboutSettingsPatch(input) {
   const aboutSettings = sanitizeAboutSettings(input);
   return {
     aboutSettings,
-    aboutMessageHeightRpx: estimateAboutMessageHeightRpx(aboutSettings.author_message),
+    aboutAuthorMessageMirrorText: buildTextareaMirrorText(aboutSettings.author_message),
   };
-}
-
-function normalizeAboutMessageHeightRpx(value) {
-  const numeric = Math.round(Number(value) || 0);
-  return Math.max(ABOUT_MESSAGE_BASE_HEIGHT_RPX, numeric);
-}
-
-function estimateAboutMessageHeightByLineCount(lineCount) {
-  const nextLineCount = Math.max(1, Number(lineCount) || 1);
-  const lineHeightRpx = Math.round(ABOUT_MESSAGE_FONT_SIZE_RPX * ABOUT_MESSAGE_LINE_HEIGHT);
-  return normalizeAboutMessageHeightRpx(
-    ABOUT_MESSAGE_VERTICAL_PADDING_RPX + nextLineCount * lineHeightRpx
-  );
-}
-
-function estimateAboutMessageHeightRpx(value) {
-  const text = String(value || "");
-  if (!text) {
-    return ABOUT_MESSAGE_BASE_HEIGHT_RPX;
-  }
-  const lineCount = text.split(/\r?\n/).reduce((total, line) => {
-    const lineLength = Math.max(1, String(line || "").length);
-    return total + Math.max(1, Math.ceil(lineLength / ABOUT_MESSAGE_ESTIMATED_CHARS_PER_LINE));
-  }, 0);
-  return estimateAboutMessageHeightByLineCount(lineCount);
 }
 
 function normalizePositiveIdList(values) {
@@ -1251,6 +1232,7 @@ function createStatCard(key, title, value, icon, colorStart, colorEnd, subtitle)
     colorStart: String(colorStart || "#FFC857"),
     colorEnd: String(colorEnd || "#FFB347"),
     subtitle: String(subtitle || ""),
+    action: String(key || "") === "users-total" ? "users" : "",
   };
 }
 
@@ -1294,6 +1276,45 @@ function createEmptyStatsView() {
     trendActiveUsers: [],
     trendNewBookings: [],
     meta: createEmptyStatsMeta(),
+  };
+}
+
+function normalizeAdminUserRow(row, currentUserId) {
+  const source = row && typeof row === "object" ? row : {};
+  const id = String((source && source.id) || "").trim();
+  if (!id) {
+    return null;
+  }
+
+  const role = String((source && source.role) || "").trim() === "admin" ? "admin" : "user";
+  const isDisabled = Number((source && (source.isDisabled || source.is_disabled)) || 0) > 0
+    || Boolean(source && (source.isDisabled === true || source.is_disabled === true));
+  const name = String((source && source.name) || "").trim();
+  const phone = String((source && source.phone) || "").trim();
+  const email = String((source && source.email) || "").trim();
+  const wechat = String((source && source.wechat) || "").trim();
+  const displayName = name || phone || email || wechat || `用户 ${id.slice(0, 8)}`;
+  const isCurrentAdmin = String(currentUserId || "").trim() === id;
+
+  return {
+    id,
+    name,
+    phone,
+    email,
+    wechat,
+    displayName,
+    role,
+    roleText: role === "admin" ? "管理员" : "普通用户",
+    isDisabled,
+    statusText: isDisabled ? "已禁用" : "正常",
+    disabledAtText: formatDateTime(source && (source.disabledAt || source.disabled_at)),
+    createdAtText: formatDateTime(source && (source.createdAt || source.created_at)),
+    lastActiveAtText: formatDateTime(source && (source.lastActiveAt || source.last_active_at)),
+    lastSessionAtText: formatDateTime(source && (source.lastSessionAt || source.last_session_at)),
+    albumCount: toSafeNumber(source && (source.albumCount || source.album_count), 0),
+    bookingCount: toSafeNumber(source && (source.bookingCount || source.booking_count), 0),
+    canManage: role !== "admin" && !isCurrentAdmin,
+    isCurrentAdmin,
   };
 }
 
@@ -1532,6 +1553,17 @@ Page({
     statsError: "",
     statsReady: false,
     statsView: createEmptyStatsView(),
+    usersLoading: false,
+    usersRefreshing: false,
+    usersError: "",
+    usersReady: false,
+    currentAdminUserId: "",
+    usersList: [],
+    userActionLoading: false,
+    userActionTargetId: "",
+    userDeleteConfirmOpen: false,
+    userDeletingTargetId: "",
+    userDeletingTargetName: "",
 
     blockedDatesLoading: false,
     blockedDatesRefreshing: false,
@@ -1660,7 +1692,6 @@ Page({
     aboutSaving: false,
     aboutDonationUploading: false,
     aboutDonationModalOpen: false,
-    aboutMessageHeightRpx: ABOUT_MESSAGE_BASE_HEIGHT_RPX,
     aboutSettings: {
       id: 0,
       author_name: "",
@@ -1670,6 +1701,7 @@ Page({
       donation_qr_code: "",
       author_message: "",
     },
+    aboutAuthorMessageMirrorText: " ",
 
     poseCreating: false,
     posesLoading: true,
@@ -1959,6 +1991,10 @@ Page({
       void this.refreshStatsSection({ silent: true, stopPullDown: true });
       return;
     }
+    if (!this.data.loading && this.data.activeSection === "users") {
+      void this.refreshAdminUsersSection({ silent: true, stopPullDown: true });
+      return;
+    }
     if (!this.data.loading && this.data.activeSection === "poses") {
       void this.refreshPoseSection({ silent: true, stopPullDown: true });
       return;
@@ -2140,6 +2176,11 @@ Page({
     }
     if (key !== "about") {
       patch.aboutDonationModalOpen = false;
+    }
+    if (key !== "users") {
+      patch.userDeleteConfirmOpen = false;
+      patch.userDeletingTargetId = "";
+      patch.userDeletingTargetName = "";
     }
     patch.betaRouteModalOpen = false;
     patch.betaRouteDeleteConfirmOpen = false;
@@ -2482,6 +2523,204 @@ Page({
       this.data.maintenanceRunning
     ) return;
     void this.refreshStatsSection({ silent: false, stopPullDown: false });
+  },
+
+  onStatsCardTap(e) {
+    const action = e && e.currentTarget && e.currentTarget.dataset
+      ? String(e.currentTarget.dataset.action || "").trim()
+      : "";
+    if (action === "users") {
+      this.onOpenAdminUsersSection();
+    }
+  },
+
+  onOpenAdminUsersSection() {
+    if (this.data.loading || this.data.authDenied || this.data.serviceMissing) return;
+    this.setData({
+      userDeleteConfirmOpen: false,
+      userDeletingTargetId: "",
+      userDeletingTargetName: "",
+    });
+    this.syncSectionMeta("users");
+    this.closeMobileMenu();
+    if (!this.data.usersLoading && !this.data.userActionLoading) {
+      void this.loadAdminUsers({ throwOnError: false, showNotice: false });
+    }
+  },
+
+  onBackToStatsSection() {
+    if (this.data.loading || this.data.authDenied || this.data.serviceMissing) return;
+    this.setData({
+      userDeleteConfirmOpen: false,
+      userDeletingTargetId: "",
+      userDeletingTargetName: "",
+    });
+    this.syncSectionMeta("stats");
+    this.closeMobileMenu();
+  },
+
+  async loadAdminUsers(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldThrow = config.throwOnError !== false;
+    const shouldShowNotice = Boolean(config.showNotice);
+    const hasReadyUsers = Boolean(this.data.usersReady);
+    const isFirstLoad = !this._usersLoadedOnce && !hasReadyUsers;
+
+    this.setData({
+      usersLoading: isFirstLoad,
+      usersRefreshing: !isFirstLoad && hasReadyUsers,
+      usersError: "",
+    });
+
+    try {
+      const payload = await listAdminUsers();
+      const currentUserId = String((payload && payload.currentUserId) || "").trim();
+      const rows = Array.isArray(payload && payload.users) ? payload.users : [];
+      const list = rows
+        .map((row) => normalizeAdminUserRow(row, currentUserId))
+        .filter(Boolean);
+
+      this._usersLoadedOnce = true;
+      this.setData({
+        usersLoading: false,
+        usersRefreshing: false,
+        usersError: "",
+        usersReady: true,
+        currentAdminUserId: currentUserId,
+        usersList: list,
+      });
+      return list;
+    } catch (error) {
+      const message = readErrorMessage(error, "加载用户列表失败");
+      const patch = {
+        usersLoading: false,
+        usersRefreshing: false,
+        usersError: message,
+        usersReady: hasReadyUsers,
+      };
+      if (!hasReadyUsers) {
+        patch.usersList = [];
+      }
+      this.setData(patch);
+      if (shouldShowNotice) {
+        this.showNotice("error", message);
+      }
+      if (shouldThrow) {
+        throw error;
+      }
+      return [];
+    }
+  },
+
+  async refreshAdminUsersSection(options) {
+    const config = options && typeof options === "object" ? options : {};
+    try {
+      const list = await this.loadAdminUsers({ throwOnError: false, showNotice: !config.silent });
+      if (Array.isArray(list) && !config.silent) {
+        this.showNotice("success", "用户列表已刷新");
+      }
+    } finally {
+      if (config.stopPullDown) {
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+
+  onRefreshAdminUsers() {
+    if (
+      this.data.loading ||
+      this.data.usersLoading ||
+      this.data.usersRefreshing ||
+      this.data.userActionLoading
+    ) return;
+    void this.refreshAdminUsersSection({ silent: false, stopPullDown: false });
+  },
+
+  async onToggleAdminUserDisabled(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const userId = String((dataset && dataset.id) || "").trim();
+    if (!userId) return;
+    const currentItem = (Array.isArray(this.data.usersList) ? this.data.usersList : []).find((item) => item.id === userId);
+    if (!currentItem || !currentItem.canManage) return;
+
+    const nextDisabled = !Boolean(currentItem.isDisabled);
+    this.setData({
+      userActionLoading: true,
+      userActionTargetId: userId,
+    });
+
+    try {
+      await toggleAdminUserDisabled(userId, nextDisabled);
+      await Promise.all([
+        this.loadAdminUsers({ throwOnError: false, showNotice: false }),
+        this.loadStats({ throwOnError: false, showNotice: false }),
+      ]);
+      this.showNotice("success", nextDisabled ? "账号已禁用，并已强制下线该用户" : "账号已恢复启用");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "更新用户状态失败"));
+    } finally {
+      this.setData({
+        userActionLoading: false,
+        userActionTargetId: "",
+      });
+    }
+  },
+
+  onPromptDeleteAdminUser(e) {
+    const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
+    const userId = String((dataset && dataset.id) || "").trim();
+    if (!userId) return;
+    const currentItem = (Array.isArray(this.data.usersList) ? this.data.usersList : []).find((item) => item.id === userId);
+    if (!currentItem || !currentItem.canManage) return;
+
+    this.setData({
+      userDeleteConfirmOpen: true,
+      userDeletingTargetId: userId,
+      userDeletingTargetName: currentItem.displayName,
+    });
+  },
+
+  onCloseAdminUserDeleteConfirm() {
+    if (this.data.userActionLoading) return;
+    this.setData({
+      userDeleteConfirmOpen: false,
+      userDeletingTargetId: "",
+      userDeletingTargetName: "",
+    });
+  },
+
+  onUserModalTap() {},
+
+  async confirmDeleteAdminUser() {
+    const userId = String(this.data.userDeletingTargetId || "").trim();
+    if (!userId) return;
+
+    this.setData({
+      userActionLoading: true,
+      userActionTargetId: userId,
+    });
+
+    try {
+      const result = await deleteAdminUser(userId);
+      await Promise.all([
+        this.loadAdminUsers({ throwOnError: false, showNotice: false }),
+        this.loadStats({ throwOnError: false, showNotice: false }),
+      ]);
+      this.setData({
+        userDeleteConfirmOpen: false,
+        userDeletingTargetId: "",
+        userDeletingTargetName: "",
+      });
+      const warning = result && typeof result === "object" ? String(result.warning || "").trim() : "";
+      this.showNotice(warning ? "info" : "success", warning || "用户账号已删除");
+    } catch (error) {
+      this.showNotice("error", readErrorMessage(error, "删除用户失败"));
+    } finally {
+      this.setData({
+        userActionLoading: false,
+        userActionTargetId: "",
+      });
+    }
   },
 
   async loadBlockedDates(options) {
@@ -2871,18 +3110,6 @@ Page({
     const value = e && e.detail ? e.detail.value : "";
     const nextSettings = Object.assign({}, this.data.aboutSettings || {}, { [field]: value });
     this.setData(buildAboutSettingsPatch(nextSettings));
-  },
-
-  onAboutMessageLineChange(e) {
-    const detail = e && e.detail ? e.detail : {};
-    const heightRpx = Number(detail.heightRpx);
-    const lineCount = Number(detail.lineCount || 0);
-    const nextHeight =
-      Number.isFinite(heightRpx) && heightRpx > 0
-        ? normalizeAboutMessageHeightRpx(heightRpx)
-        : estimateAboutMessageHeightByLineCount(lineCount);
-    if (nextHeight === Number(this.data.aboutMessageHeightRpx || 0)) return;
-    this.setData({ aboutMessageHeightRpx: nextHeight });
   },
 
   onOpenAboutDonationModal() {

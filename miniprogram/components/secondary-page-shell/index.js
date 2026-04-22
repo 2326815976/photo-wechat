@@ -117,7 +117,11 @@ Component({
       }
 
       const app = typeof getApp === "function" ? getApp() : null;
-      const runtimeConfig = app && app.globalData ? app.globalData.runtimeConfig : null;
+      const globalData = app && app.globalData ? app.globalData : {};
+      if (!Boolean(globalData.auditConfigReady)) {
+        return "";
+      }
+      const runtimeConfig = globalData.runtimeConfig || null;
       const managedAccess = getManagedPageAccess(runtimeConfig, managedPageKey);
 
       return String((managedAccess && (managedAccess.headerTitle || managedAccess.navText)) || "").trim();

@@ -1,4 +1,4 @@
-const { dbRpc } = require("../../services/photo-api");
+﻿const { dbRpc } = require("../../services/photo-api");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const { markGalleryCacheDirty } = require("../../utils/gallery-cache");
 const { getCachedAlbumRootName, setCachedAlbumRootName } = require("../../utils/album-root-name-cache");
@@ -9,7 +9,8 @@ const {
   buildStableWaterfallColumns,
   shouldResetStableColumnMap,
 } = require("../../utils/stable-waterfall");
-const { createPagingSkeletonItems } = require("../../utils/paging-skeleton");
+const { createPagingSkeletonItems, createPagingSkeletonItemsFromPhotos } = require("../../utils/paging-skeleton");
+const { hydratePhotoDimensions } = require("../../utils/photo-dimensions");
 const {
   STORY_OPENING_DURATION_MS,
   STORY_CLOSING_DURATION_MS,
@@ -24,7 +25,10 @@ const {
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const ALBUM_SWITCH_OVERLAY_TRACK_COUNT = 6;
 const ALBUM_PAGING_SKELETON_COUNT = 8;
-const SHARE_TITLE = "「拾光谣」相册分享";
+const ALBUM_LOAD_AHEAD_PX = 720;
+const ALBUM_VIEWPORT_FILL_BUFFER_PX = 48;
+const ALBUM_INITIAL_AUTOFILL_MAX_BATCHES = 2;
+const SHARE_TITLE = "拾光谣｜相册分享";
 
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
@@ -49,7 +53,7 @@ function resolveOriginalUrl(photo) {
   if (originalRaw) {
     return resolvePublicUrl(originalRaw);
   }
-  // 兼容历史数据：部分记录只有 url 字段
+  // 鍏煎鍘嗗彶鏁版嵁锛氶儴鍒嗚褰曞彧鏈?url 瀛楁
   const legacyRaw = String((photo && photo.url) || "").trim();
   if (legacyRaw) {
     return resolvePublicUrl(legacyRaw);
@@ -77,7 +81,7 @@ function normalizeMaybeText(value) {
 
 function resolveManagedAlbumDetailTitle(runtimeConfig) {
   const access = getManagedPageAccess(runtimeConfig, "album-detail");
-  return String((access && (access.headerTitle || access.navText)) || "").trim() || "专属返图空间";
+  return String((access && (access.headerTitle || access.navText)) || "").trim() || "涓撳睘杩斿浘绌洪棿";
 }
 
 function resolveAlbumHeaderTitle(options) {
@@ -87,7 +91,7 @@ function resolveAlbumHeaderTitle(options) {
       current.rootFolderName ||
       current.initialRootFolderName ||
       current.managedTitle ||
-      "专属返图空间"
+      "涓撳睘杩斿浘绌洪棿"
   ).trim();
 }
 
@@ -102,7 +106,7 @@ const ALBUM_SOFT_RELAYOUT_DELAY = 160;
 function clampAlbumLayoutRatio(value, fallback) {
   const numericValue = Number(value || 0);
   if (!(numericValue > 0)) return fallback;
-  return Math.min(ALBUM_LAYOUT_RATIO_MAX, Math.max(ALBUM_LAYOUT_RATIO_MIN, numericValue));
+  return numericValue;
 }
 
 function estimateAlbumTextLines(value, charsPerLine) {
@@ -126,15 +130,18 @@ function resolveAlbumPhotoRatio(photo, ratioMap) {
     return clampAlbumLayoutRatio(runtimeRatio, 4 / 3);
   }
 
+  const width = Number((photo && photo.width) || 0);
+  const height = Number((photo && photo.height) || 0);
+  if (width > 0 && height > 0) {
+    return clampAlbumLayoutRatio(height / width, 4 / 3);
+  }
+
   const photoRatio = Number(photo && photo.__ratio);
   if (photoRatio > 0) {
     return clampAlbumLayoutRatio(photoRatio, 4 / 3);
   }
 
-  const width = Number((photo && photo.width) || 0);
-  const height = Number((photo && photo.height) || 0);
-  const ratio = width > 0 && height > 0 ? height / width : 4 / 3;
-  return clampAlbumLayoutRatio(ratio, 4 / 3);
+  return 4 / 3;
 }
 
 function estimateAlbumCardHeight(photo, ratioMap) {
@@ -207,10 +214,9 @@ function normalizePhoto(photo) {
     _imageLoadFailed: Boolean(photo && photo._imageLoadFailed),
     __ratio: resolveAlbumPhotoRatio(photo, null),
     __media_padding_top: `${resolveAlbumPhotoRatio(photo, null) * 100}%`,
-    // 列表卡片优先走缩略图，保证清晰度同时降低首屏体积
+    // 鍒楄〃鍗＄墖浼樺厛璧扮缉鐣ュ浘锛屼繚璇佹竻鏅板害鍚屾椂闄嶄綆棣栧睆浣撶Н
     card_url_resolved: thumbnailUrl || previewUrl || originalUrl,
-    // 全屏查看优先走原图，历史数据回退预览/缩略图
-    fullscreen_url_resolved: originalUrl || previewUrl || thumbnailUrl,
+    // 鍏ㄥ睆鏌ョ湅浼樺厛璧板師鍥撅紝鍘嗗彶鏁版嵁鍥為€€棰勮/缂╃暐鍥?    fullscreen_url_resolved: originalUrl || previewUrl || thumbnailUrl,
   });
 }
 
@@ -345,11 +351,11 @@ function getExpiryDays(album) {
 
 function resolveAlbumAccessErrorMessage(errorMessage) {
   const message = String(errorMessage || "").toLowerCase();
-  if (message.includes("过期") || message.includes("expired")) {
-    return "该空间已过期";
+  if (message.includes("杩囨湡") || message.includes("expired")) {
+    return "璇ョ┖闂村凡杩囨湡";
   }
-  if (message.includes("无权") || message.includes("权限") || message.includes("forbidden")) {
-    return "您暂无该空间访问权限";
+  if (message.includes("鏃犳潈") || message.includes("鏉冮檺") || message.includes("forbidden")) {
+    return "鎮ㄦ殏鏃犺绌洪棿璁块棶鏉冮檺";
   }
   return "空间不存在或已过期";
 }
@@ -394,8 +400,8 @@ function convertRpxToPx(value) {
 
 function computeToolbarStickyTop(safeTop) {
   const unit = Math.max(readWindowWidth(), 320) / 750;
-  const headerInnerHeight = 96 * unit; // app-header back-sub 高度
-  // 与页头无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝。
+  const headerInnerHeight = 96 * unit; // app-header back-sub 楂樺害
+  // 与页面头部无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝
   const top = Number(safeTop || 0) + headerInnerHeight - 1;
   return Math.max(0, Math.round(top));
 }
@@ -489,7 +495,7 @@ function isRpcFunctionNotImplemented(errorMessage) {
   const text = String(errorMessage || "").toLowerCase();
   if (!text) return false;
   return (
-    text.includes("未实现的 rpc") ||
+    text.includes("鏈疄鐜扮殑 rpc") ||
     text.includes("not implemented") ||
     text.includes("not support") ||
     text.includes("unknown rpc")
@@ -566,7 +572,7 @@ Page({
 
     album: null,
     freezeEnabled: true,
-    managedTitle: "专属返图空间",
+    managedTitle: "涓撳睘杩斿浘绌洪棿",
     headerTitle: "",
     pageScaffoldReady: false,
     expiryDays: 7,
@@ -593,6 +599,16 @@ Page({
     selectedCount: 0,
     isSelectAll: false,
     batchLoading: false,
+    downloadProgressVisible: false,
+    downloadProgressRunning: false,
+    downloadProgressDone: false,
+    downloadProgressCurrent: 0,
+    downloadProgressTotal: 0,
+    downloadProgressSuccess: 0,
+    downloadProgressFail: 0,
+    downloadProgressPercent: 0,
+    downloadProgressTitle: "",
+    downloadProgressMessage: "",
 
     confirmPhotoId: "",
     pinConfirmPending: false,
@@ -610,7 +626,7 @@ Page({
 
     toast: null,
 
-    // Web 同款拆信交互：envelope -> opening -> letter -> closing
+    // Web 鍚屾鎷嗕俊浜や簰锛歟nvelope -> opening -> letter -> closing
     letterStage: "envelope",
 
   },
@@ -632,7 +648,17 @@ Page({
   fullPhotosByFolder: null,
   _lastAlbumAutoLoadAt: 0,
   _windowHeight: 0,
+  albumAutoFillRemaining: ALBUM_INITIAL_AUTOFILL_MAX_BATCHES,
+  albumLoadZoneArmed: true,
+  autoFillTimer: null,
+  downloadProgressTimer: null,
   loadingNextPhotoPage: false,
+  currentScrollTop: 0,
+  albumPrefetchToken: 0,
+  albumPrefetchPromise: null,
+  prefetchingAlbumPageNo: 0,
+  prefetchingAlbumFolderId: "",
+  prefetchedAlbumPage: null,
 
   async onLoad(options) {
     const app = getApp();
@@ -654,6 +680,15 @@ Page({
     this.relayoutTimer = null;
     this._lastAlbumAutoLoadAt = 0;
     this._windowHeight = 0;
+    this.albumAutoFillRemaining = ALBUM_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.albumLoadZoneArmed = true;
+    this.autoFillTimer = null;
+    this.currentScrollTop = 0;
+    this.albumPrefetchToken = 0;
+    this.albumPrefetchPromise = null;
+    this.prefetchingAlbumPageNo = 0;
+    this.prefetchingAlbumFolderId = "";
+    this.prefetchedAlbumPage = null;
     const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
     this._lastSeenAppEnterSeq = Math.max(0, currentAppEnterSeq - 1);
     try {
@@ -681,7 +716,7 @@ Page({
     }
 
     if (!key) {
-      wx.showToast({ title: "缺少密钥", icon: "none" });
+      wx.showToast({ title: "缂哄皯瀵嗛挜", icon: "none" });
       wx.switchTab({ url: "/pages/album/index" });
       return;
     }
@@ -881,11 +916,14 @@ Page({
 
   onUnload() {
     this.clearToastTimer();
+    this.clearDownloadProgressTimer();
     this.clearFolderGuideTimer();
     this.clearFolderWaveTimer();
     this.clearRelayoutTimer();
+    this.clearAutoFillTimer();
     this.clearAllStoryMotionTimers();
     this.photoLoadTicket += 1;
+    this.invalidateAlbumPrefetch();
     this._lastAlbumAutoLoadAt = 0;
     if (typeof this._unsubscribeAuditConfig === "function") {
       this._unsubscribeAuditConfig();
@@ -904,6 +942,127 @@ Page({
       clearTimeout(this.toastTimer);
       this.toastTimer = null;
     }
+  },
+
+  clearDownloadProgressTimer() {
+    if (this.downloadProgressTimer) {
+      clearTimeout(this.downloadProgressTimer);
+      this.downloadProgressTimer = null;
+    }
+  },
+
+  hideDownloadProgress() {
+    this.clearDownloadProgressTimer();
+    this.setData({
+      downloadProgressVisible: false,
+      downloadProgressRunning: false,
+      downloadProgressDone: false,
+      downloadProgressCurrent: 0,
+      downloadProgressTotal: 0,
+      downloadProgressSuccess: 0,
+      downloadProgressFail: 0,
+      downloadProgressPercent: 0,
+      downloadProgressTitle: "",
+      downloadProgressMessage: "",
+    });
+  },
+
+  openDownloadProgress(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const total = Math.max(0, Number(config.total || 0));
+    const currentRaw = Number(config.current || 0);
+    const current = total > 0 ? Math.max(0, Math.min(total, currentRaw)) : Math.max(0, currentRaw);
+    const success = Math.max(0, Number(config.success || 0));
+    const fail = Math.max(0, Number(config.fail || 0));
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
+
+    this.clearDownloadProgressTimer();
+    this.setData({
+      downloadProgressVisible: true,
+      downloadProgressRunning: config.running !== false,
+      downloadProgressDone: Boolean(config.done),
+      downloadProgressCurrent: current,
+      downloadProgressTotal: total,
+      downloadProgressSuccess: success,
+      downloadProgressFail: fail,
+      downloadProgressPercent: percent,
+      downloadProgressTitle: String(config.title || ""),
+      downloadProgressMessage: String(config.message || ""),
+    });
+  },
+
+  updateDownloadProgress(patch) {
+    const nextPatch = patch && typeof patch === "object" ? patch : {};
+    const total = Object.prototype.hasOwnProperty.call(nextPatch, "total")
+      ? Math.max(0, Number(nextPatch.total || 0))
+      : Math.max(0, Number(this.data.downloadProgressTotal || 0));
+    const currentRaw = Object.prototype.hasOwnProperty.call(nextPatch, "current")
+      ? Number(nextPatch.current || 0)
+      : Number(this.data.downloadProgressCurrent || 0);
+    const current = total > 0 ? Math.max(0, Math.min(total, currentRaw)) : Math.max(0, currentRaw);
+    const success = Object.prototype.hasOwnProperty.call(nextPatch, "success")
+      ? Math.max(0, Number(nextPatch.success || 0))
+      : Math.max(0, Number(this.data.downloadProgressSuccess || 0));
+    const fail = Object.prototype.hasOwnProperty.call(nextPatch, "fail")
+      ? Math.max(0, Number(nextPatch.fail || 0))
+      : Math.max(0, Number(this.data.downloadProgressFail || 0));
+    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round((current / total) * 100))) : 0;
+
+    const nextData = {
+      downloadProgressVisible: true,
+      downloadProgressCurrent: current,
+      downloadProgressTotal: total,
+      downloadProgressSuccess: success,
+      downloadProgressFail: fail,
+      downloadProgressPercent: percent,
+    };
+
+    if (Object.prototype.hasOwnProperty.call(nextPatch, "running")) {
+      nextData.downloadProgressRunning = Boolean(nextPatch.running);
+    }
+    if (Object.prototype.hasOwnProperty.call(nextPatch, "done")) {
+      nextData.downloadProgressDone = Boolean(nextPatch.done);
+    }
+    if (Object.prototype.hasOwnProperty.call(nextPatch, "title")) {
+      nextData.downloadProgressTitle = String(nextPatch.title || "");
+    }
+    if (Object.prototype.hasOwnProperty.call(nextPatch, "message")) {
+      nextData.downloadProgressMessage = String(nextPatch.message || "");
+    }
+
+    this.setData(nextData);
+  },
+
+  finishDownloadProgress(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const total = Math.max(0, Number(config.total || this.data.downloadProgressTotal || 0));
+    const success = Math.max(0, Number(config.success || 0));
+    const fail = Math.max(0, Number(config.fail || 0));
+
+    if (total <= 0) {
+      this.hideDownloadProgress();
+      return;
+    }
+
+    this.clearDownloadProgressTimer();
+    this.setData({
+      downloadProgressVisible: true,
+      downloadProgressRunning: false,
+      downloadProgressDone: true,
+      downloadProgressCurrent: total,
+      downloadProgressTotal: total,
+      downloadProgressSuccess: success,
+      downloadProgressFail: fail,
+      downloadProgressPercent: 100,
+      downloadProgressTitle: "淇濆瓨瀹屾垚",
+      downloadProgressMessage: fail > 0
+        ? `成功 ${success} 张 · 失败 ${fail} 张`
+        : `已成功保存 ${success} 张照片`,
+    });
+
+    this.downloadProgressTimer = setTimeout(() => {
+      this.hideDownloadProgress();
+    }, 3200);
   },
 
   clearFolderGuideTimer() {
@@ -925,6 +1084,80 @@ Page({
     if (!this.relayoutTimer) return;
     clearTimeout(this.relayoutTimer);
     this.relayoutTimer = null;
+  },
+
+  clearAutoFillTimer() {
+    if (!this.autoFillTimer) return;
+    clearTimeout(this.autoFillTimer);
+    this.autoFillTimer = null;
+  },
+
+  ensureWindowHeight() {
+    if (Number(this._windowHeight || 0) > 0) {
+      return Number(this._windowHeight || 0);
+    }
+
+    try {
+      if (typeof wx.getWindowInfo === "function") {
+        const info = wx.getWindowInfo();
+        this._windowHeight = Number(info && info.windowHeight) || 0;
+      } else if (typeof wx.getSystemInfoSync === "function") {
+        const info = wx.getSystemInfoSync();
+        this._windowHeight = Number(info && info.windowHeight) || 0;
+      }
+    } catch (error) {
+      this._windowHeight = 0;
+    }
+
+    return Number(this._windowHeight || 0);
+  },
+
+  scheduleAutoFillCheck(delay) {
+    this.clearAutoFillTimer();
+    this.autoFillTimer = setTimeout(() => {
+      this.autoFillTimer = null;
+      this.maybeAutoFillViewport("scheduled");
+    }, Math.max(0, Number(delay || 0)));
+  },
+
+  maybeAutoFillViewport(reason) {
+    if (this.data.serviceMissing) return false;
+    if (this.data.loading || this.data.loadingMore) return false;
+    if (this.data.switchingFolderLoading) return false;
+    if (!this.data.hasMore) return false;
+    if (!(this.albumAutoFillRemaining > 0)) return false;
+
+    const viewportHeight = this.ensureWindowHeight();
+    if (!(viewportHeight > 0)) return false;
+
+    wx.createSelectorQuery()
+      .selectViewport()
+      .scrollOffset((offset) => {
+        if (this.data.loading || this.data.loadingMore || this.data.switchingFolderLoading || !this.data.hasMore) {
+          return;
+        }
+
+        const scrollHeight = Number((offset && offset.scrollHeight) || 0);
+        if (!(scrollHeight > 0)) return;
+        if (scrollHeight > viewportHeight + ALBUM_VIEWPORT_FILL_BUFFER_PX) return;
+        if (!(this.albumAutoFillRemaining > 0)) return;
+
+        this.albumAutoFillRemaining -= 1;
+        this._lastAlbumAutoLoadAt = Date.now();
+        Promise.resolve(
+          this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, Number(this.data.pageNo || 0) + 1, {
+            reset: false,
+            silent: false,
+          })
+        ).then((success) => {
+          if (!success) {
+            this.albumAutoFillRemaining += 1;
+          }
+        });
+      })
+      .exec();
+
+    return true;
   },
 
   clearStoryMotionTimer(id, phase) {
@@ -995,6 +1228,7 @@ Page({
     }
 
     if (Boolean(opts && opts.preferAppend) && this.canAppendWaterfall(resolvedPhotos)) {
+      const preservedScrollTop = Math.max(0, Number(this.currentScrollTop || 0));
       const baseLeft = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
       const baseRight = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
       const incremental = resolvedPhotos.slice((this.data.photos || []).length);
@@ -1015,10 +1249,20 @@ Page({
           leftPhotos: columns.left,
           rightPhotos: columns.right,
         },
-        () => this.refreshSelectionMeta()
+        () => {
+          if (preservedScrollTop > 0) {
+            try {
+              wx.pageScrollTo({
+                scrollTop: preservedScrollTop,
+                duration: 0,
+              });
+            } catch (error) {
+            }
+          }
+          this.refreshSelectionMeta();
+        }
       );
       return true;
-      return;
     }
 
     const columns = splitWaterfallColumns(resolvedPhotos, {
@@ -1052,32 +1296,255 @@ Page({
     });
   },
 
-  showPagingSkeletons(count) {
+  buildPagingSkeletonColumns(skeletonItems) {
+    const source = Array.isArray(skeletonItems) ? skeletonItems : [];
+    if (source.length <= 0) {
+      return { left: [], right: [] };
+    }
+
+    const columns = splitWaterfallColumns(source, {
+      left: [],
+      right: [],
+      leftHeight: Math.max(0, Number(this.leftHeight || 0)),
+      rightHeight: Math.max(0, Number(this.rightHeight || 0)),
+      ratioMap: this.photoRatioMap,
+      columnMap: Object.assign(Object.create(null), this.photoColumnMap || Object.create(null)),
+    });
+
+    return {
+      left: columns.left || [],
+      right: columns.right || [],
+    };
+  },
+
+  showPagingSkeletons(count, photos) {
     const safeCount = Math.max(0, Number(count || 0));
     if (!(safeCount > 0)) {
       this.clearPagingSkeletons();
       return;
     }
 
-    const baseLeft = resolveAlbumPhotoListRatios(this.data.leftPhotos || [], this.photoRatioMap);
-    const baseRight = resolveAlbumPhotoListRatios(this.data.rightPhotos || [], this.photoRatioMap);
-    const skeletons = createPagingSkeletonItems(safeCount, {
-      prefix: "album",
-      seed: Number(this.photoLoadTicket || 0),
+    const skeletonItems = Array.isArray(photos) && photos.length > 0
+      ? createPagingSkeletonItemsFromPhotos(photos, {
+        prefix: "album",
+        seed: Date.now(),
+      })
+      : createPagingSkeletonItems(safeCount, {
+        prefix: "album",
+        seed: Date.now(),
+      });
+    const columns = this.buildPagingSkeletonColumns(skeletonItems);
+    this.setData({
+      pagingSkeletonLeftPhotos: columns.left,
+      pagingSkeletonRightPhotos: columns.right,
     });
-    const columns = splitWaterfallColumns(skeletons, {
-      left: baseLeft,
-      right: baseRight,
-      leftHeight: this.calculateWaterfallHeight(baseLeft),
-      rightHeight: this.calculateWaterfallHeight(baseRight),
-      ratioMap: this.photoRatioMap,
-      columnMap: this.photoColumnMap,
+  },
+
+  invalidateAlbumPrefetch() {
+    this.albumPrefetchToken = Number(this.albumPrefetchToken || 0) + 1;
+    this.albumPrefetchPromise = null;
+    this.prefetchingAlbumPageNo = 0;
+    this.prefetchingAlbumFolderId = "";
+    this.prefetchedAlbumPage = null;
+  },
+
+  canUsePrefetchedAlbumPage(folderId, pageNo) {
+    const prefetched = this.prefetchedAlbumPage;
+    if (!prefetched || typeof prefetched !== "object") {
+      return false;
+    }
+    return (
+      Number(prefetched.pageNo || 0) === Number(pageNo || 0) &&
+      String(prefetched.folderId || "") === String(folderId || "")
+    );
+  },
+
+  async fetchAlbumPhotoPageData(folderId, pageNo) {
+    const normalizedFolderId = String(folderId || ROOT_FOLDER_ID);
+    const nextPageNo = toPageNumber(pageNo, 1);
+    const r = await dbRpc("get_album_photo_page", {
+      input_key: this.data.key,
+      folder_id: normalizedFolderId,
+      page_no: nextPageNo,
+      page_size: PHOTO_PAGE_SIZE,
     });
 
-    this.setData({
-      pagingSkeletonLeftPhotos: columns.left.slice(baseLeft.length),
-      pagingSkeletonRightPhotos: columns.right.slice(baseRight.length),
-    });
+    const rawPayload = r ? r.data : null;
+    const payload = resolveAlbumPhotoPagePayload(rawPayload);
+    const rpcErrorMessage = String((r && r.error && r.error.message) || "").trim();
+    const payloadErrorMessage =
+      isExplicitRpcFailure(rawPayload) || isExplicitRpcFailure(payload)
+        ? readRpcPayloadErrorMessage(rawPayload || payload)
+        : "";
+
+    if (isRpcFunctionNotImplemented(rpcErrorMessage || payloadErrorMessage)) {
+      return {
+        errorMessage: "",
+        fallbackLegacy: true,
+        folderId: normalizedFolderId,
+        pageNo: nextPageNo,
+        rows: [],
+        total: 0,
+        hasMore: false,
+      };
+    }
+
+    if (rpcErrorMessage || payloadErrorMessage || !payload) {
+      return {
+        errorMessage: rpcErrorMessage || payloadErrorMessage || "加载失败",
+        fallbackLegacy: false,
+        folderId: normalizedFolderId,
+        pageNo: nextPageNo,
+        rows: [],
+        total: 0,
+        hasMore: false,
+      };
+    }
+
+    const rows = Array.isArray(payload.photos) ? payload.photos : [];
+    const normalizedRows = rows.map(normalizePhoto);
+    const hydratedRows = normalizedRows.length > 0
+      ? await hydratePhotoDimensions(normalizedRows)
+      : normalizedRows;
+    const total = readPageTotal(payload, hydratedRows.length);
+    const hasMoreFromPayload = Object.prototype.hasOwnProperty.call(payload, "has_more")
+      ? Boolean(payload.has_more)
+      : null;
+    const hasMore = hasMoreFromPayload === null
+      ? hydratedRows.length >= PHOTO_PAGE_SIZE
+      : hasMoreFromPayload;
+
+    return {
+      errorMessage: "",
+      fallbackLegacy: false,
+      folderId: normalizedFolderId,
+      pageNo: nextPageNo,
+      rows: hydratedRows,
+      total,
+      hasMore,
+    };
+  },
+
+  commitAlbumPhotoPageData(folderId, pageNo, pageData, opts) {
+    const reset = Boolean(opts && opts.reset);
+    const silent = Boolean(opts && opts.silent);
+    const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    const currentRows = reset
+      ? []
+      : (Array.isArray(this.data.allPhotos) ? this.data.allPhotos : []);
+    const incomingRows = Array.isArray(pageData && pageData.rows) ? pageData.rows : [];
+    let mergedRows = incomingRows;
+
+    if (!reset) {
+      const existingIds = new Set(currentRows.map((item) => String(item.id)));
+      const incrementalRows = incomingRows.filter((item) => !existingIds.has(String(item.id)));
+      mergedRows = currentRows.concat(incrementalRows);
+    }
+
+    const total = Math.max(0, Number(pageData && pageData.total) || 0);
+    const hasKnownTotal = total > 0;
+    const hasMore = hasKnownTotal
+      ? mergedRows.length < total
+      : Boolean(pageData && pageData.hasMore);
+    const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
+    if (!hasMore && mergedRows.length > 0) {
+      this.cacheFullPhotosForFolder(targetFolderId, mergedRows);
+    }
+
+    let nextPendingFolderPhotoIds = null;
+    if (reset) {
+      nextPendingFolderPhotoIds = silent
+        ? Array.from(
+          new Set(
+            mergedRows
+              .slice(0, ALBUM_SWITCH_OVERLAY_TRACK_COUNT)
+              .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
+              .map((photo) => String((photo && photo.id) || "").trim())
+              .filter(Boolean)
+          )
+        )
+        : [];
+    }
+
+    const nextData = {
+      allPhotos: mergedRows,
+      pageNo,
+      total,
+      hasMore,
+    };
+    if (reset) {
+      nextData.pendingFolderPhotoIds = nextPendingFolderPhotoIds;
+    }
+
+    this.setData(
+      nextData,
+      () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
+    );
+
+    if (hasMore) {
+      void this.prefetchAlbumPhotoPage(targetFolderId, pageNo + 1);
+    } else {
+      this.invalidateAlbumPrefetch();
+    }
+
+    return {
+      success: true,
+      nextPendingFolderPhotoIds,
+    };
+  },
+
+  async prefetchAlbumPhotoPage(folderId, pageNo) {
+    if (this.data.serviceMissing) return null;
+    if (this.useLegacyPhotoPaging) return null;
+
+    const targetFolderId = String(folderId || ROOT_FOLDER_ID);
+    const nextPageNo = toPageNumber(pageNo, 1);
+    if (!(nextPageNo > 1)) return null;
+    if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+      return null;
+    }
+    if (this.canUsePrefetchedAlbumPage(targetFolderId, nextPageNo)) {
+      return this.prefetchedAlbumPage;
+    }
+    if (
+      Number(this.prefetchingAlbumPageNo || 0) === nextPageNo &&
+      String(this.prefetchingAlbumFolderId || "") === targetFolderId &&
+      this.albumPrefetchPromise
+    ) {
+      return this.albumPrefetchPromise;
+    }
+
+    const token = Number(this.albumPrefetchToken || 0) + 1;
+    this.albumPrefetchToken = token;
+    this.prefetchedAlbumPage = null;
+    this.prefetchingAlbumPageNo = nextPageNo;
+    this.prefetchingAlbumFolderId = targetFolderId;
+
+    const task = Promise.resolve(this.fetchAlbumPhotoPageData(targetFolderId, nextPageNo))
+      .then((pageData) => {
+        if (token !== this.albumPrefetchToken) {
+          return null;
+        }
+        if (!pageData || pageData.errorMessage || pageData.fallbackLegacy) {
+          return null;
+        }
+        if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+          return null;
+        }
+        this.prefetchedAlbumPage = Object.assign({}, pageData);
+        return this.prefetchedAlbumPage;
+      })
+      .catch(() => null)
+      .finally(() => {
+        if (token === this.albumPrefetchToken) {
+          this.albumPrefetchPromise = null;
+          this.prefetchingAlbumPageNo = 0;
+          this.prefetchingAlbumFolderId = "";
+        }
+      });
+
+    this.albumPrefetchPromise = task;
+    return task;
   },
 
   scheduleRelayout() {
@@ -1095,12 +1562,15 @@ Page({
       this.leftHeight = this.calculateWaterfallHeight(nextLeftPhotos);
       this.rightHeight = this.calculateWaterfallHeight(nextRightPhotos);
 
-      if (!shouldSyncVisible) return;
+      if (!shouldSyncVisible) {
+        this.scheduleAutoFillCheck(100);
+        return false;
+      }
       this.setData({
         photos: nextPhotos,
         leftPhotos: nextLeftPhotos,
         rightPhotos: nextRightPhotos,
-      });
+      }, () => this.scheduleAutoFillCheck(100));
     }, ALBUM_SOFT_RELAYOUT_DELAY);
   },
 
@@ -1124,11 +1594,17 @@ Page({
     const hasStableStoredRatio = Boolean(
       stablePhoto
       && (
-        Number(stablePhoto.__ratio || 0) > 0
-        || (Number(stablePhoto.width || 0) > 0 && Number(stablePhoto.height || 0) > 0)
+        Number(stablePhoto.width || 0) > 0
+        && Number(stablePhoto.height || 0) > 0
       )
     );
     if (hasStableStoredRatio) return;
+
+    const shouldAllowLiveRelayout = Boolean(
+      this.data.switchingFolderLoading ||
+      (Array.isArray(this.data.pendingFolderPhotoIds) && this.data.pendingFolderPhotoIds.length > 0)
+    );
+    if (!shouldAllowLiveRelayout) return;
 
     const detail = (e && e.detail) || {};
     const width = Number(detail.width || 0);
@@ -1150,11 +1626,19 @@ Page({
     this.photoRatioMap[id] = ratio;
     const nextCurrent = this.findPhotoById(id);
     if (!nextCurrent) return;
+    if (!(Number(nextCurrent.width || 0) > 0 && Number(nextCurrent.height || 0) > 0)) {
+      this.patchPhotoVisualState(id, (photo) => Object.assign({}, photo, {
+        width,
+        height,
+      }));
+    }
 
     const currentRatio = Number(nextCurrent.__ratio || 0);
     if (currentRatio > 0 && Math.abs(currentRatio - ratio) < 0.08) {
       return;
     }
+
+    this.scheduleRelayout();
   },
 
   onPhotoError(e) {
@@ -1345,7 +1829,7 @@ Page({
         // ignore
       }
     }
-    // 关闭后重置阶段，确保下次打开从信封开始
+    // 关闭后重置阶段，确保下次打开时从信封开始
     this.setData(
       {
         showWelcomeLetter: false,
@@ -1363,7 +1847,7 @@ Page({
   },
 
   onLetterMaskTap() {
-    // Web 端：只有在信纸阶段点击遮罩才会关闭
+    // Web 端仅在信纸阶段点击遮罩时才关闭
     if (this.data.letterStage !== "letter") return;
     this.closeWelcomeLetterAnimated();
   },
@@ -1444,7 +1928,7 @@ Page({
     }
 
     this.setData({ donationSaving: true });
-    wx.showLoading({ title: "保存中..." });
+    wx.showLoading({ title: "淇濆瓨涓?.." });
 
     try {
       await this.savePhotoToAlbum(qrCodeUrl);
@@ -1653,6 +2137,9 @@ Page({
 
   async loadAlbum() {
     this.loadingNextPhotoPage = false;
+    this.albumAutoFillRemaining = ALBUM_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.albumLoadZoneArmed = true;
+    this.clearAutoFillTimer();
     this.setData({
       loading: true,
       loadingMore: false,
@@ -1690,7 +2177,7 @@ Page({
         donation_qr_code_url: normalizeMaybeUrl(album && album.donation_qr_code_url),
       });
       if (album && album.is_expired) {
-        wx.showToast({ title: "该空间已过期", icon: "none" });
+        wx.showToast({ title: "璇ョ┖闂村凡杩囨湡", icon: "none" });
       }
 
       const expiryDays = getExpiryDays(normalizedAlbum);
@@ -1726,7 +2213,7 @@ Page({
           hasSeenWelcomeEgg = false;
         }
       }
-      // 兼容旧逻辑：历史版本可能在未点击印章时就提前写入入口已看标记。
+      // 兼容旧逻辑：历史版本可能在未点击印章时就写入了入口已见标记
       if (hasSeenWelcomeEgg && !hasSeenWelcome && eggStorageKey) {
         try {
           wx.removeStorageSync(eggStorageKey);
@@ -1851,6 +2338,11 @@ Page({
     this.rightHeight = 0;
     this.photoRatioMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
+    this.albumAutoFillRemaining = ALBUM_INITIAL_AUTOFILL_MAX_BATCHES;
+    this.albumLoadZoneArmed = true;
+    this.clearAutoFillTimer();
+    this.invalidateAlbumPrefetch();
+    this.currentScrollTop = 0;
     await new Promise((resolve) => this.setData({
       selectedFolder: id,
       switchingFolderLoading: true,
@@ -1866,8 +2358,8 @@ Page({
       this.applyFilter();
       this.refreshSelectionMeta();
       if (!this.data.hasShownFolderSwitchToast) {
-        const folderName = String((folder && folder.name) || "分组").trim() || "分组";
-        this.showToast(`已切换到：${folderName}`, "success", 1800);
+        const folderName = String((folder && folder.name) || "鍒嗙粍").trim() || "鍒嗙粍";
+        this.showToast(`宸插垏鎹㈠埌锛?{folderName}`, "success", 1800);
         this.setData({ hasShownFolderSwitchToast: true });
       }
       resolve();
@@ -1889,7 +2381,7 @@ Page({
         this.applyFilter();
         resolve();
       }));
-      this.showToast("切换失败，请稍后重试", "error", 1800);
+      this.showToast("鍒囨崲澶辫触锛岃绋嶅悗閲嶈瘯", "error", 1800);
     }
   },
 
@@ -1913,7 +2405,11 @@ Page({
     let nextPendingFolderPhotoIds = null;
 
     if (reset) {
+      this.albumAutoFillRemaining = ALBUM_INITIAL_AUTOFILL_MAX_BATCHES;
+      this.albumLoadZoneArmed = true;
+      this.clearAutoFillTimer();
       this.clearCachedFullPhotosForFolder(targetFolderId);
+      this.invalidateAlbumPrefetch();
     }
 
     if (!reset && this.loadingNextPhotoPage) return false;
@@ -1945,6 +2441,18 @@ Page({
         });
       }
     } else {
+      if (this.canUsePrefetchedAlbumPage(targetFolderId, nextPageNo)) {
+        const prefetched = this.prefetchedAlbumPage;
+        this.prefetchedAlbumPage = null;
+        const committed = this.commitAlbumPhotoPageData(targetFolderId, nextPageNo, prefetched, {
+          reset,
+          silent,
+        });
+        nextPendingFolderPhotoIds = committed && committed.nextPendingFolderPhotoIds;
+        this.loadingNextPhotoPage = false;
+        this.scheduleAutoFillCheck(80);
+        return Boolean(committed);
+      }
       this.loadingNextPhotoPage = true;
       this.showPagingSkeletons(ALBUM_PAGING_SKELETON_COUNT);
       this.setData({ loadingMore: true });
@@ -1954,90 +2462,34 @@ Page({
     this.photoLoadTicket = ticket;
 
     try {
-      const r = await dbRpc("get_album_photo_page", {
-        input_key: this.data.key,
-        folder_id: targetFolderId,
-        page_no: nextPageNo,
-        page_size: PHOTO_PAGE_SIZE,
-      });
-      const rawPayload = r ? r.data : null;
-      const payload = resolveAlbumPhotoPagePayload(rawPayload);
-      const rpcErrorMessage = String((r && r.error && r.error.message) || "").trim();
-      const payloadErrorMessage =
-        isExplicitRpcFailure(rawPayload) || isExplicitRpcFailure(payload)
-          ? readRpcPayloadErrorMessage(rawPayload || payload)
-          : "";
+      const pageData = nextPageNo > 1
+        ? await (this.prefetchAlbumPhotoPage(targetFolderId, nextPageNo) || this.fetchAlbumPhotoPageData(targetFolderId, nextPageNo))
+        : await this.fetchAlbumPhotoPageData(targetFolderId, nextPageNo);
 
-      if (isRpcFunctionNotImplemented(rpcErrorMessage || payloadErrorMessage)) {
+      if (pageData && pageData.fallbackLegacy) {
         this.useLegacyPhotoPaging = true;
         this.photoLoadTicket += 1;
         return this.loadPhotoPageLegacy(targetFolderId, nextPageNo, { reset, silent });
       }
 
-      if (rpcErrorMessage || payloadErrorMessage || !payload) {
+      if (!pageData || pageData.errorMessage) {
         if (!(reset && silent)) {
-          wx.showToast({ title: rpcErrorMessage || payloadErrorMessage || "加载失败", icon: "none" });
+          wx.showToast({ title: (pageData && pageData.errorMessage) || "加载失败", icon: "none" });
         }
-        return;
+        return false;
       }
 
       if (ticket !== this.photoLoadTicket) return false;
       if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) return false;
 
-      const rows = Array.isArray(payload.photos) ? payload.photos : [];
-      const normalizedRows = rows.map(normalizePhoto);
-      let mergedRows = normalizedRows;
-
-      if (!reset) {
-        const existingRows = Array.isArray(this.data.allPhotos) ? this.data.allPhotos : [];
-        const existingIds = new Set(existingRows.map((item) => String(item.id)));
-        const incrementalRows = normalizedRows.filter((item) => !existingIds.has(String(item.id)));
-        mergedRows = existingRows.concat(incrementalRows);
+      if (this.canUsePrefetchedAlbumPage(targetFolderId, nextPageNo)) {
+        this.prefetchedAlbumPage = null;
       }
-
-      const total = readPageTotal(payload, mergedRows.length);
-      const loadedCount = mergedRows.length;
-      const hasKnownTotal = total > 0;
-      const hasMoreFromPayload = Object.prototype.hasOwnProperty.call(payload, "has_more")
-        ? Boolean(payload.has_more)
-        : null;
-      const hasMore = hasMoreFromPayload === null
-        ? hasKnownTotal
-          ? loadedCount < total
-          : normalizedRows.length >= PHOTO_PAGE_SIZE
-        : hasMoreFromPayload;
-      const selectedPhotos = withSelection(mergedRows, this.data.selectedPhotoMap || {});
-      if (!hasMore) {
-        this.cacheFullPhotosForFolder(targetFolderId, mergedRows);
-      }
-      if (reset) {
-        nextPendingFolderPhotoIds = silent
-          ? Array.from(
-            new Set(
-              mergedRows
-                .slice(0, ALBUM_SWITCH_OVERLAY_TRACK_COUNT)
-                .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
-                .map((photo) => String((photo && photo.id) || "").trim())
-                .filter(Boolean)
-            )
-          )
-          : [];
-      }
-
-      const nextData = {
-        allPhotos: mergedRows,
-        pageNo: nextPageNo,
-        total,
-        hasMore,
-      };
-      if (reset) {
-        nextData.pendingFolderPhotoIds = nextPendingFolderPhotoIds;
-      }
-
-      this.setData(
-        nextData,
-        () => this.applyWaterfallPhotos(selectedPhotos, { preferAppend: !reset })
-      );
+      const committed = this.commitAlbumPhotoPageData(targetFolderId, nextPageNo, pageData, {
+        reset,
+        silent,
+      });
+      nextPendingFolderPhotoIds = committed && committed.nextPendingFolderPhotoIds;
       return true;
     } catch (e) {
       if (reset && nextPendingFolderPhotoIds !== null) {
@@ -2047,6 +2499,7 @@ Page({
       if (!(reset && silent)) {
         wx.showToast({ title: "加载失败", icon: "none" });
       }
+      return false;
     } finally {
       if (!reset) {
         this.loadingNextPhotoPage = false;
@@ -2064,6 +2517,7 @@ Page({
           pagingSkeletonLeftPhotos: [],
           pagingSkeletonRightPhotos: [],
         }, () => {
+          this.scheduleAutoFillCheck(80);
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {
@@ -2087,6 +2541,9 @@ Page({
     let nextPendingFolderPhotoIds = null;
 
     if (reset) {
+      this.albumAutoFillRemaining = ALBUM_INITIAL_AUTOFILL_MAX_BATCHES;
+      this.albumLoadZoneArmed = true;
+      this.clearAutoFillTimer();
       this.clearCachedFullPhotosForFolder(targetFolderId);
     }
 
@@ -2128,15 +2585,18 @@ Page({
             : "";
         if (rpcErrorMessage || payloadErrorMessage || !payload) {
           if (!(reset && silent)) {
-            wx.showToast({ title: rpcErrorMessage || payloadErrorMessage || "加载失败", icon: "none" });
+            wx.showToast({ title: (pageData && pageData.errorMessage) || "加载失败", icon: "none" });
           }
           return;
         }
 
-        const allRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+        const normalizedAllRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+        const allRows = normalizedAllRows.length > 0
+          ? await hydratePhotoDimensions(normalizedAllRows)
+          : normalizedAllRows;
         fullRows = filterPhotosByFolder(allRows, targetFolderId);
         this.legacyPhotosByFolder[targetFolderId] = fullRows;
-      this.cacheFullPhotosForFolder(targetFolderId, fullRows);
+        this.cacheFullPhotosForFolder(targetFolderId, fullRows);
       }
 
       if (ticket !== this.photoLoadTicket) return;
@@ -2201,6 +2661,7 @@ Page({
           pagingSkeletonLeftPhotos: [],
           pagingSkeletonRightPhotos: [],
         }, () => {
+          this.scheduleAutoFillCheck(80);
           if (!shouldPlayWaveOnVisible) return;
           if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
           if (this.data.showWelcomeLetter) {
@@ -2227,46 +2688,46 @@ Page({
   },
 
   onPageScroll(event) {
+    const scrollTop = Number(event && event.scrollTop);
+    if (Number.isFinite(scrollTop) && scrollTop >= 0) {
+      this.currentScrollTop = scrollTop;
+    }
+
     if (this.data.serviceMissing) return;
     if (this.data.loading || this.data.loadingMore) return;
+    if (this.data.switchingFolderLoading) return;
     if (!this.data.hasMore) return;
-
-    const scrollTop = Number(event && event.scrollTop);
     if (!Number.isFinite(scrollTop) || scrollTop < 0) return;
 
     const now = Date.now();
     const lastAutoLoadAt = Number(this._lastAlbumAutoLoadAt || 0);
     if (lastAutoLoadAt > 0 && now - lastAutoLoadAt < 280) return;
 
-    if (!(Number(this._windowHeight) > 0)) {
-      try {
-        if (typeof wx.getWindowInfo === "function") {
-          const info = wx.getWindowInfo();
-          this._windowHeight = Number(info && info.windowHeight) || 0;
-        } else if (typeof wx.getSystemInfoSync === "function") {
-          const info = wx.getSystemInfoSync();
-          this._windowHeight = Number(info && info.windowHeight) || 0;
-        }
-      } catch (error) {
-        this._windowHeight = 0;
-      }
-    }
-    if (!(Number(this._windowHeight) > 0)) return;
+    const viewportHeight = this.ensureWindowHeight();
+    if (!(viewportHeight > 0)) return;
 
     wx.createSelectorQuery()
       .selectViewport()
       .scrollOffset((offset) => {
-        if (this.data.loading || this.data.loadingMore || !this.data.hasMore) return;
+        if (this.data.loading || this.data.loadingMore || this.data.switchingFolderLoading || !this.data.hasMore) return;
         const scrollHeight = Number((offset && offset.scrollHeight) || 0);
         if (!(scrollHeight > 0)) return;
+        const distanceToBottom = scrollHeight - (scrollTop + viewportHeight);
+        if (distanceToBottom > ALBUM_LOAD_AHEAD_PX) {
+          this.albumLoadZoneArmed = true;
+          return;
+        }
+        if (!this.albumLoadZoneArmed) return;
 
-        const progress = (scrollTop + Number(this._windowHeight || 0)) / scrollHeight;
-        if (progress < 0.8) return;
-
+        this.albumLoadZoneArmed = false;
         this._lastAlbumAutoLoadAt = Date.now();
-        void this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, Number(this.data.pageNo || 0) + 1, {
+        Promise.resolve(this.loadPhotoPage(this.data.selectedFolder || ROOT_FOLDER_ID, Number(this.data.pageNo || 0) + 1, {
           reset: false,
           silent: false,
+        })).then((success) => {
+          if (!success) {
+            this.albumLoadZoneArmed = true;
+          }
         });
       })
       .exec();
@@ -2385,7 +2846,7 @@ Page({
       if (total > 0) {
         this.showToast(`已全选 ${total} 张`, "success", 1800);
       } else {
-        this.showToast("当前分组暂无照片", "error", 2200);
+        this.showToast("褰撳墠鍒嗙粍鏆傛棤鐓х墖", "error", 2200);
       }
     } catch (error) {
       this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false });
@@ -2430,7 +2891,10 @@ Page({
         throw new Error(rpcErrorMessage || payloadErrorMessage || "加载失败");
       }
 
-      const allRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+      const normalizedAllRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+      const allRows = normalizedAllRows.length > 0
+        ? await hydratePhotoDimensions(normalizedAllRows)
+        : normalizedAllRows;
       fullRows = filterPhotosByFolder(allRows, targetFolderId);
       this.legacyPhotosByFolder[targetFolderId] = fullRows;
       this.cacheFullPhotosForFolder(targetFolderId, fullRows);
@@ -2478,7 +2942,10 @@ Page({
         throw new Error(rpcErrorMessage || payloadErrorMessage || "加载失败");
       }
 
-      const pageRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+      const normalizedPageRows = (Array.isArray(payload.photos) ? payload.photos : []).map(normalizePhoto);
+      const pageRows = normalizedPageRows.length > 0
+        ? await hydratePhotoDimensions(normalizedPageRows)
+        : normalizedPageRows;
       pageRows.forEach((item) => {
         const id = String((item && item.id) || "").trim();
         if (id && rowIds.has(id)) return;
@@ -2500,7 +2967,7 @@ Page({
       if (!hasMore) break;
       pageNo += 1;
 
-      // 防止异常数据导致无限翻页
+      // 闃叉寮傚父鏁版嵁瀵艰嚧鏃犻檺缈婚〉
       if (pageNo > 200) {
         throw new Error("分页异常：页数超出上限");
       }
@@ -2526,7 +2993,7 @@ Page({
   async resolveImageLocalPath(url) {
     const target = String(url || "").trim();
     if (!target) {
-      throw new Error("缺少图片地址");
+      throw new Error("缂哄皯鍥剧墖鍦板潃");
     }
 
     try {
@@ -2536,14 +3003,14 @@ Page({
         return localPath;
       }
     } catch (error) {
-      // ignore，进入 downloadFile 兜底
+      // ignore锛岃繘鍏?downloadFile 鍏滃簳
     }
 
     const tryDownload = async () => {
       const download = await wx.downloadFile({ url: target, timeout: 60000 });
       if (!download || download.statusCode !== 200 || !download.tempFilePath) {
         const status = Number((download && download.statusCode) || 0);
-        throw new Error(status ? `下载失败(${status})` : "下载失败");
+        throw new Error(status ? `涓嬭浇澶辫触(${status})` : "涓嬭浇澶辫触");
       }
       return download.tempFilePath;
     };
@@ -2646,7 +3113,7 @@ Page({
   },
 
   async handleBatchDownload() {
-    if (this.data.batchLoading) return;
+    if (this.data.batchLoading || this.data.downloadProgressRunning) return;
 
     const list = this.data.photos || [];
     const map = this.data.selectedPhotoMap || {};
@@ -2663,67 +3130,105 @@ Page({
       return;
     }
 
-    this.setData({ batchLoading: true });
+    this.openDownloadProgress({
+      title: shouldDownloadAll ? "姝ｅ湪鍑嗗涓嬭浇" : "姝ｅ湪淇濆瓨鐓х墖",
+      message: shouldDownloadAll
+        ? "姝ｅ湪鏁寸悊褰撳墠鐩稿唽鐨勫叏閮ㄧ収鐗?.."
+        : `准备保存 0 / ${selected.length} 张照片`,
+      total: shouldDownloadAll ? 0 : selected.length,
+      current: 0,
+      success: 0,
+      fail: 0,
+      running: true,
+      done: false,
+    });
 
     let targets = selected;
     if (shouldDownloadAll) {
       try {
-        this.showToast("正在拉取全部照片...", "success", 1400);
         targets = await this.loadAllPhotosForFolder(this.data.selectedFolder || ROOT_FOLDER_ID);
       } catch (error) {
-        this.setData({ batchLoading: false });
-        const message = String((error && error.message) || "").trim() || "加载全部照片失败";
+        this.hideDownloadProgress();
+        const message = String((error && error.message) || "").trim() || "鍔犺浇鍏ㄩ儴鐓х墖澶辫触";
         this.showToast(message, "error", 2600);
         return;
       }
     }
 
     if (!targets.length) {
-      this.setData({ batchLoading: false });
+      this.hideDownloadProgress();
       this.showToast("暂无可下载照片", "error", 2200);
       return;
     }
 
+    const total = targets.length;
+    this.updateDownloadProgress({
+      title: "姝ｅ湪淇濆瓨鐓х墖",
+      message: `准备保存 0 / ${total} 张照片`,
+      total,
+      current: 0,
+      success: 0,
+      fail: 0,
+      running: true,
+      done: false,
+    });
+
     let success = 0;
     let fail = 0;
 
-    for (const photo of targets) {
+    for (let index = 0; index < total; index += 1) {
+      const photo = targets[index];
+      this.updateDownloadProgress({
+        title: "姝ｅ湪淇濆瓨鐓х墖",
+        message: total > 1 ? `姝ｅ湪淇濆瓨绗?${index + 1} / ${total} 寮?..` : "姝ｅ湪淇濆瓨鐓х墖...",
+      });
+
       const url = photo.original_url_resolved;
       if (!url) {
         fail += 1;
-        continue;
+      } else {
+        try {
+          await this.savePhotoToAlbum(url);
+          success += 1;
+          void this.incrementPhotoDownloadCount(photo.id);
+          if (index < total - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 120));
+          }
+        } catch (e) {
+          try {
+            console.warn("[album] save image failed", {
+              photoId: String(photo.id || ""),
+              url: String(url),
+              message: String((e && e.message) || e || ""),
+            });
+          } catch (_) {
+            // ignore log error
+          }
+          fail += 1;
+        }
       }
 
-      try {
-        await this.savePhotoToAlbum(url);
-        success += 1;
-        void this.incrementPhotoDownloadCount(photo.id);
-        await new Promise((resolve) => setTimeout(resolve, 120));
-      } catch (e) {
-        try {
-          console.warn("[album] save image failed", {
-            photoId: String(photo.id || ""),
-            url: String(url),
-            message: String((e && e.message) || e || ""),
-          });
-        } catch (_) {
-          // ignore log error
-        }
-        fail += 1;
-      }
+      const current = index + 1;
+      this.updateDownloadProgress({
+        current,
+        total,
+        success,
+        fail,
+        message: current < total ? `已完成 ${current} / ${total} 张照片` : "正在整理保存结果...",
+      });
     }
 
-    this.setData({ batchLoading: false });
+    this.finishDownloadProgress({ success, fail, total });
 
     if (fail > 0) {
-      this.showToast(`保存完成：成功${success}张，失败${fail}张`, "error", 3200);
+      this.showToast(`保存完成：成功 ${success} 张，失败 ${fail} 张`, "error", 3200);
     } else {
       this.showToast(`成功保存 ${success} 张`, "success", 2600);
     }
   },
 
   handleBatchDelete() {
-    if (this.data.batchLoading) return;
+    if (this.data.batchLoading || this.data.downloadProgressRunning) return;
 
     const map = this.data.selectedPhotoMap || {};
     const selected = (this.data.photos || []).filter((p) => Boolean(map[String(p.id)]));
@@ -2740,7 +3245,7 @@ Page({
   },
 
   async confirmBatchDelete() {
-    if (this.data.batchLoading) return;
+    if (this.data.batchLoading || this.data.downloadProgressRunning) return;
 
     const map = this.data.selectedPhotoMap || {};
     const selected = (this.data.photos || []).filter((p) => Boolean(map[String(p.id)]));
@@ -2816,12 +3321,12 @@ Page({
     if (fail > 0 || storageWarningCount > 0) {
       const warnings = [];
       if (fail > 0) {
-        warnings.push(`失败${fail}张`);
+        warnings.push(`失败 ${fail} 张`);
       }
       if (storageWarningCount > 0) {
-        warnings.push(`云存储清理失败${storageWarningCount}张`);
+        warnings.push(`云存储清理失败 ${storageWarningCount} 张`);
       }
-      this.showToast(`删除完成：成功${success}张，${warnings.join("，")}`, "error", 3200);
+      this.showToast(`删除完成：成功 ${success} 张，${warnings.join("；")}`, "error", 3200);
     } else {
       this.showToast(`成功删除 ${success} 张`, "success", 2600);
     }
@@ -2845,7 +3350,7 @@ Page({
     if (previewRows.length === 0) {
       try {
         if (this.data.hasMore || Math.max(0, Number(this.data.total || 0)) > visibleRows.length) {
-          wx.showLoading({ title: "正在准备全部照片...", mask: true });
+          wx.showLoading({ title: "姝ｅ湪鍑嗗鍏ㄩ儴鐓х墖...", mask: true });
           loadingShown = true;
         }
       } catch (error) {
@@ -2871,7 +3376,7 @@ Page({
 
     const previewableRows = (Array.isArray(previewRows) ? previewRows : []).filter((item) => Boolean(item && item.fullscreen_url_resolved));
     if (previewableRows.length === 0) {
-      this.showToast("原图暂不可用", "error", 2200);
+      this.showToast("鍘熷浘鏆備笉鍙敤", "error", 2200);
       return;
     }
 
@@ -2947,13 +3452,13 @@ Page({
 
       if (r && r.error) {
         const rpcErrorMessage = String((r.error && r.error.message) || "").trim();
-        this.showToast(rpcErrorMessage || "操作失败", "error", 2600);
+        this.showToast(rpcErrorMessage || "鎿嶄綔澶辫触", "error", 2600);
         return;
       }
       const rawPayload = r ? r.data : null;
       if (typeof rawPayload !== "boolean" && isExplicitRpcFailure(rawPayload)) {
         const payloadErrorMessage = readRpcPayloadErrorMessage(rawPayload);
-        this.showToast(payloadErrorMessage || "操作失败", "error", 2600);
+        this.showToast(payloadErrorMessage || "鎿嶄綔澶辫触", "error", 2600);
         return;
       }
       const nextPublicState = typeof rawPayload === "boolean" ? rawPayload : null;
@@ -2987,7 +3492,7 @@ Page({
         this.showToast("照片已从照片墙移除", "success", 2200);
       }
     } catch (e2) {
-      this.showToast("操作失败", "error", 2600);
+      this.showToast("鎿嶄綔澶辫触", "error", 2600);
     } finally {
       this.setPinActionPending(id, false);
     }
@@ -3014,3 +3519,5 @@ Page({
     };
   },
 });
+
+

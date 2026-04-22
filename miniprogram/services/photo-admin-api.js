@@ -787,6 +787,43 @@ async function getAdminDashboardStats() {
   return payload && typeof payload === "object" ? payload : {};
 }
 
+async function listAdminUsers() {
+  await requireAdminSession();
+  const payload = await requestJson("/api/admin/users", { method: "GET" });
+  const body = assertAdminMutationPayload(payload, "获取用户列表失败");
+  return {
+    users: readArrayFromPayloadChain(body, ["users", "list", "items"]),
+    currentUserId: String(readFieldFromPayloadChain(body, ["currentUserId", "current_user_id"]) || "").trim(),
+  };
+}
+
+async function toggleAdminUserDisabled(userId, isDisabled) {
+  await requireAdminSession();
+  const id = String(userId || "").trim();
+  if (!id) {
+    throw new Error("用户 ID 非法");
+  }
+  const payload = await requestJson(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    data: {
+      isDisabled: Boolean(isDisabled),
+    },
+  });
+  return assertAdminMutationPayload(payload, "更新用户状态失败");
+}
+
+async function deleteAdminUser(userId) {
+  await requireAdminSession();
+  const id = String(userId || "").trim();
+  if (!id) {
+    throw new Error("用户 ID 非法");
+  }
+  const payload = await requestJson(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  return assertAdminMutationPayload(payload, "删除用户失败");
+}
+
 async function runAdminMaintenanceTasks() {
   await requireAdminSession();
   const response = await requestJson("/api/maintenance", {
@@ -2894,6 +2931,9 @@ module.exports = {
   clearAdminSessionCache,
   requireAdminSession,
   getAdminDashboardStats,
+  listAdminUsers,
+  toggleAdminUserDisabled,
+  deleteAdminUser,
   runAdminMaintenanceTasks,
   listAdminBlockedDates,
   createAdminBlockedDate,

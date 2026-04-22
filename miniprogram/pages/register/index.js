@@ -230,16 +230,21 @@ Page({
     authMode: "wechat_only",
     phoneLoginEnabled: false,
     pageTitle: "注册",
-    loginEntryVisible: true,
+    loginEntryVisible: false,
     loginEntryLabel: "登录",
   },
 
-  applyRuntimeConfig(runtimeConfig) {
+  applyRuntimeConfig(runtimeConfig, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const auditConfigReady =
+      !Object.prototype.hasOwnProperty.call(opts, "auditConfigReady") ||
+      Boolean(opts.auditConfigReady);
     const normalized = normalizeRuntimeConfig(runtimeConfig);
-    const authMode = String(normalized.authMode || "phone_password");
-    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
-    const registerAccess = getManagedPageAccess(normalized, "register");
-    const loginAccess = getManagedPageAccess(normalized, "login");
+    const authMode = auditConfigReady ? String(normalized.authMode || "phone_password") : "wechat_only";
+    const phoneLoginEnabled =
+      auditConfigReady && (authMode === "phone_password" || authMode === "mixed");
+    const registerAccess = auditConfigReady ? getManagedPageAccess(normalized, "register") : null;
+    const loginAccess = auditConfigReady ? getManagedPageAccess(normalized, "login") : null;
     const pageTitle =
       String((registerAccess && (registerAccess.headerTitle || registerAccess.navText)) || "").trim() ||
       "注册";
@@ -269,12 +274,17 @@ Page({
     this.trajectory = [];
     this.captchaExpireTimer = null;
 
+    const auditConfigReady = Boolean(globalData.auditConfigReady);
     this.setData({ safeTop, serviceMissing });
     const runtimeConfig = this.applyRuntimeConfig(
-      globalData.runtimeConfig || null
+      globalData.runtimeConfig || null,
+      { auditConfigReady }
     );
     const blocked = await this.guardManagedAccess();
     if (blocked) {
+      return;
+    }
+    if (!auditConfigReady) {
       return;
     }
     if (runtimeConfig.authMode === "wechat_only" || !this.data.phoneLoginEnabled) {
@@ -309,7 +319,8 @@ Page({
     const normalized = this.applyRuntimeConfig(
       app && app.globalData
         ? app.globalData.runtimeConfig || null
-        : null
+        : null,
+      { auditConfigReady: Boolean(app && app.globalData && app.globalData.auditConfigReady) }
     );
     const blocked = await this.guardManagedAccess();
     if (blocked) {
@@ -318,6 +329,10 @@ Page({
     if (normalized.authMode === "wechat_only" || !this.data.phoneLoginEnabled) {
       wx.showToast({ title: "当前未开放手机号注册", icon: "none" });
       wx.redirectTo({ url: "/pages/login/index" });
+      return;
+    }
+    if (!this.data.serviceMissing && !String(this.data.captchaId || "").trim()) {
+      void this.loadCaptcha();
     }
   },
 

@@ -616,7 +616,7 @@ Page({
     try {
       const [loginRes, profile] = await Promise.all([
         wxLogin(),
-        requestWechatUserProfile({ desc: "用于完善登录后的头像与昵称" }),
+        requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
       ]);
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {

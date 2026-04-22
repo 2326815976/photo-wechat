@@ -77,7 +77,7 @@
               <block wx:else>
                 <view class="story-media-stage {{item.story_image_phase === 'entering' ? 'story-media-stage--entering' : ''}}">
                   <view class="img-box" style="padding-top: {{item.__media_padding_top || '100%'}};" data-id="{{item.id}}" bindtap="previewPhoto">
-                    <image class="img {{item._imageLoaded ? 'img--loaded' : ''}}" src="{{item.thumbnail_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" binderror="onPhotoError" data-id="{{item.id}}" />
+                    <image class="img {{item._imageLoaded ? 'img--loaded' : ''}}" src="{{item.card_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" binderror="onPhotoError" data-id="{{item.id}}" />
                     <view class="img-loading-card {{item._imageLoaded ? 'img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'img-loading-card--error' : ''}}">
                       <block wx:if="{{item._imageLoadFailed}}">
                         <view class="img-loading-card__center img-loading-card__center--error">
@@ -158,7 +158,7 @@
               <block wx:else>
                 <view class="story-media-stage {{item.story_image_phase === 'entering' ? 'story-media-stage--entering' : ''}}">
                   <view class="img-box" style="padding-top: {{item.__media_padding_top || '100%'}};" data-id="{{item.id}}" bindtap="previewPhoto">
-                    <image class="img {{item._imageLoaded ? 'img--loaded' : ''}}" src="{{item.thumbnail_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" binderror="onPhotoError" data-id="{{item.id}}" />
+                    <image class="img {{item._imageLoaded ? 'img--loaded' : ''}}" src="{{item.card_url_resolved}}" mode="aspectFill" lazy-load="{{true}}" bindload="onPhotoLoad" binderror="onPhotoError" data-id="{{item.id}}" />
                     <view class="img-loading-card {{item._imageLoaded ? 'img-loading-card--hidden' : ''}} {{item._imageLoadFailed ? 'img-loading-card--error' : ''}}">
                       <block wx:if="{{item._imageLoadFailed}}">
                         <view class="img-loading-card__center img-loading-card__center--error">
@@ -237,6 +237,9 @@
       </view>
       <view class="end" wx:if="{{!(switchingFolderLoading || pendingSwitchPhotoIds.length > 0) && !hasMore && (left.length + right.length) > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
+        <view class="copyright-bubble">
+          <text class="copyright-text">照片墙内展示的照片版权归开发者所有，未经授权禁止商用、搬运、盗用或二次传播。</text>
+        </view>
       </view>
     </view>
   </view>
