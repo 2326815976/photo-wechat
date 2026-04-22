@@ -1,5 +1,13 @@
+@import "../../../styles/secondary-page-frame.wxss";
+
+.content {
+  padding: 0;
+  background-image: none;
+  min-height: 0;
+}
+
 .beta-legacy-redirect {
-  min-height: 100vh;
+  min-height: calc(100vh - 240rpx - env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   justify-content: center;

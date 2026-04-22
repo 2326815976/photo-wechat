@@ -9,7 +9,6 @@
     "pages/profile/beta/pose/index",
     "pages/album/detail",
     "pages/login/index",
-    "pages/register/index",
     "pages/profile/edit/index",
     "pages/profile/bookings/index",
     "pages/profile/about/index",

@@ -1,4 +1,25 @@
-<view wx:if="{{url}}" style="height: 100vh; background: #FFFBF0;">
-  <web-view src="{{url}}"></web-view>
-</view>
-<view wx:else style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #FFFBF0; color: #5D4037; font-size: 28rpx;">预览地址缺失</view>
+<secondary-page-shell
+  shell-class="page"
+  title="Web 预览"
+  fallbackRoute="{{fallbackRoute}}"
+  preferFallback="{{true}}"
+  content-class="content"
+  useScrollView="{{false}}"
+>
+  <view class="preview-status" wx:if="{{loading}}">
+    <text class="preview-status__title">正在加载预览...</text>
+    <text class="preview-status__desc">正在校验管理员权限并准备页面。</text>
+  </view>
+
+  <view class="preview-status preview-status--error" wx:elif="{{errorMessage}}">
+    <text class="preview-status__title">无法打开预览</text>
+    <text class="preview-status__desc">{{errorMessage}}</text>
+  </view>
+
+  <web-view wx:elif="{{url}}" src="{{url}}"></web-view>
+
+  <view class="preview-status preview-status--error" wx:else>
+    <text class="preview-status__title">预览地址缺失</text>
+    <text class="preview-status__desc">请返回上一页重新触发预览入口。</text>
+  </view>
+</secondary-page-shell>

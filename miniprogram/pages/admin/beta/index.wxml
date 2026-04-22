@@ -1,3 +1,12 @@
-<view class="beta-legacy-redirect">
-  <text>正在跳转到 Web 页面管理...</text>
-</view>
+<secondary-page-shell
+  shell-class="page"
+  title="Web 页面管理"
+  fallbackRoute="/pages/admin/page-center/index?channel=web"
+  preferFallback="{{true}}"
+  content-class="content"
+  useScrollView="{{false}}"
+>
+  <view class="beta-legacy-redirect">
+    <text>正在跳转到 Web 页面管理...</text>
+  </view>
+</secondary-page-shell>

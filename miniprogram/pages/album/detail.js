@@ -2381,7 +2381,7 @@ Page({
         this.applyFilter();
         resolve();
       }));
-      this.showToast("鍒囨崲澶辫触锛岃绋嶅悗閲嶈瘯", "error", 1800);
+      this.showToast("切换失败，请稍后重试", "error", 1800);
     }
   },
 
@@ -3010,7 +3010,7 @@ Page({
       const download = await wx.downloadFile({ url: target, timeout: 60000 });
       if (!download || download.statusCode !== 200 || !download.tempFilePath) {
         const status = Number((download && download.statusCode) || 0);
-        throw new Error(status ? `涓嬭浇澶辫触(${status})` : "涓嬭浇澶辫触");
+        throw new Error(status ? `下载失败(${status})` : "下载失败");
       }
       return download.tempFilePath;
     };
@@ -3149,7 +3149,7 @@ Page({
         targets = await this.loadAllPhotosForFolder(this.data.selectedFolder || ROOT_FOLDER_ID);
       } catch (error) {
         this.hideDownloadProgress();
-        const message = String((error && error.message) || "").trim() || "鍔犺浇鍏ㄩ儴鐓х墖澶辫触";
+        const message = String((error && error.message) || "").trim() || "加载全部照片失败";
         this.showToast(message, "error", 2600);
         return;
       }
@@ -3452,13 +3452,13 @@ Page({
 
       if (r && r.error) {
         const rpcErrorMessage = String((r.error && r.error.message) || "").trim();
-        this.showToast(rpcErrorMessage || "鎿嶄綔澶辫触", "error", 2600);
+        this.showToast(rpcErrorMessage || "操作失败", "error", 2600);
         return;
       }
       const rawPayload = r ? r.data : null;
       if (typeof rawPayload !== "boolean" && isExplicitRpcFailure(rawPayload)) {
         const payloadErrorMessage = readRpcPayloadErrorMessage(rawPayload);
-        this.showToast(payloadErrorMessage || "鎿嶄綔澶辫触", "error", 2600);
+        this.showToast(payloadErrorMessage || "操作失败", "error", 2600);
         return;
       }
       const nextPublicState = typeof rawPayload === "boolean" ? rawPayload : null;
@@ -3492,7 +3492,7 @@ Page({
         this.showToast("照片已从照片墙移除", "success", 2200);
       }
     } catch (e2) {
-      this.showToast("鎿嶄綔澶辫触", "error", 2600);
+      this.showToast("操作失败", "error", 2600);
     } finally {
       this.setPinActionPending(id, false);
     }

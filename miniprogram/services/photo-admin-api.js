@@ -1,4 +1,6 @@
 const { dbQuery, dbRpc, getSession, requestJson, requestUpload } = require("./photo-api");
+const { getStoredCookie, subscribeStoredCookieClear } = require("../utils/auth");
+const { hasAdminAccess } = require("../utils/admin-access");
 
 const ADMIN_BOOKING_STATUS = new Set([
   "pending",
@@ -51,6 +53,11 @@ const ADMIN_RELEASE_LEGACY_ONLY_MESSAGE = "当前数据库结构较旧，请先�
 let cachedAdminSessionUser = null;
 let cachedAdminSessionAt = 0;
 let pendingAdminSessionPromise = null;
+let adminSessionGeneration = 0;
+
+function hasStoredSessionCookie() {
+  return Boolean(String(getStoredCookie() || "").trim());
+}
 
 function getSessionUser(sessionPayload) {
   let current = sessionPayload;
@@ -75,9 +82,13 @@ function getSessionUser(sessionPayload) {
 }
 
 function clearAdminSessionCache() {
+  adminSessionGeneration += 1;
   cachedAdminSessionUser = null;
   cachedAdminSessionAt = 0;
+  pendingAdminSessionPromise = null;
 }
+
+subscribeStoredCookieClear(clearAdminSessionCache);
 
 function toErrorMessage(error, fallback) {
   if (typeof error === "string" && error.trim()) return error;
@@ -734,6 +745,11 @@ async function uploadAdminAsset(filePath, fileName, folder, fallbackPrefix) {
 }
 
 async function requireAdminSession() {
+  if (!hasStoredSessionCookie()) {
+    clearAdminSessionCache();
+    throw new Error("未登录，请先登录后再访问管理后台");
+  }
+
   const now = Date.now();
   if (
     cachedAdminSessionUser &&
@@ -747,21 +763,40 @@ async function requireAdminSession() {
     return pendingAdminSessionPromise;
   }
 
+  const requestGeneration = adminSessionGeneration;
   pendingAdminSessionPromise = (async () => {
     const session = await getSession();
+    if (requestGeneration !== adminSessionGeneration || !hasStoredSessionCookie()) {
+      clearAdminSessionCache();
+      throw new Error("未登录，请先登录后再访问管理后台");
+    }
     const user = getSessionUser(session);
+    let profile = null;
     if (!user || !user.id) {
       clearAdminSessionCache();
       throw new Error("未登录，请先登录后再访问管理后台");
+    }
+    if (!hasAdminAccess(user)) {
+      const profileResult = await dbQuery({
+        table: "profiles",
+        action: "select",
+        columns: "role",
+        filters: [{ column: "id", operator: "eq", value: String(user.id || "").trim() }],
+        maybeSingle: true,
+      });
+      profile = assertDbSuccess(profileResult, "读取管理员资料失败");
+    }
+    if (hasAdminAccess(user, profile)) {
+      cachedAdminSessionUser = Object.assign({}, user, {
+        profile_role: String((profile && profile.role) || "").trim(),
+      });
+      cachedAdminSessionAt = Date.now();
+      return cachedAdminSessionUser;
     }
     if (String(user.role || "") !== "admin") {
       clearAdminSessionCache();
       throw new Error("无权访问：仅管理员可使用该功能");
     }
-
-    cachedAdminSessionUser = user;
-    cachedAdminSessionAt = Date.now();
-    return user;
   })();
 
   try {

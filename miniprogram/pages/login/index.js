@@ -62,8 +62,6 @@ Page({
     phoneLoginEnabled: false,
     wechatLoginEnabled: true,
     pageTitle: "登录",
-    registerEntryVisible: false,
-    registerEntryLabel: "注册",
   },
 
   applyRuntimeConfig(runtimeConfig, options) {
@@ -79,23 +77,13 @@ Page({
       ? authMode === "wechat_only" || authMode === "mixed"
       : true;
     const loginAccess = auditConfigReady ? getManagedPageAccess(normalized, "login") : null;
-    const registerAccess = auditConfigReady ? getManagedPageAccess(normalized, "register") : null;
     const pageTitle =
       String((loginAccess && (loginAccess.headerTitle || loginAccess.navText)) || "").trim() || "登录";
-    const registerEntryVisible =
-      Boolean(registerAccess) &&
-      String((registerAccess && registerAccess.publishState) || "").trim() === "online" &&
-      phoneLoginEnabled;
-    const registerEntryLabel =
-      String((registerAccess && (registerAccess.navText || registerAccess.headerTitle)) || "").trim() ||
-      "注册";
     this.setData({
       authMode,
       phoneLoginEnabled,
       wechatLoginEnabled,
       pageTitle,
-      registerEntryVisible,
-      registerEntryLabel,
     });
     this.initLegalDocuments();
     return normalized;
@@ -280,14 +268,6 @@ Page({
       fallbackTab: "pages/profile/index",
     });
     return !result.allowed;
-  },
-
-  goRegister() {
-    if (!this.data.phoneLoginEnabled || !this.data.registerEntryVisible) {
-      this.setData({ error: "当前配置未开放手机号注册" });
-      return;
-    }
-    wx.navigateTo({ url: "/pages/register/index" });
   },
 
   async submit() {

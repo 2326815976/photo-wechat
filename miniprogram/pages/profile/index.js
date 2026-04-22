@@ -18,6 +18,7 @@ const {
   subscribePagePresentation,
 } = require("../../utils/page-presentation");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
+const { hasAdminAccess } = require("../../utils/admin-access");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜我的小天地";
@@ -65,7 +66,7 @@ const PROFILE_MENU_SPECS = [
   {
     pageKey: "profile-delete-account",
     action: "goDeleteAccount",
-    defaultOrder: 160,
+    defaultOrder: 150,
     defaultTitle: "删除账户",
     description: "永久删除账户和所有数据",
     iconSrc: "/images/icons/log-out-red.svg",
@@ -116,6 +117,36 @@ function resolveDisplayUserName(user) {
   const name = normalizeWechatMiniDefaultName(user && user.name, user);
   const phone = toOptionalText(user && user.phone);
   return name || phone || WECHAT_MINIPROGRAM_DEFAULT_NAME;
+}
+
+async function loadProfileRecord(userId) {
+  const id = toText(userId);
+  if (!id) return null;
+
+  const result = await dbQuery({
+    table: "profiles",
+    action: "select",
+    columns: "name,role",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+
+  return result ? result.data : null;
+}
+
+async function loadUserCreatedAt(userId) {
+  const id = toText(userId);
+  if (!id) return "";
+
+  const result = await dbQuery({
+    table: "users",
+    action: "select",
+    columns: "created_at",
+    filters: [{ column: "id", operator: "eq", value: id }],
+    maybeSingle: true,
+  });
+
+  return formatRegisterDateText(result && result.data ? result.data.created_at : "");
 }
 
 function resolveAvatarText(name) {
@@ -614,7 +645,7 @@ Page({
     this._wechatSubmitting = true;
     this.setData({ wechatLoginSubmitting: true });
     try {
-      const [loginRes, profile] = await Promise.all([
+      const [loginRes, wechatProfile] = await Promise.all([
         wxLogin(),
         requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
       ]);
@@ -624,7 +655,7 @@ Page({
         return;
       }
 
-      const result = await loginWithMiniProgram(code, profile || undefined);
+      const result = await loginWithMiniProgram(code, wechatProfile || undefined);
       const user = extractAuthUserFromPayload(result);
       if (!user) {
         wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
@@ -636,10 +667,20 @@ Page({
           ? getApp().globalData.runtimeConfig
           : null;
       const normalized = normalizeRuntimeConfig(runtimeConfig);
-      const userRole = String((user && user.role) || "").trim();
-      const isAdmin = userRole === "admin";
       const canChangePassword = !isWechatMiniProgramAccount(user);
-      const userName = resolveDisplayUserName(user);
+      let profileRecord = null;
+      let userName = resolveDisplayUserName(user);
+
+      try {
+        profileRecord = await loadProfileRecord(user.id);
+        if (profileRecord && profileRecord.name) {
+          userName = normalizeWechatMiniDefaultName(profileRecord.name, user) || userName;
+        }
+      } catch (error) {
+        // ignore
+      }
+
+      const isAdmin = hasAdminAccess(user, profileRecord);
 
       this.setData({
         loading: false,
@@ -717,23 +758,12 @@ Page({
       let userName = resolveDisplayUserName(user);
       let userRegisterDateText = formatRegisterDateText(user && (user.created_at || user.createdAt));
       const isWechatLogin = isWechatMiniProgramAccount(user);
-      const rawUserRole = String((user && user.role) || "").trim();
-      let profileRole = "";
+      let profile = null;
 
       try {
-        const result = await dbQuery({
-          table: "profiles",
-          action: "select",
-          columns: "name,role",
-          filters: [{ column: "id", operator: "eq", value: user.id }],
-          maybeSingle: true,
-        });
-        const profile = result ? result.data : null;
+        profile = await loadProfileRecord(user.id);
         if (profile && profile.name) {
           userName = normalizeWechatMiniDefaultName(profile.name, user) || userName;
-        }
-        if (profile && profile.role) {
-          profileRole = String(profile.role).trim();
         }
       } catch (error) {
         // ignore
@@ -741,21 +771,13 @@ Page({
 
       if (!userRegisterDateText) {
         try {
-          const userResult = await dbQuery({
-            table: "users",
-            action: "select",
-            columns: "created_at",
-            filters: [{ column: "id", operator: "eq", value: user.id }],
-            maybeSingle: true,
-          });
-          const userRow = userResult ? userResult.data : null;
-          userRegisterDateText = formatRegisterDateText(userRow && userRow.created_at);
+          userRegisterDateText = await loadUserCreatedAt(user.id);
         } catch (error) {
           // ignore
         }
       }
 
-      const isAdmin = rawUserRole === "admin" && profileRole === "admin";
+      const isAdmin = hasAdminAccess(user, profile);
       const canChangePassword = !isWechatLogin;
       const nextState = {
         loading: false,

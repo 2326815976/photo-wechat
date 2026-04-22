@@ -1,4 +1,7 @@
 {
   "navigationStyle": "custom",
-  "navigationBarTitleText": "Web 页面管理"
+  "navigationBarTitleText": "Web 页面管理",
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
 }

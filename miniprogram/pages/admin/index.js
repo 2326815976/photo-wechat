@@ -192,6 +192,15 @@ const BETA_PRESET_ROUTE_OPTIONS = [
   { route_path: "/pages/admin/index", route_title: "后台管理" },
 ];
 
+for (let index = BETA_PRESET_ROUTE_OPTIONS.length - 1; index >= 0; index -= 1) {
+  if (
+    BETA_PRESET_ROUTE_OPTIONS[index] &&
+    BETA_PRESET_ROUTE_OPTIONS[index].route_path === "/pages/admin/index"
+  ) {
+    BETA_PRESET_ROUTE_OPTIONS.splice(index, 1);
+  }
+}
+
 function readErrorMessage(error, fallback) {
   if (error && typeof error === "object") {
     const message = error.message;

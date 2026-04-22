@@ -416,22 +416,6 @@ function readFeatureAccessDeniedMessage(payload, fallback) {
   return String(fallback || "进入功能失败");
 }
 
-function isLegacyMiniProgramBetaPayload(payload) {
-  const source = String((payload && payload.source) || "").trim().toLowerCase();
-  const reason = String((payload && payload.reason) || "").trim().toLowerCase();
-  return (
-    source === "legacy_compatible" ||
-    source === "page_center_with_legacy" ||
-    reason.startsWith("legacy_")
-  );
-}
-
-function assertMiniProgramPageCenterOnly(payload) {
-  if (isLegacyMiniProgramBetaPayload(payload)) {
-    throw new Error("当前小程序仅支持页面中心新体系，请先迁移旧内测数据。");
-  }
-}
-
 Page({
   data: {
     safeTop: 0,
@@ -557,8 +541,6 @@ Page({
     if (!payload || payload.error) {
       throw new Error(String((payload && payload.error) || "加载内测功能失败"));
     }
-    assertMiniProgramPageCenterOnly(payload);
-
     const rows = readArrayFromPayloadChain(payload.data || payload);
     const featureRows = rows.map((row) => {
       const id = String((row && row.feature_id) || "").trim();
@@ -632,8 +614,6 @@ Page({
       if (!payload || payload.error) {
         throw new Error(String((payload && payload.error) || "绑定内测码失败"));
       }
-      assertMiniProgramPageCenterOnly(payload);
-
       const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
       const featureId = String(data.feature_id || data.page_key || "").trim();
       const routePathRaw = String(data.route_path || "").trim();
@@ -682,8 +662,6 @@ Page({
       if (!payload || payload.error || payload.allowed !== true) {
         throw new Error(readFeatureAccessDeniedMessage(payload, "进入功能失败"));
       }
-      assertMiniProgramPageCenterOnly(payload);
-
       const data = payload && payload.data && typeof payload.data === "object" ? payload.data : {};
       const routePathRaw = String(data.route_path || target.route_path_raw || "").trim();
       await enterFeatureRoute(featureId, routePathRaw);

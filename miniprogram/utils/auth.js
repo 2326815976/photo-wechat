@@ -1,5 +1,27 @@
 const SESSION_COOKIE_NAME = "photo_session";
 const STORAGE_KEY = "photo_session_cookie_v1";
+const storedCookieClearListeners = new Set();
+
+function notifyStoredCookieCleared() {
+  storedCookieClearListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (error) {
+      // ignore listener error
+    }
+  });
+}
+
+function subscribeStoredCookieClear(listener) {
+  if (typeof listener !== "function") {
+    return () => {};
+  }
+
+  storedCookieClearListeners.add(listener);
+  return () => {
+    storedCookieClearListeners.delete(listener);
+  };
+}
 
 function getStoredCookie() {
   try {
@@ -25,6 +47,7 @@ function clearStoredCookie() {
   } catch (e) {
     // ignore
   }
+  notifyStoredCookieCleared();
 }
 
 function normalizeSetCookieRows(setCookieHeader) {
@@ -88,6 +111,7 @@ module.exports = {
   getStoredCookie,
   setStoredCookie,
   clearStoredCookie,
+  subscribeStoredCookieClear,
   resolveSessionCookieAction,
   extractSessionCookie,
 };

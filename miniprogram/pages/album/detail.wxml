@@ -12,7 +12,7 @@
 </view>
 
 <view wx:if="{{pageScaffoldReady}}" class="page">
-  <app-header
+  <!-- legacy app-header removed
     id="albumHeader"
     class="album-header-host"
     title="{{headerTitle}}"
@@ -21,7 +21,15 @@
     showBack="{{true}}"
     fallbackTab="pages/album/index"
     preferFallback="{{false}}"
-  />
+  -->
+
+  <secondary-page-shell
+    title="{{headerTitle}}"
+    fallbackTab="pages/album/index"
+    content-class="content"
+    useScrollView="{{false}}"
+    enableFlex="{{false}}"
+  >
 
   <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
@@ -476,4 +484,5 @@
     </view>
   </view>
 
+  </secondary-page-shell>
 </view>

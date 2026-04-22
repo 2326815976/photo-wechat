@@ -1,4 +1,10 @@
-<view class="album-detail-page" style="padding-top: {{contentTopPx}}px;">
+<secondary-page-shell
+  title="{{isSystemAlbum ? '照片墙管理' : '空间管理'}}"
+  fallbackRoute="/pages/admin/index"
+  preferFallback="{{true}}"
+  content-class="album-detail-page"
+  useScrollView="{{false}}"
+>
   <view wx:if="{{loading}}" class="loading-container">
     <view class="admin-loading-card admin-loading-card--page">
       <view class="admin-loading-card__orb">
@@ -9,12 +15,25 @@
     </view>
   </view>
 
+  <view wx:elif="{{authDenied}}" class="main-content">
+    <view class="header-section">
+      <view class="header-main">
+        <view class="header-info">
+          <text class="album-title">{{isSystemAlbum ? '公共图库管理' : ((album && album.title) || '空间管理')}}</text>
+          <text class="album-subtitle">管理员权限校验未通过</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="auth-tip">
+      <text class="auth-tip__title">无权访问</text>
+      <text class="auth-tip__desc">{{authErrorMessage || '请先使用管理员账号登录后再打开该页面'}}</text>
+    </view>
+  </view>
+
   <view wx:else class="main-content">
     <view class="header-section">
       <view class="header-main">
-        <view class="header-back-btn" bindtap="onBack">
-          <image class="header-back-btn__icon" src="/images/icons/arrow-left.svg" mode="aspectFit" />
-        </view>
         <view class="header-info">
           <text class="album-title">{{isSystemAlbum ? '照片墙管理' : (album.title || '未命名空间')}}</text>
           <text class="album-subtitle">{{isSystemAlbum ? '管理公开图集、展示顺序和页面可见状态' : '管理专属空间照片'}}</text>
@@ -595,4 +614,4 @@
     <text class="toast__icon">{{toastType === 'success' ? '✓' : (toastType === 'warning' ? '!' : '✕')}}</text>
     <text class="toast__text">{{toastMessage}}</text>
   </view>
-</view>
+</secondary-page-shell>

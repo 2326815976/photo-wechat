@@ -1,4 +1,5 @@
 const { requestJson, requestUpload } = require("../utils/cloudrun");
+const { getStoredCookie, subscribeStoredCookieClear } = require("../utils/auth");
 
 const SESSION_CACHE_TTL_MS = 45 * 1000;
 const TRANSIENT_DB_RETRY_TIMES = 2;
@@ -6,6 +7,11 @@ const TRANSIENT_DB_RETRY_DELAY_MS = 1200;
 let cachedSessionPayload = null;
 let cachedSessionAt = 0;
 let pendingSessionRequest = null;
+let sessionCacheGeneration = 0;
+
+function hasStoredSessionCookie() {
+  return Boolean(String(getStoredCookie() || "").trim());
+}
 
 function wait(ms) {
   const delay = Math.max(0, Number(ms || 0));
@@ -297,10 +303,13 @@ async function dbRpc(functionName, args, options) {
 }
 
 function clearSessionCache() {
+  sessionCacheGeneration += 1;
   cachedSessionPayload = null;
   cachedSessionAt = 0;
   pendingSessionRequest = null;
 }
+
+subscribeStoredCookieClear(clearSessionCache);
 
 function primeSessionCache(payload) {
   if (!payload || typeof payload !== "object") {
@@ -317,6 +326,11 @@ async function getSession(options) {
   const opts = options && typeof options === "object" ? options : {};
   const force = Boolean(opts.force || opts.forceRefresh);
 
+  if (!force && !hasStoredSessionCookie()) {
+    clearSessionCache();
+    return null;
+  }
+
   if (!force && cachedSessionPayload) {
     const age = Date.now() - Number(cachedSessionAt || 0);
     if (age >= 0 && age <= SESSION_CACHE_TTL_MS) {
@@ -328,8 +342,16 @@ async function getSession(options) {
     return pendingSessionRequest;
   }
 
+  const requestGeneration = sessionCacheGeneration;
   pendingSessionRequest = requestJson("/api/auth/session", { method: "GET" })
     .then((payload) => {
+      if (requestGeneration !== sessionCacheGeneration) {
+        return null;
+      }
+      if (!hasStoredSessionCookie()) {
+        clearSessionCache();
+        return null;
+      }
       cachedSessionPayload = payload || null;
       cachedSessionAt = Date.now();
       return payload;

@@ -2,6 +2,7 @@ page {
   background: #fffaf2;
 }
 
-.page-scroll {
-  height: 100vh;
+.page-center-content {
+  padding: 0;
+  background-image: none;
 }

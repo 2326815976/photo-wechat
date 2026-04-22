@@ -1,4 +1,6 @@
 {
   "navigationBarTitleText": "专属空间管理",
-  "usingComponents": {}
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
 }

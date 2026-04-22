@@ -1,12 +1,10 @@
-<app-header
+<secondary-page-shell
   title="{{channelTitle}}"
-  subtitle=""
-  showBack="{{true}}"
-  safeTop="{{safeTop}}"
   fallbackRoute="/pages/admin/index"
   preferFallback="{{true}}"
-/>
-
-<scroll-view scroll-y class="page-scroll">
+  useScrollView="{{true}}"
+  enableFlex="{{true}}"
+  content-class="page-center-content"
+>
   <page-center-panel id="pageCenterPanel" channel="{{channel}}" />
-</scroll-view>
+</secondary-page-shell>

@@ -1,4 +1,5 @@
 const { dbQuery, requestUpload, requestJson } = require("../../../services/photo-api");
+const { requireAdminSession } = require("../../../services/photo-admin-api");
 const { resolvePublicUrl } = require("../../../utils/storage-url");
 const { setCachedAlbumRootName } = require("../../../utils/album-root-name-cache");
 const { markGalleryCacheDirty } = require("../../../utils/gallery-cache");
@@ -707,6 +708,8 @@ Page({
     albumId: "",
     album: null,
     isSystemAlbum: false,
+    authDenied: false,
+    authErrorMessage: "",
     folders: [],
     photos: [],
     loading: true,
@@ -836,6 +839,23 @@ Page({
           }
         : null;
 
+    this.setData({
+      albumId,
+      safeTop,
+      contentTopPx,
+      album: initialAlbum,
+      isSystemAlbum,
+      authDenied: false,
+      authErrorMessage: "",
+      loading: true,
+    });
+    void this.bootstrapPage({
+      albumId,
+      initialAlbum,
+      isSystemAlbum,
+    });
+    return;
+
     const restoredDraft = loadTransientPageState(this.getUploadDraftStorageKey(albumId));
     const hasRestoredDraft = Boolean(restoredDraft && typeof restoredDraft === "object");
     this._restoredUploadDraft = hasRestoredDraft;
@@ -901,12 +921,144 @@ Page({
     this.loadAlbumData({ silent: hasRestoredPageState });
   },
 
+  async bootstrapPage(options) {
+    const current = options && typeof options === "object" ? options : {};
+    const albumId = String(current.albumId || "").trim();
+    const initialAlbum =
+      current.initialAlbum && typeof current.initialAlbum === "object"
+        ? Object.assign({}, current.initialAlbum)
+        : null;
+    const isSystemAlbum = Boolean(current.isSystemAlbum);
+
+    try {
+      await requireAdminSession();
+
+      const restoredDraft = loadTransientPageState(this.getUploadDraftStorageKey(albumId));
+      const hasRestoredDraft = Boolean(restoredDraft && typeof restoredDraft === "object");
+      this._restoredUploadDraft = hasRestoredDraft;
+
+      const restoredPageState = loadTransientPageState(this.getPageStateStorageKey(albumId));
+      const hasRestoredPageState = Boolean(restoredPageState && typeof restoredPageState === "object");
+      const restoredPhotos = hasRestoredPageState && Array.isArray(restoredPageState.photos)
+        ? restoredPageState.photos
+          .map((item) => normalizePhotoRecord(item))
+          .filter((item) => String(item.id || "").trim())
+        : [];
+      const restoredFolders = hasRestoredPageState && Array.isArray(restoredPageState.folders)
+        ? restoredPageState.folders
+          .map((item) => pickAlbumDetailFolderState(item))
+          .filter((item) => item.id)
+        : [];
+      const restoredAlbum =
+        hasRestoredPageState &&
+        restoredPageState.album &&
+        typeof restoredPageState.album === "object"
+          ? Object.assign({}, restoredPageState.album)
+          : null;
+      const restoredCurrentPage = hasRestoredPageState
+        ? Math.max(
+            1,
+            Math.min(
+              Number(restoredPageState.currentPage || 1),
+              Math.max(1, Math.ceil(restoredPhotos.length / 10))
+            )
+          )
+        : 1;
+
+      this.setData(
+        Object.assign(
+          {
+            album: restoredAlbum || initialAlbum,
+            isSystemAlbum,
+            authDenied: false,
+            authErrorMessage: "",
+          },
+          hasRestoredPageState
+            ? {
+                album: restoredAlbum || initialAlbum,
+                folders: restoredFolders,
+                photos: restoredPhotos,
+                rootFolderName: String(restoredPageState.rootFolderName || "根目录"),
+                rootPhotoCount: Math.max(0, Number(restoredPageState.rootPhotoCount || 0)),
+                selectedFolder: restoredPageState.selectedFolder || null,
+                selectedFolderName: String(
+                  restoredPageState.selectedFolderName ||
+                    restoredPageState.rootFolderName ||
+                    "根目录"
+                ),
+                currentPage: restoredCurrentPage,
+                totalCount: Math.max(
+                  0,
+                  Number(restoredPageState.totalCount || restoredPhotos.length)
+                ),
+                totalPages: Math.max(1, Number(restoredPageState.totalPages || 1)),
+                hasMore: Boolean(restoredPageState.hasMore),
+                loading: false,
+              }
+            : {},
+          hasRestoredDraft
+            ? {
+                selectedFolder:
+                  restoredDraft.selectedFolder ||
+                  (hasRestoredPageState ? restoredPageState.selectedFolder || null : null),
+                currentPage: Math.max(
+                  1,
+                  Number(restoredDraft.currentPage || restoredCurrentPage || 1)
+                ),
+                showUploadModal: Boolean(restoredDraft.showUploadModal),
+                uploadMode:
+                  String(restoredDraft.uploadMode || "batch") === "single"
+                    ? "single"
+                    : "batch",
+                singleImage: restoredDraft.singleImage || null,
+                singleStoryText: String(restoredDraft.singleStoryText || ""),
+                singleHighlight: Boolean(restoredDraft.singleHighlight),
+                singleShotDate:
+                  normalizeShotDate(restoredDraft.singleShotDate) || getTodayDateUTC8(),
+                singleShotLocation: normalizeShotLocation(restoredDraft.singleShotLocation),
+                batchShotDate:
+                  normalizeShotDate(restoredDraft.batchShotDate) || getTodayDateUTC8(),
+                batchShotLocation: normalizeShotLocation(restoredDraft.batchShotLocation),
+                batchImages: Array.isArray(restoredDraft.batchImages)
+                  ? restoredDraft.batchImages
+                  : [],
+                uploading: false,
+                uploadProgress: { current: 0, total: 0 },
+              }
+            : {}
+        ),
+        () => {
+          if (hasRestoredPageState) {
+            this.updateFilteredPhotos();
+          }
+        }
+      );
+
+      this.loadAlbumData({ silent: hasRestoredPageState });
+    } catch (error) {
+      this._restoredUploadDraft = false;
+      this.setData({
+        loading: false,
+        authDenied: true,
+        authErrorMessage: readErrorMessage(error, "无法验证管理员权限"),
+        folders: [],
+        photos: [],
+        filteredPhotos: [],
+        totalCount: 0,
+        totalPages: 1,
+        hasMore: false,
+      });
+    }
+  },
+
   onHide() {
+    if (this.data.authDenied) return;
     this.persistUploadDraft();
     this.persistPageState();
   },
 
   onUnload() {
+    if (this.data.authDenied) return;
     this.persistUploadDraft();
     this.persistPageState();
   },

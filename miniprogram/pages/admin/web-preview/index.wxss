@@ -1,1 +1,32 @@
-page {}
+@import "../../../styles/secondary-page-frame.wxss";
+
+.content {
+  padding: 0;
+  background-image: none;
+  min-height: 0;
+}
+
+.preview-status {
+  min-height: calc(100vh - 240rpx - env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 32rpx;
+  text-align: center;
+}
+
+.preview-status__title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #5d4037;
+  line-height: 1.4;
+}
+
+.preview-status__desc {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: rgba(93, 64, 55, 0.68);
+}

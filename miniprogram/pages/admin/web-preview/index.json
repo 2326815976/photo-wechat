@@ -1,3 +1,7 @@
 {
-  "navigationBarTitleText": "Web 预览"
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "Web 预览",
+  "usingComponents": {
+    "secondary-page-shell": "/components/secondary-page-shell/index"
+  }
 }

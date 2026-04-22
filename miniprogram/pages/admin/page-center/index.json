@@ -2,7 +2,7 @@
   "navigationStyle": "custom",
   "navigationBarTitleText": "页面管理",
   "usingComponents": {
-    "app-header": "/components/app-header/index",
+    "secondary-page-shell": "/components/secondary-page-shell/index",
     "page-center-panel": "/components/admin/page-center-panel/index"
   }
 }
