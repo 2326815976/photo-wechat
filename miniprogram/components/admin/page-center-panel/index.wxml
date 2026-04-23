@@ -221,12 +221,6 @@
                 </view>
               </view>
 
-              <view class="info-card info-card--plain" wx:if="{{dialogRow.isSecondaryPage}}">
-                <view class="info-card__title">{{dialogRow.pageKey === 'album-detail' ? '默认名称预览' : '入口名称预览'}}</view>
-                <text class="info-card__desc info-card__desc--strong">{{dialogRow.loginNavLabel}}</text>
-                <text class="helper-text">{{dialogRow.pageKey === 'album-detail' ? '这里只维护无相册名时的默认名称，实际页面顶部优先使用相册名。' : '显示后会同步作为页面顶部标题，隐藏后所属一级页不再展示。'}}</text>
-              </view>
-
               <view class="order-pills" wx:if="{{!dialogRow.isSecondaryPage || dialogRow.supportsSecondaryOrder}}">
                 <text class="{{item.pageKey === dialogRow.pageKey ? 'order-pill order-pill--active' : 'order-pill'}}" wx:for="{{dialogRow.supportsSecondaryOrder ? profileAuthenticatedSecondaryRows : navRows}}" wx:key="pageKey">{{index + 1}}. {{item.displayLabel}}</text>
                 <text class="order-empty" wx:if="{{dialogRow.supportsSecondaryOrder && !profileAuthenticatedSecondaryRows.length}}">当前还没有可排序的登录后入口。</text>

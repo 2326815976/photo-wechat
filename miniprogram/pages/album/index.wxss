@@ -540,15 +540,37 @@
 }
 
 .back-btn {
-  margin-top: 18rpx;
+  margin-top: 20rpx;
+  padding: 6rpx 10rpx;
+  border-radius: 999rpx;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
   font-size: 24rpx;
-  color: rgba(93, 64, 55, 0.60);
-  transition: color 0.2s ease, opacity 0.2s ease;
+  font-weight: 600;
+  color: rgba(93, 64, 55, 0.64);
+  line-height: 1.2;
+  box-sizing: border-box;
+  transition: color 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
 }
 
 .back-btn--active {
   color: #5D4037;
+  background: rgba(255, 200, 87, 0.06);
   opacity: 0.9;
+}
+
+.back-btn__icon {
+  font-size: 22rpx;
+  font-weight: 500;
+  line-height: 1;
+  opacity: 0.78;
+}
+
+.back-btn__label {
+  line-height: 1.2;
 }
 
 .modal-mask {

@@ -2288,33 +2288,47 @@
 
   <view class="pose-modal-mask pose-tag-modal-mask" wx:if="{{activeSection === 'poses' && posePanelTab === 'tags' && poseTagModalOpen}}" bindtap="onClosePoseTagModal">
     <view class="pose-modal pose-modal--tag" catchtap="onPoseModalTap">
-      <view class="pose-tag-modal-head">
-        <text class="pose-tag-modal-title">新增标签</text>
-        <view class="pose-tag-modal-close" bindtap="onClosePoseTagModal">
-          <text class="pose-tag-modal-close__icon">✕</text>
+      <view class="pose-editor-head">
+        <text class="pose-editor-title">新增标签</text>
+        <view class="pose-editor-close" bindtap="onClosePoseTagModal">
+          <text class="pose-editor-close__icon">✕</text>
         </view>
       </view>
 
-      <view class="pose-tag-modal-body">
-        <view class="pose-tag-form-item">
-          <text class="pose-tag-form-label">
-            标签名称 <text class="pose-tag-form-required">*</text>
+      <view class="pose-editor-body">
+        <view class="pose-editor-field">
+          <text class="pose-editor-label">
+            标签名称 <text class="pose-editor-required">*</text>
           </text>
+          <textarea
+            class="pose-tag-create-textarea"
+            value="{{poseTagCreateInput}}"
+            placeholder="输入标签名称，多个标签用逗号分隔&#10;例如：户外,室内,情侣,全身照,半身照"
+            maxlength="300"
+            bindinput="onPoseTagCreateInput"
+          />
         </view>
-        <textarea
-          class="pose-tag-textarea"
-          value="{{poseTagCreateInput}}"
-          placeholder="输入标签名称，多个标签用逗号分隔&#10;例如：户外,室内,情侣,全身照,半身照"
-          maxlength="300"
-          bindinput="onPoseTagCreateInput"
-        />
-        <text class="pose-tag-form-tip">💡 提示：可以一次添加多个标签，用逗号（中文或英文）分隔</text>
+        <view class="pose-editor-field" wx:if="{{poseTagCreatePreviewList.length}}">
+          <text class="pose-editor-label">本次将新增的标签</text>
+          <view class="pose-form-tags pose-tag-create-preview">
+            <view
+              class="pose-form-tag-chip"
+              wx:for="{{poseTagCreatePreviewList}}"
+              wx:key="*this"
+            >
+              <text>{{item}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="pose-tag-create-tip">
+          <text class="pose-tag-create-tip__text">💡 提示：可以一次添加多个标签，用逗号（中英文均可）分隔</text>
+        </view>
         <button
-          class="pose-tag-submit-btn"
+          class="pose-editor-submit-btn"
           bindtap="onCreatePoseTags"
-          hover-class="pose-tag-submit-btn--active"
+          hover-class="pose-editor-submit-btn--active"
           loading="{{poseTagCreating}}"
-          disabled="{{poseTagCreating || !poseTagCreateInput}}"
+          disabled="{{poseTagCreating}}"
         >
           {{poseTagCreating ? "添加中..." : "确认添加"}}
         </button>

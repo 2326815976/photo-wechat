@@ -2745,6 +2745,23 @@ button::after {
   background: #ffffff;
 }
 
+.pose-tag-create-textarea {
+  width: 100%;
+  min-height: 190rpx;
+  box-sizing: border-box;
+  border: 2rpx solid rgba(93, 64, 55, 0.2);
+  border-radius: 24rpx;
+  padding: 24rpx 32rpx;
+  font-size: 28rpx;
+  line-height: 1.45;
+  color: rgba(93, 64, 55, 0.92);
+  background: #ffffff;
+}
+
+.pose-tag-create-preview {
+  min-height: 76rpx;
+}
+
 .pose-tag-input {
   width: 100%;
   min-height: 90rpx;
@@ -2762,6 +2779,25 @@ button::after {
   margin-top: 4rpx;
   font-size: 24rpx;
   color: rgba(93, 64, 55, 0.62);
+}
+
+.pose-tag-create-tip {
+  border-radius: 18rpx;
+  background: #fffbf0;
+  padding: 18rpx 20rpx;
+  display: flex;
+  align-items: center;
+}
+
+.pose-tag-create-tip__text {
+  display: block;
+  width: 100%;
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: rgba(93, 64, 55, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pose-tag-submit-btn {

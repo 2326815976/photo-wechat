@@ -157,9 +157,10 @@
           </view>
         </view>
 
-        <button class="back-btn" hover-class="back-btn--active" wx:if="{{isLoggedIn && boundAlbums.length > 0}}" bindtap="hideKeyInput">
-          返回我的相册
-        </button>
+        <view class="back-btn" hover-class="back-btn--active" hover-stay-time="80" wx:if="{{isLoggedIn && boundAlbums.length > 0}}" bindtap="hideKeyInput">
+          <text class="back-btn__icon">←</text>
+          <text class="back-btn__label">返回我的相册</text>
+        </view>
       </view>
     </view>
   </view>

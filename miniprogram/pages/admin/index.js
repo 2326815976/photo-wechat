@@ -1763,6 +1763,7 @@ Page({
     poseTagAllSelected: false,
     poseTagModalOpen: false,
     poseTagCreateInput: "",
+    poseTagCreatePreviewList: [],
     poseTagCreating: false,
     poseTagEditModalOpen: false,
     poseTagEditId: 0,
@@ -4595,6 +4596,7 @@ Page({
     this.setData({
       poseTagModalOpen: true,
       poseTagCreateInput: "",
+      poseTagCreatePreviewList: [],
     });
   },
 
@@ -4663,12 +4665,17 @@ Page({
     this.setData({
       poseTagModalOpen: false,
       poseTagCreateInput: "",
+      poseTagCreatePreviewList: [],
     });
   },
 
   onPoseTagCreateInput(e) {
     const value = e && e.detail ? e.detail.value : "";
-    this.setData({ poseTagCreateInput: String(value || "") });
+    const nextValue = String(value || "");
+    this.setData({
+      poseTagCreateInput: nextValue,
+      poseTagCreatePreviewList: normalizePoseTagsInput(nextValue),
+    });
   },
 
   async onCreatePoseTags() {
@@ -4687,6 +4694,7 @@ Page({
       this.setData({
         poseTagModalOpen: false,
         poseTagCreateInput: "",
+        poseTagCreatePreviewList: [],
       });
 
       if (insertedCount > 0 && skippedCount === 0) {

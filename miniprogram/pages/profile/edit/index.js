@@ -269,17 +269,13 @@ Page({
         wechat: wechat || null,
       };
 
-      if (isWechatMiniProgramAccount(user)) {
-        await this.saveProfileByTable(user.id, payload);
-      } else {
-        try {
-          await this.saveProfileByAuthApi(payload);
-        } catch (error) {
-          if (!isTransientBackendError(error) || !canFallbackToProfileTable(user, phone)) {
-            throw error;
-          }
-          await this.saveProfileByTable(user.id, payload);
+      try {
+        await this.saveProfileByAuthApi(payload);
+      } catch (error) {
+        if (!isTransientBackendError(error) || !canFallbackToProfileTable(user, phone)) {
+          throw error;
         }
+        await this.saveProfileByTable(user.id, payload);
       }
 
       clearSessionCache();

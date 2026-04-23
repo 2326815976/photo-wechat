@@ -649,6 +649,11 @@ Page({
         wxLogin(),
         requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
       ]);
+      const wechatNickName = String((wechatProfile && wechatProfile.nickName) || "").trim();
+      if (!wechatNickName) {
+        wx.showToast({ title: "请先允许获取微信昵称", icon: "none" });
+        return;
+      }
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
         wx.showToast({ title: "未获取到微信登录凭证，请重试", icon: "none" });
