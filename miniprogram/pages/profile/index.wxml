@@ -48,7 +48,16 @@
 
     <view wx:else>
       <view class="id-card motion-fade-up motion-delay-2">
-        <view class="avatar">{{userAvatarText}}</view>
+        <view class="avatar">
+          <image
+            wx:if="{{userAvatarUrl}}"
+            class="avatar-image"
+            src="{{userAvatarUrl}}"
+            mode="aspectFill"
+            binderror="onAvatarLoadError"
+          />
+          <text wx:else class="avatar-text">{{userAvatarText}}</text>
+        </view>
         <view class="id-info">
           <text class="id-name">{{userName}}</text>
           <view class="id-sub-row id-sub-row--register" wx:if="{{userRegisterDateText}}">

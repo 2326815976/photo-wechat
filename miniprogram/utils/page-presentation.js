@@ -1,4 +1,4 @@
-﻿const { isTabBarPagePath } = require("./runtime-config");
+const { isTabBarPagePath } = require("./runtime-config");
 
 function normalizeMiniProgramRoutePath(value) {
   return String(value || "")

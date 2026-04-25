@@ -1,54 +1,53 @@
-<view>
-  <secondary-page-shell
-    shell-class="page"
-    managedPageKey="profile-edit"
+<view class="page">
+  <app-header
     title="编辑个人资料"
-    subtitle=""
+    safeTop="{{safeTop}}"
+    showBack="{{true}}"
     fallbackTab="pages/profile/index"
-    content-class="content"
-    useScrollView="{{true}}"
-    enableFlex="{{true}}"
-  >
+  />
+
+  <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
-      <text class="config-tip__title">需要配置云托管服务名</text>
-      <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）。</text>
+      <text class="config-tip__title">需要先配置云托管服务名</text>
+      <text class="config-tip__desc">请在 `miniprogram/config.js` 中填写 `cloudRunService`，用于透传 `X-WX-SERVICE`。</text>
     </view>
 
-    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2" wx:elif="{{loading}}">
-      <view class="admin-loading-card__orb">
-        <view class="admin-loading-card__spinner"></view>
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
       </view>
-      <text class="admin-loading-card__title">拾光中...</text>
-      <text class="admin-loading-card__desc">正在加载个人资料</text>
+      <view class="loading-text">
+        <text class="loading-title">加载中...</text>
+        <text class="loading-desc">正在加载个人资料</text>
+      </view>
     </view>
 
-    <view wx:elif="{{success}}" class="edit-shell">
-      <view class="state-card success-card motion-pop-in">
-        <view class="state-icon-wrap">
-          <image class="state-icon" src="/images/icons/save-yellow.svg" mode="aspectFit" />
+    <view wx:if="{{!loading}}">
+      <view class="success-card motion-pop-in" wx:if="{{success}}">
+        <view class="success-icon">
+          <image class="success-icon-img" src="/images/icons/save-yellow.svg" mode="aspectFit" />
         </view>
-        <text class="state-title">保存成功！</text>
-        <text class="state-desc">个人资料已更新，正在返回上一页</text>
+        <text class="success-title">保存成功！</text>
+        <text class="success-desc">个人资料已更新</text>
       </view>
-    </view>
 
-    <view wx:else class="edit-shell">
-      <view class="form-card motion-fade-up motion-delay-2">
-        <view class="form-card__accent"></view>
-
-        <view class="form-grid">
+      <view class="paper-card motion-fade-up motion-delay-2" wx:else>
+        <view class="form">
           <view class="form-item">
             <view class="label">
-              <image class="label-icon" src="/images/icons/user-brown.svg" mode="aspectFit" />
               <text class="label-text">用户名 *</text>
             </view>
             <input
               class="input {{focusField === 'name' ? 'input--focus' : ''}}"
+              type="{{supportsWechatNicknameInput ? 'nickname' : 'text'}}"
               placeholder="请输入用户名"
-              placeholder-class="input-placeholder"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
               value="{{formData.name}}"
+              focus="{{nameInputFocus}}"
               data-field="name"
               bindinput="onInput"
+              bindchange="onInputChange"
               bindfocus="onFieldFocus"
               bindblur="onFieldBlur"
               maxlength="20"
@@ -64,10 +63,11 @@
               class="input {{focusField === 'phone' ? 'input--focus' : ''}}"
               type="number"
               placeholder="请输入手机号（选填）"
-              placeholder-class="input-placeholder"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
               value="{{formData.phone}}"
               data-field="phone"
               bindinput="onInput"
+              bindchange="onInputChange"
               bindfocus="onFieldFocus"
               bindblur="onFieldBlur"
               maxlength="11"
@@ -82,39 +82,29 @@
             <input
               class="input {{focusField === 'wechat' ? 'input--focus' : ''}}"
               placeholder="请输入微信号（选填）"
-              placeholder-class="input-placeholder"
+              placeholder-style="color: rgba(93, 64, 55, 0.4);"
               value="{{formData.wechat}}"
               data-field="wechat"
               bindinput="onInput"
+              bindchange="onInputChange"
               bindfocus="onFieldFocus"
               bindblur="onFieldBlur"
               maxlength="32"
             />
           </view>
-        </view>
 
-        <view class="tip-box">
-          <image class="tip-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
-          <text class="tip-text">填写手机号和微信号后，预约时会自动填充</text>
-        </view>
-
-        <view class="error-card motion-pop-in" wx:if="{{error}}">
-          <text class="error-text">{{error}}</text>
-        </view>
-
-        <button
-          class="submit-btn {{saving || serviceMissing ? 'submit-btn--disabled' : ''}}"
-          hover-class="{{saving || serviceMissing ? '' : 'submit-btn--active'}}"
-          bindtap="submit"
-          loading="{{false}}"
-          disabled="{{saving || serviceMissing}}"
-        >
-          <view class="submit-row">
-            <image class="submit-icon" src="/images/icons/save-brown.svg" mode="aspectFit" wx:if="{{!saving}}" />
-            <text>{{saving ? '保存中...' : '保存修改'}}</text>
+          <view class="error motion-pop-in" wx:if="{{error}}">
+            <text class="error-text">{{error}}</text>
           </view>
-        </button>
+
+          <button class="btn-submit" bindtap="submit" disabled="{{saving || serviceMissing}}">
+            <view class="btn-row">
+              <image class="btn-icon" src="/images/icons/save-brown.svg" mode="aspectFit" wx:if="{{!saving}}" />
+              <text class="btn-text">{{saving ? '保存中...' : '保存修改'}}</text>
+            </view>
+          </button>
+        </view>
       </view>
     </view>
-  </secondary-page-shell>
+  </view>
 </view>

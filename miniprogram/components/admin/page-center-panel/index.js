@@ -1884,6 +1884,7 @@ Component({
     const currentRule = normalizeRuleForm(currentRow, this.data.channel, currentRow.currentRule);
     const targetRule = normalizeRuleForm(targetRow, this.data.channel, targetRow.currentRule);
     this.setData({ savingKey: `${pageKey}:${isSecondaryOrder ? "secondary-move" : "move"}` });
+    let swapPersisted = false;
     try {
       await requestJson("/api/admin/page-center/pages", {
         method: "POST",
@@ -1895,12 +1896,31 @@ Component({
         data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule, { navOrder: currentRule.navOrder }),
         timeout: 10000,
       });
+      swapPersisted = true;
       await this.loadOverview();
       this.showNotice(
         "success",
         isSecondaryOrder ? "登录后菜单顺序已更新" : "底部菜单顺序已更新"
       );
     } catch (error) {
+      if (!swapPersisted) {
+        try {
+          await Promise.all([
+            requestJson("/api/admin/page-center/pages", {
+              method: "POST",
+              data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule),
+              timeout: 10000,
+            }),
+            requestJson("/api/admin/page-center/pages", {
+              method: "POST",
+              data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule),
+              timeout: 10000,
+            }),
+          ]);
+        } catch (_) {
+          // ignore rollback errors
+        }
+      }
       this.showNotice(
         "error",
         readErrorMessage(error, isSecondaryOrder ? "调整登录后菜单顺序失败" : "调整底部菜单顺序失败")

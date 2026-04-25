@@ -92,9 +92,19 @@ const ALBUM_COVER_MAX_LONG_EDGE = 1920;
 const ALBUM_COVER_COMPRESS_QUALITIES = [86, 78, 70, 62];
 const ADMIN_GALLERY_UPLOAD_DRAFT_KEY = "admin_gallery_upload_draft_v1";
 const ADMIN_GALLERY_UPLOAD_DRAFT_TTL_MS = 30 * 60 * 1000;
-const FIXED_PUBLIC_ORIGIN = "https://guangyao666.xyz";
+
+function normalizePublicOrigin(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
 function resolveAppPublicUrl() {
-  return FIXED_PUBLIC_ORIGIN;
+  return normalizePublicOrigin(
+    runtimeConfig.appUrl ||
+      runtimeConfig.cloudRunBaseUrl ||
+      runtimeConfig.cloudRunOrigin ||
+      runtimeConfig.cloudrunOrigin ||
+      ""
+  );
 }
 
 const ADMIN_SECTION_META = {
@@ -2445,7 +2455,7 @@ Page({
       const adminName = String(user.name || user.phone || user.email || "管理员");
       this.setData({ adminName });
 
-      await Promise.all([
+      const bootstrapResults = await Promise.allSettled([
         this.loadStats({ throwOnError: false }),
         this.loadBlockedDates({ throwOnError: false }),
         this.loadBookingTypes({ throwOnError: false }),
@@ -2458,6 +2468,10 @@ Page({
         this.loadAboutSettings(),
         this.loadRecentBookings({ throwOnError: false }),
       ]);
+      const failedBootstrapCount = bootstrapResults.filter((item) => item.status === "rejected").length;
+      if (failedBootstrapCount > 0) {
+        this.showNotice("error", `有 ${failedBootstrapCount} 个模块加载失败，可稍后下拉刷新重试`);
+      }
     } catch (error) {
       const message = readErrorMessage(error, "管理后台加载失败");
       const authDenied =
@@ -9849,6 +9863,16 @@ Page({
       albumQrAccessKey: key,
       albumQrImageUrl: buildAlbumQrUrl(key),
     });
+  },
+
+  onAlbumQrImageError() {
+    if (!String(this.data.albumQrImageUrl || "").trim()) {
+      return;
+    }
+    this.setData({
+      albumQrImageUrl: "",
+    });
+    this.showNotice("error", "二维码生成失败，请复制访问链接");
   },
 
   onCloseAlbumQrModal() {

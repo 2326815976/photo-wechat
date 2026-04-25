@@ -843,6 +843,12 @@
   color: #5d4037;
 }
 
+.booking-modal__textarea--story {
+  min-height: 104rpx;
+  max-height: 240rpx;
+  transition: height 0.14s ease;
+}
+
 .booking-modal__submit {
   width: 100%;
   height: 64rpx;
@@ -1113,13 +1119,21 @@
   color: rgba(93, 64, 55, 0.55);
 }
 
+.shot-date-picker-wrap {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
 .shot-date-picker {
   width: 100%;
+  max-width: 100%;
   min-height: 74rpx;
   border-radius: 14rpx;
   border: 2rpx solid rgba(93, 64, 55, 0.18);
   background: #fffbf0;
   padding: 0 14rpx;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   color: #5d4037;

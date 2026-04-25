@@ -1,4 +1,4 @@
-﻿const { getSession, extractSessionUser, requestJson } = require("../../../services/photo-api");
+const { getSession, extractSessionUser, requestJson } = require("../../../services/photo-api");
 const {
   isTabBarPagePath,
   normalizeRuntimeConfig,

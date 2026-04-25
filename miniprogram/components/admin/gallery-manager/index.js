@@ -2,6 +2,7 @@ const { dbQuery, requestUpload, requestJson } = require("../../../services/photo
 const { resolvePublicUrl } = require("../../../utils/storage-url");
 const { setCachedAlbumRootName } = require("../../../utils/album-root-name-cache");
 const { markGalleryCacheDirty } = require("../../../utils/gallery-cache");
+const { detectImageShotDate } = require("../../../utils/image-shot-date");
 
 const ROOT_FOLDER_SENTINEL = '__ROOT__';
 const DEFAULT_SORT_ORDER = 2147483647;
@@ -10,8 +11,14 @@ const TOP_PIN_CONFLICT_SORT_ORDER = 11;
 const SYSTEM_GALLERY_ALBUM_ID = "00000000-0000-0000-0000-000000000000";
 const DELETE_FOLDER_CONFIRM_PHRASE = "确认删除";
 const DELETE_FOLDER_MANUAL_CONFIRM_THRESHOLD = 10;
+const STORY_TEXTAREA_MIN_HEIGHT_RPX = 104;
+const STORY_TEXTAREA_MAX_HEIGHT_RPX = 240;
+const STORY_TEXTAREA_LINE_HEIGHT_RPX = 36;
+const STORY_TEXTAREA_VERTICAL_PADDING_RPX = 28;
+const STORY_TEXTAREA_APPROX_CHARS_PER_LINE = 22;
 const ALBUM_FOLDER_SORT_MIGRATION_HINT = "数据库缺少 album_folders.sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/15_album_folder_sort_order.sql";
 const ALBUM_FOLDER_SORT_READONLY_HINT = "当前后端暂不支持 album_folders.sort_order, 已回退为旧版顺序展示; 如需启用上移/下移, 请同步数据库迁移和后端字段白名单: photo/sql/migrations/15_album_folder_sort_order.sql";
+const ALBUM_FOLDER_VISIBILITY_MIGRATION_HINT = "数据库缺少 album_folders.is_hidden 字段，请先执行 SQL 迁移：photo/sql/migrations/32_album_folder_visibility.sql";
 const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_highlight / sort_order 字段，请先执行 SQL 迁移：photo/sql/migrations/06_album_photo_story_sort.sql";
 const ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT = "数据库缺少 shot_date 字段，请先执行 SQL 迁移：photo/sql/migrations/07_album_photo_shot_date.sql";
 const ALBUM_PHOTO_SHOT_LOCATION_MIGRATION_HINT = "数据库缺少 shot_location 字段，请先执行 SQL 迁移：photo/sql/migrations/08_album_photo_shot_location.sql";
@@ -30,6 +37,58 @@ function normalizeStoryText(value) {
     return "";
   }
   return text;
+}
+
+function getWindowWidth() {
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
+      const info = wx.getWindowInfo();
+      const width = Number(info && info.windowWidth);
+      if (Number.isFinite(width) && width > 0) return width;
+    }
+  } catch (error) {}
+
+  try {
+    if (typeof wx !== "undefined" && typeof wx.getSystemInfoSync === "function") {
+      const info = wx.getSystemInfoSync();
+      const width = Number(info && info.windowWidth);
+      if (Number.isFinite(width) && width > 0) return width;
+    }
+  } catch (error) {}
+
+  return 375;
+}
+
+function toRpxFromPx(value) {
+  const px = Number(value);
+  if (!Number.isFinite(px) || px <= 0) return 0;
+  return Math.round((px * 750) / getWindowWidth());
+}
+
+function clampStoryTextareaHeight(value) {
+  const height = Number(value);
+  if (!Number.isFinite(height) || height <= 0) return STORY_TEXTAREA_MIN_HEIGHT_RPX;
+  return Math.max(STORY_TEXTAREA_MIN_HEIGHT_RPX, Math.min(STORY_TEXTAREA_MAX_HEIGHT_RPX, Math.round(height)));
+}
+
+function estimateStoryTextareaHeight(text) {
+  const lineCount = String(text == null ? "" : text)
+    .split(/\r\n|\r|\n/)
+    .reduce((count, segment) => {
+      const length = Array.from(segment || "").length;
+      return count + Math.max(1, Math.ceil(length / STORY_TEXTAREA_APPROX_CHARS_PER_LINE));
+    }, 0);
+  return clampStoryTextareaHeight(lineCount * STORY_TEXTAREA_LINE_HEIGHT_RPX + STORY_TEXTAREA_VERTICAL_PADDING_RPX);
+}
+
+function buildStoryTextareaState(text, measuredHeightRpx) {
+  const measured = Number(measuredHeightRpx);
+  const estimatedHeight = estimateStoryTextareaHeight(text);
+  const rawHeight = Number.isFinite(measured) && measured > 0 ? measured : estimatedHeight;
+  return {
+    editingStoryTextareaHeight: clampStoryTextareaHeight(rawHeight),
+    editingStoryTextareaScrollable: rawHeight > STORY_TEXTAREA_MAX_HEIGHT_RPX,
+  };
 }
 
 function getTodayDateUTC8() {
@@ -56,6 +115,18 @@ function normalizeShotLocation(value) {
     return "";
   }
   return raw;
+}
+
+function resolveDetectedShotDates(images) {
+  const dates = (Array.isArray(images) ? images : [])
+    .map((item) => normalizeShotDate(item && item.detectedShotDate))
+    .filter(Boolean);
+  const uniqueDates = Array.from(new Set(dates));
+  return {
+    dates,
+    uniqueDates,
+    singleDate: uniqueDates.length === 1 ? uniqueDates[0] : "",
+  };
 }
 
 function normalizeDbBoolean(value, fallback) {
@@ -129,6 +200,21 @@ function isDeleteFolderConfirmMatched(value) {
 function normalizeFolderSortOrder(value) {
   const sortValue = Number(value);
   return Number.isFinite(sortValue) && sortValue > 0 ? Math.round(sortValue) : DEFAULT_SORT_ORDER;
+}
+
+function normalizePhotoSortOrder(value) {
+  const sortValue = Number(value);
+  return Number.isFinite(sortValue) && sortValue > 0 ? Math.round(sortValue) : DEFAULT_SORT_ORDER;
+}
+
+function compareManagedPhotos(a, b) {
+  const normalizedA = normalizePhotoSortOrder(a && a.sort_order);
+  const normalizedB = normalizePhotoSortOrder(b && b.sort_order);
+  if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+  const shotA = normalizeShotDate(a && a.shot_date) || "";
+  const shotB = normalizeShotDate(b && b.shot_date) || "";
+  if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
+  return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
 }
 
 function sortAlbumFolders(rows) {
@@ -682,6 +768,7 @@ const pageDefinition = {
     loading: true,
     selectedFolder: null,
     selectedFolderName: "根目录",
+    selectedFolderHidden: false,
     selectedFolderCanMoveTop: false,
     selectedFolderCanMoveUp: false,
     selectedFolderCanMoveDown: false,
@@ -730,6 +817,8 @@ const pageDefinition = {
     editingStoryPhotoId: "",
     editingStoryText: "",
     editingStoryHighlight: false,
+    editingStoryTextareaHeight: STORY_TEXTAREA_MIN_HEIGHT_RPX,
+    editingStoryTextareaScrollable: false,
     showShotDateModal: false,
     editingShotDatePhotoId: "",
     editingShotDateValue: getTodayDateUTC8(),
@@ -871,28 +960,49 @@ const pageDefinition = {
   async loadFolders(options) {
     const silent = Boolean(options && options.silent);
     try {
-      let result = await dbQuery({
-        table: "album_folders",
-        action: "select",
-        columns: "id,album_id,name,sort_order,created_at",
-        filters: [{ column: "album_id", operator: "eq", value: this.data.albumId }],
-        orders: [
-          { column: "sort_order", ascending: true },
-          { column: "created_at", ascending: true },
-        ],
-      });
-      let folderSortOrderAvailable = true;
-      const folderSortReadError = readRpcError(result, "获取文件夹失败");
-
-      if (hasRpcError(result) && isColumnUnavailableError(folderSortReadError, "sort_order", "album_folders")) {
-        folderSortOrderAvailable = false;
-        result = await dbQuery({
+      const queryFolders = (includeSortOrder, includeHidden) =>
+        dbQuery({
           table: "album_folders",
           action: "select",
-          columns: "id,album_id,name,created_at",
+          columns: includeSortOrder
+            ? (includeHidden ? "id,album_id,name,is_hidden,sort_order,created_at" : "id,album_id,name,sort_order,created_at")
+            : (includeHidden ? "id,album_id,name,is_hidden,created_at" : "id,album_id,name,created_at"),
           filters: [{ column: "album_id", operator: "eq", value: this.data.albumId }],
-          orders: [{ column: "created_at", ascending: true }],
+          orders: includeSortOrder
+            ? [
+                { column: "sort_order", ascending: true },
+                { column: "created_at", ascending: true },
+              ]
+            : [{ column: "created_at", ascending: true }],
         });
+
+      let includeSortOrder = true;
+      let includeHidden = true;
+      let folderSortOrderAvailable = true;
+      let result = null;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        result = await queryFolders(includeSortOrder, includeHidden);
+        if (!hasRpcError(result)) {
+          break;
+        }
+        const message = readRpcError(result, "获取文件夹失败");
+        const sortOrderUnavailable =
+          includeSortOrder && isColumnUnavailableError(message, "sort_order", "album_folders");
+        const hiddenUnavailable =
+          includeHidden && isColumnUnavailableError(message, "is_hidden", "album_folders");
+
+        if (!sortOrderUnavailable && !hiddenUnavailable) {
+          break;
+        }
+
+        if (sortOrderUnavailable) {
+          includeSortOrder = false;
+          folderSortOrderAvailable = false;
+        }
+        if (hiddenUnavailable) {
+          includeHidden = false;
+        }
       }
 
       if (!hasRpcError(result)) {
@@ -906,6 +1016,7 @@ const pageDefinition = {
         );
         const folders = sortAlbumFolders(folderRows.map(folder => ({
           ...folder,
+          is_hidden: normalizeDbBoolean(folder && folder.is_hidden, false),
           sort_order: normalizeFolderSortOrder(folder && folder.sort_order),
           photoCount: previousCountMap.get(String(folder.id)) || 0
         })));
@@ -914,16 +1025,12 @@ const pageDefinition = {
           !folders.some((folder) => String(folder.id) === String(this.data.selectedFolder))
             ? null
             : this.data.selectedFolder;
-        const nextSelectedFolderName =
-          nextSelectedFolder === null
-            ? this.data.rootFolderName || "根目录"
-            : (
-                folders.find((folder) => String(folder.id) === String(nextSelectedFolder)) || {}
-              ).name || "";
+        const nextSelectedFolderState = this.resolveSelectedFolderState(nextSelectedFolder, folders);
         this.setData({
           folders,
           selectedFolder: nextSelectedFolder,
-          selectedFolderName: String(nextSelectedFolderName || ""),
+          selectedFolderName: nextSelectedFolderState.selectedFolderName,
+          selectedFolderHidden: nextSelectedFolderState.selectedFolderHidden,
           folderSortOrderAvailable,
           ...this.resolveSelectedFolderMoveState(nextSelectedFolder, folders, { folderSortOrderAvailable }),
         }, () => {
@@ -968,18 +1075,12 @@ const pageDefinition = {
         }
         return filters;
       };
-      const useTimeDescOrders = Boolean(this.data.isSystemAlbum);
-      const timeDescOrders = [{ column: "created_at", ascending: false }, { column: "shot_date", ascending: false }];
-      const primaryOrders = useTimeDescOrders
-        ? timeDescOrders
-        : [
-            { column: "sort_order", ascending: true },
-            { column: "shot_date", ascending: false },
-            { column: "created_at", ascending: false },
-          ];
-      const ordersWithoutSort = useTimeDescOrders
-        ? timeDescOrders
-        : [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }];
+      const primaryOrders = [
+        { column: "sort_order", ascending: true },
+        { column: "shot_date", ascending: false },
+        { column: "created_at", ascending: false },
+      ];
+      const ordersWithoutSort = [{ column: "shot_date", ascending: false }, { column: "created_at", ascending: false }];
       const ordersWithoutShotDate = [{ column: "created_at", ascending: false }];
       const fullColumns =
         "id,album_id,folder_id,url,thumbnail_url,preview_url,original_url,width,height,story_text,is_highlight,sort_order,shot_date,shot_location,is_public,view_count,like_count,created_at";
@@ -1355,35 +1456,14 @@ const pageDefinition = {
   },
 
   updateFilteredPhotos() {
-    const { photos, selectedFolder, isSystemAlbum } = this.data;
+    const { photos, selectedFolder } = this.data;
     const selectedSet = new Set((Array.isArray(this.data.selectedPhotoIds) ? this.data.selectedPhotoIds : []).map(id => String(id)));
 
     let filteredPhotos = selectedFolder
       ? photos.filter(p => String(p.folder_id || "") === String(selectedFolder))
       : photos.filter(p => !p.folder_id);
 
-    filteredPhotos = filteredPhotos.slice().sort((a, b) => {
-      if (isSystemAlbum) {
-        const createdCompare = String((b && b.created_at) || "").localeCompare(
-          String((a && a.created_at) || ""),
-          "zh-CN"
-        );
-        if (createdCompare !== 0) return createdCompare;
-        const shotA = normalizeShotDate(a && a.shot_date) || "";
-        const shotB = normalizeShotDate(b && b.shot_date) || "";
-        if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
-        return 0;
-      }
-      const sortA = Number(a && a.sort_order);
-      const sortB = Number(b && b.sort_order);
-      const normalizedA = Number.isFinite(sortA) && sortA > 0 ? Math.round(sortA) : DEFAULT_SORT_ORDER;
-      const normalizedB = Number.isFinite(sortB) && sortB > 0 ? Math.round(sortB) : DEFAULT_SORT_ORDER;
-      if (normalizedA !== normalizedB) return normalizedA - normalizedB;
-      const shotA = normalizeShotDate(a && a.shot_date) || "";
-      const shotB = normalizeShotDate(b && b.shot_date) || "";
-      if (shotA !== shotB) return shotB.localeCompare(shotA, "zh-CN");
-      return String((b && b.created_at) || "").localeCompare(String((a && a.created_at) || ""), "zh-CN");
-    });
+      filteredPhotos = filteredPhotos.slice().sort(compareManagedPhotos);
 
     filteredPhotos = filteredPhotos.map(photo => {
       const dateText = formatPhotoDateWithYear(photo.shot_date || photo.created_at);
@@ -1413,6 +1493,23 @@ const pageDefinition = {
       filteredPhotos,
       ...this.resolveSelectedFolderMoveState(selectedFolder, this.data.folders),
     });
+  },
+
+  resolveSelectedFolderState(folderId, folders) {
+    const normalizedFolderId = String(folderId == null ? "" : folderId).trim();
+    if (!normalizedFolderId) {
+      return {
+        selectedFolderName: String(this.data.rootFolderName || "根目录"),
+        selectedFolderHidden: false,
+      };
+    }
+    const matched = (Array.isArray(folders) ? folders : []).find(
+      (folder) => String(folder && folder.id) === normalizedFolderId
+    );
+    return {
+      selectedFolderName: String((matched && matched.name) || ""),
+      selectedFolderHidden: normalizeDbBoolean(matched && matched.is_hidden, false),
+    };
   },
 
   resolveSelectedFolderMoveState(folderId, folders, options) {
@@ -1530,17 +1627,11 @@ const pageDefinition = {
       rawFolderId === "null"
         ? null
         : String(rawFolderId);
-    const selectedFolderName =
-      folderId === null
-        ? this.data.rootFolderName || "根目录"
-        : (
-            (Array.isArray(this.data.folders) ? this.data.folders : []).find(
-              (folder) => String(folder.id) === String(folderId)
-            ) || {}
-          ).name || "";
+    const selectedFolderState = this.resolveSelectedFolderState(folderId, this.data.folders);
     this.setData({
       selectedFolder: folderId,
-      selectedFolderName: String(selectedFolderName || ""),
+      selectedFolderName: selectedFolderState.selectedFolderName,
+      selectedFolderHidden: selectedFolderState.selectedFolderHidden,
       ...this.resolveSelectedFolderMoveState(folderId, this.data.folders),
       currentPage: 1,
       isSelectionMode: false,
@@ -1886,6 +1977,80 @@ const pageDefinition = {
       reordered,
       direction === "top" ? "文件夹已置顶" : direction === "up" ? "文件夹已上移" : "文件夹已下移"
     );
+  },
+
+  async onToggleFolderVisibility() {
+    if (this.data.actionLoading) return;
+    const folderId = String(this.data.selectedFolder || "").trim();
+    if (!folderId || folderId === ROOT_FOLDER_SENTINEL) {
+      return;
+    }
+
+    const folders = Array.isArray(this.data.folders) ? this.data.folders : [];
+    const targetFolder = folders.find((folder) => String(folder.id) === folderId);
+    if (!targetFolder) {
+      this.showToastMessage("目标文件夹不存在", "warning");
+      return;
+    }
+
+    const nextHidden = !normalizeDbBoolean(targetFolder.is_hidden, false);
+    this.setData({ actionLoading: true });
+
+    try {
+      const result = await dbQuery({
+        table: "album_folders",
+        action: "update",
+        values: { is_hidden: nextHidden ? 1 : 0 },
+        filters: [
+          { column: "id", operator: "eq", value: folderId },
+          { column: "album_id", operator: "eq", value: this.data.albumId },
+        ],
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,album_id,name,is_hidden,sort_order,created_at",
+      });
+
+      if (hasRpcError(result)) {
+        const message = readRpcError(result, "更新文件夹显示状态失败");
+        if (isColumnUnavailableError(message, "is_hidden", "album_folders")) {
+          this.showToastMessage(ALBUM_FOLDER_VISIBILITY_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      const updatedFolder = readRpcData(result, null);
+      if (!updatedFolder) {
+        this.showToastMessage("文件夹不存在或已删除", "warning");
+        return;
+      }
+
+      const nextFolders = folders.map((folder) => (
+        String(folder.id) === folderId
+          ? Object.assign({}, folder, {
+              is_hidden: normalizeDbBoolean(updatedFolder.is_hidden, nextHidden),
+            })
+          : folder
+      ));
+      const nextSelectedFolderState = this.resolveSelectedFolderState(folderId, nextFolders);
+
+      this.setData({
+        folders: nextFolders,
+        selectedFolderHidden: nextSelectedFolderState.selectedFolderHidden,
+        selectedFolderName: nextSelectedFolderState.selectedFolderName,
+      });
+
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
+      this.showToastMessage(nextHidden ? "文件夹已隐藏" : "文件夹已显示", "success");
+    } catch (error) {
+      console.error("更新文件夹显示状态失败:", error);
+      this.showToastMessage(`更新失败：${readErrorMessage(error, "请稍后重试")}`, "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
   },
 
   // 删除文件夹
@@ -2389,6 +2554,7 @@ const pageDefinition = {
       this.setData({
         selectedFolder: null,
         selectedFolderName: this.data.rootFolderName || "根目录",
+        selectedFolderHidden: false,
       });
     }
 
@@ -2667,12 +2833,13 @@ const pageDefinition = {
       return;
     }
 
-    this.setData({
+    const storyText = normalizeStoryText(target.story_text);
+    this.setData(Object.assign({
       showStoryModal: true,
       editingStoryPhotoId: photoId,
-      editingStoryText: normalizeStoryText(target.story_text),
+      editingStoryText: storyText,
       editingStoryHighlight: Boolean(target.is_highlight),
-    });
+    }, buildStoryTextareaState(storyText)));
   },
 
   onCloseStoryModal() {
@@ -2682,11 +2849,24 @@ const pageDefinition = {
       editingStoryPhotoId: "",
       editingStoryText: "",
       editingStoryHighlight: false,
+      editingStoryTextareaHeight: STORY_TEXTAREA_MIN_HEIGHT_RPX,
+      editingStoryTextareaScrollable: false,
     });
   },
 
   onEditingStoryInput(e) {
-    this.setData({ editingStoryText: e && e.detail ? e.detail.value : "" });
+    const storyText = e && e.detail ? e.detail.value : "";
+    this.setData(Object.assign({
+      editingStoryText: storyText,
+    }, buildStoryTextareaState(storyText)));
+  },
+
+  onEditingStoryLineChange(e) {
+    const detail = e && e.detail ? e.detail : {};
+    const measuredHeightRpx = Number.isFinite(Number(detail.heightRpx))
+      ? Number(detail.heightRpx)
+      : toRpxFromPx(detail.height);
+    this.setData(buildStoryTextareaState(this.data.editingStoryText, measuredHeightRpx));
   },
 
   onEditingStoryHighlightChange(e) {

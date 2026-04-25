@@ -1,4 +1,4 @@
-﻿const { getSession, extractSessionUser } = require("../services/photo-api");
+const { getSession, extractSessionUser } = require("../services/photo-api");
 const {
   buildRuntimeConfigPreset,
   getDisplayedTabBarItems,

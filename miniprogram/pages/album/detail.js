@@ -53,7 +53,7 @@ function resolveOriginalUrl(photo) {
   if (originalRaw) {
     return resolvePublicUrl(originalRaw);
   }
-  // 鍏煎鍘嗗彶鏁版嵁锛氶儴鍒嗚褰曞彧鏈?url 瀛楁
+  // 兼容历史数据：部分记录只含 url 字段
   const legacyRaw = String((photo && photo.url) || "").trim();
   if (legacyRaw) {
     return resolvePublicUrl(legacyRaw);
@@ -81,7 +81,7 @@ function normalizeMaybeText(value) {
 
 function resolveManagedAlbumDetailTitle(runtimeConfig) {
   const access = getManagedPageAccess(runtimeConfig, "album-detail");
-  return String((access && (access.headerTitle || access.navText)) || "").trim() || "涓撳睘杩斿浘绌洪棿";
+  return String((access && (access.headerTitle || access.navText)) || "").trim() || "专属返图空间";
 }
 
 function resolveAlbumHeaderTitle(options) {
@@ -91,7 +91,7 @@ function resolveAlbumHeaderTitle(options) {
       current.rootFolderName ||
       current.initialRootFolderName ||
       current.managedTitle ||
-      "涓撳睘杩斿浘绌洪棿"
+      "专属返图空间"
   ).trim();
 }
 
@@ -214,9 +214,10 @@ function normalizePhoto(photo) {
     _imageLoadFailed: Boolean(photo && photo._imageLoadFailed),
     __ratio: resolveAlbumPhotoRatio(photo, null),
     __media_padding_top: `${resolveAlbumPhotoRatio(photo, null) * 100}%`,
-    // 鍒楄〃鍗＄墖浼樺厛璧扮缉鐣ュ浘锛屼繚璇佹竻鏅板害鍚屾椂闄嶄綆棣栧睆浣撶Н
+    // 列表卡片优先走缩略图，保证清晰度同时降低首屏体积
     card_url_resolved: thumbnailUrl || previewUrl || originalUrl,
-    // 鍏ㄥ睆鏌ョ湅浼樺厛璧板師鍥撅紝鍘嗗彶鏁版嵁鍥為€€棰勮/缂╃暐鍥?    fullscreen_url_resolved: originalUrl || previewUrl || thumbnailUrl,
+    // 全屏查看优先走原图，历史数据回退预览/缩略图
+    fullscreen_url_resolved: originalUrl || previewUrl || thumbnailUrl,
   });
 }
 
@@ -351,11 +352,11 @@ function getExpiryDays(album) {
 
 function resolveAlbumAccessErrorMessage(errorMessage) {
   const message = String(errorMessage || "").toLowerCase();
-  if (message.includes("杩囨湡") || message.includes("expired")) {
-    return "璇ョ┖闂村凡杩囨湡";
+  if (message.includes("过期") || message.includes("expired")) {
+    return "该空间已过期";
   }
-  if (message.includes("鏃犳潈") || message.includes("鏉冮檺") || message.includes("forbidden")) {
-    return "鎮ㄦ殏鏃犺绌洪棿璁块棶鏉冮檺";
+  if (message.includes("无权") || message.includes("权限") || message.includes("forbidden")) {
+    return "您暂无该空间访问权限";
   }
   return "空间不存在或已过期";
 }
@@ -400,7 +401,7 @@ function convertRpxToPx(value) {
 
 function computeToolbarStickyTop(safeTop) {
   const unit = Math.max(readWindowWidth(), 320) / 750;
-  const headerInnerHeight = 96 * unit; // app-header back-sub 楂樺害
+  const headerInnerHeight = 112 * unit; // app-header simple 高度
   // 与页面头部无缝衔接：吸顶时不再额外叠加页头下边框高度，避免出现细缝
   const top = Number(safeTop || 0) + headerInnerHeight - 1;
   return Math.max(0, Math.round(top));
@@ -571,8 +572,7 @@ Page({
     total: 0,
 
     album: null,
-    freezeEnabled: true,
-    managedTitle: "涓撳睘杩斿浘绌洪棿",
+    managedTitle: "专属返图空间",
     headerTitle: "",
     pageScaffoldReady: false,
     expiryDays: 7,
@@ -587,7 +587,6 @@ Page({
     showFolderGuide: false,
     folderWaveActiveIndex: -1,
     folderWaveTick: 0,
-    hasShownFolderSwitchToast: false,
     allPhotos: [],
     photos: [],
     leftPhotos: [],
@@ -716,7 +715,7 @@ Page({
     }
 
     if (!key) {
-      wx.showToast({ title: "缂哄皯瀵嗛挜", icon: "none" });
+      wx.showToast({ title: "缺少密钥", icon: "none" });
       wx.switchTab({ url: "/pages/album/index" });
       return;
     }
@@ -1054,7 +1053,7 @@ Page({
       downloadProgressSuccess: success,
       downloadProgressFail: fail,
       downloadProgressPercent: 100,
-      downloadProgressTitle: "淇濆瓨瀹屾垚",
+      downloadProgressTitle: "保存完成",
       downloadProgressMessage: fail > 0
         ? `成功 ${success} 张 · 失败 ${fail} 张`
         : `已成功保存 ${success} 张照片`,
@@ -1771,8 +1770,8 @@ Page({
 
   triggerFolderGuideForEntry() {
     const folderCount = Array.isArray(this.data.folders) ? this.data.folders.length : 0;
+    this.clearFolderGuideTimer();
     if (folderCount <= 1) {
-      this.clearFolderGuideTimer();
       if (this.data.showFolderGuide) {
         this.setData({ showFolderGuide: false });
       }
@@ -1780,13 +1779,8 @@ Page({
     }
 
     if (this.data.showFolderGuide) {
-      this.startFolderGuideAutoDismiss();
-      return;
+      this.setData({ showFolderGuide: false });
     }
-
-    this.setData({ showFolderGuide: true }, () => {
-      this.startFolderGuideAutoDismiss();
-    });
   },
 
   dismissFolderGuide() {
@@ -1927,8 +1921,7 @@ Page({
       return;
     }
 
-    this.setData({ donationSaving: true });
-    wx.showLoading({ title: "淇濆瓨涓?.." });
+    wx.showLoading({ title: "保存中..." });
 
     try {
       await this.savePhotoToAlbum(qrCodeUrl);
@@ -2177,7 +2170,7 @@ Page({
         donation_qr_code_url: normalizeMaybeUrl(album && album.donation_qr_code_url),
       });
       if (album && album.is_expired) {
-        wx.showToast({ title: "璇ョ┖闂村凡杩囨湡", icon: "none" });
+        wx.showToast({ title: "该空间已过期", icon: "none" });
       }
 
       const expiryDays = getExpiryDays(normalizedAlbum);
@@ -2193,7 +2186,7 @@ Page({
       const folders = [{ id: ROOT_FOLDER_ID, name: rootFolderName }].concat(
         Array.isArray(payload.folders) ? payload.folders : []
       );
-      const showFolderGuide = folders.length > 1;
+      const showFolderGuide = false;
       const storageKey = String(this.data.welcomeStorageKey || "").trim();
       const welcomeStorageToken = buildWelcomeStorageToken(normalizedAlbum);
       let hasSeenWelcome = false;
@@ -2261,7 +2254,6 @@ Page({
             showFolderGuide,
             folderWaveActiveIndex: -1,
             folderWaveTick: 0,
-            hasShownFolderSwitchToast: false,
             allPhotos: [],
             photos: [],
             leftPhotos: [],
@@ -2357,11 +2349,8 @@ Page({
     }, () => {
       this.applyFilter();
       this.refreshSelectionMeta();
-      if (!this.data.hasShownFolderSwitchToast) {
-        const folderName = String((folder && folder.name) || "鍒嗙粍").trim() || "鍒嗙粍";
-        this.showToast(`宸插垏鎹㈠埌锛?{folderName}`, "success", 1800);
-        this.setData({ hasShownFolderSwitchToast: true });
-      }
+      const folderName = String((folder && folder.name) || "分组").trim() || "分组";
+      this.showToast(`已切换到：${folderName}`, "success", 1800);
       resolve();
     }));
 
@@ -2846,7 +2835,7 @@ Page({
       if (total > 0) {
         this.showToast(`已全选 ${total} 张`, "success", 1800);
       } else {
-        this.showToast("褰撳墠鍒嗙粍鏆傛棤鐓х墖", "error", 2200);
+        this.showToast("当前分组暂无照片", "error", 2200);
       }
     } catch (error) {
       this.setData({ loading: false, loadingMore: false, switchingFolderLoading: false });
@@ -2993,7 +2982,7 @@ Page({
   async resolveImageLocalPath(url) {
     const target = String(url || "").trim();
     if (!target) {
-      throw new Error("缂哄皯鍥剧墖鍦板潃");
+      throw new Error("缺少图片地址");
     }
 
     try {
@@ -3003,7 +2992,7 @@ Page({
         return localPath;
       }
     } catch (error) {
-      // ignore锛岃繘鍏?downloadFile 鍏滃簳
+      // ignore，进入 downloadFile 兜底
     }
 
     const tryDownload = async () => {
@@ -3131,9 +3120,9 @@ Page({
     }
 
     this.openDownloadProgress({
-      title: shouldDownloadAll ? "姝ｅ湪鍑嗗涓嬭浇" : "姝ｅ湪淇濆瓨鐓х墖",
+      title: shouldDownloadAll ? "正在准备下载" : "正在保存照片",
       message: shouldDownloadAll
-        ? "姝ｅ湪鏁寸悊褰撳墠鐩稿唽鐨勫叏閮ㄧ収鐗?.."
+        ? "正在整理当前相册的全部照片..."
         : `准备保存 0 / ${selected.length} 张照片`,
       total: shouldDownloadAll ? 0 : selected.length,
       current: 0,
@@ -3163,7 +3152,7 @@ Page({
 
     const total = targets.length;
     this.updateDownloadProgress({
-      title: "姝ｅ湪淇濆瓨鐓х墖",
+      title: "正在保存照片",
       message: `准备保存 0 / ${total} 张照片`,
       total,
       current: 0,
@@ -3179,8 +3168,8 @@ Page({
     for (let index = 0; index < total; index += 1) {
       const photo = targets[index];
       this.updateDownloadProgress({
-        title: "姝ｅ湪淇濆瓨鐓х墖",
-        message: total > 1 ? `姝ｅ湪淇濆瓨绗?${index + 1} / ${total} 寮?..` : "姝ｅ湪淇濆瓨鐓х墖...",
+        title: "正在保存照片",
+        message: total > 1 ? `正在保存第 ${index + 1} / ${total} 张...` : "正在保存照片...",
       });
 
       const url = photo.original_url_resolved;
@@ -3349,10 +3338,8 @@ Page({
 
     if (previewRows.length === 0) {
       try {
-        if (this.data.hasMore || Math.max(0, Number(this.data.total || 0)) > visibleRows.length) {
-          wx.showLoading({ title: "姝ｅ湪鍑嗗鍏ㄩ儴鐓х墖...", mask: true });
+          wx.showLoading({ title: "正在准备全部照片...", mask: true });
           loadingShown = true;
-        }
       } catch (error) {
         loadingShown = false;
       }

@@ -1,18 +1,14 @@
 @import "../../styles/admin-loading.wxss";
-@import "../../styles/secondary-page-frame.wxss";
 
 .page {
   min-height: 100vh;
   background: #fffbf0;
-  display: block;
 }
 
 .content {
   /* 对齐旧版相册详情页：使用页面原生滚动，避免 flex 容器干扰 sticky 头部与标签栏 */
-  flex: none;
   padding: 0 16rpx calc(256rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
-  background-image: none;
 }
 
 .page-loading-shell {

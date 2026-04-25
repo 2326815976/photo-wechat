@@ -2,7 +2,7 @@
   <secondary-page-shell
     shell-class="page"
     title="{{pageTitle}}"
-    subtitle="继续你的拾光之旅"
+    subtitle="授权微信昵称后继续你的拾光之旅"
     fallbackTab="pages/profile/index"
     content-class="content"
   >
@@ -74,6 +74,11 @@
         <text wx:else>登录</text>
       </button>
 
+      <view class="footer" wx:if="{{phoneLoginEnabled && registerEntryVisible}}">
+        <text>还没有账号？</text>
+        <text class="footer-link" hover-class="footer-link--active" bindtap="goRegister">{{registerEntryLabel}}</text>
+      </view>
+
       <view class="wechat-divider" wx:if="{{phoneLoginEnabled && wechatLoginEnabled}}">
         <view class="wechat-divider__line"></view>
         <text class="wechat-divider__text">或</text>
@@ -87,8 +92,8 @@
         bindtap="submitWechatLogin"
         disabled="{{submitting || wechatSubmitting || serviceMissing}}"
       >
-        <text wx:if="{{wechatSubmitting}}">连接微信中...</text>
-        <text wx:else>微信一键登录</text>
+        <text wx:if="{{wechatSubmitting}}">授权中...</text>
+        <text wx:else>微信登录</text>
       </button>
 
     </view>

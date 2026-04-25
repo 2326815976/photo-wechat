@@ -5,7 +5,6 @@ const {
   extractSessionUser,
   loginWithMiniProgram,
 } = require("../../services/photo-api");
-const { requestWechatUserProfile } = require("../../utils/wechat-profile");
 const { clearStoredCookie } = require("../../utils/auth");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const {
@@ -19,15 +18,19 @@ const {
 } = require("../../utils/page-presentation");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 const { hasAdminAccess } = require("../../utils/admin-access");
+const { requestWechatUserProfile } = require("../../utils/wechat-profile");
+const { WECHAT_NICKNAME_AUTH_DESC, resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
-const SHARE_TITLE = "拾光谣｜我的小天地";
+const SHARE_TITLE = "拾光，做我的小天地";
 const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
 const WECHAT_MINIPROGRAM_DEFAULT_NAME = "拾光者";
 const WECHAT_MINIPROGRAM_LEGACY_DEFAULT_NAMES = new Set([
   "微信用户",
   WECHAT_MINIPROGRAM_DEFAULT_NAME,
 ]);
+
+const DEFAULT_PROFILE_AVATAR_TEXT = "光";
 
 const PROFILE_MENU_SPECS = [
   {
@@ -56,6 +59,15 @@ const PROFILE_MENU_SPECS = [
     requiresWechatLogin: true,
   },
   {
+    pageKey: "profile-change-password",
+    action: "goChangePassword",
+    defaultOrder: 135,
+    defaultTitle: "修改密码",
+    description: "修改当前账户登录密码",
+    iconSrc: "/images/icons/lock-yellow.svg",
+    requiresPasswordUser: true,
+  },
+  {
     pageKey: "about",
     action: "goAbout",
     defaultOrder: 140,
@@ -76,10 +88,27 @@ const PROFILE_MENU_SPECS = [
 
 const GUEST_MENU_SPECS = [
   {
-    action: "goWechatLogin",
-    defaultTitle: "微信登录",
+    pageKey: "login",
+    action: "goLogin",
+    defaultTitle: "账号登录",
     buttonClass: "btn-primary",
     hoverClass: "btn-primary--active",
+    requiresPhoneAuth: true,
+  },
+  {
+    pageKey: "register",
+    action: "goRegister",
+    defaultTitle: "手机号注册",
+    buttonClass: "btn-outline",
+    hoverClass: "btn-outline--active",
+    requiresPhoneAuth: true,
+  },
+  {
+    action: "goWechatLogin",
+    defaultTitle: "微信登录",
+    buttonClass: "btn-outline",
+    hoverClass: "btn-outline--active",
+    requiresWechatAuth: true,
   },
 ];
 
@@ -126,7 +155,7 @@ async function loadProfileRecord(userId) {
   const result = await dbQuery({
     table: "profiles",
     action: "select",
-    columns: "name,role",
+    columns: "name,role,avatar",
     filters: [{ column: "id", operator: "eq", value: id }],
     maybeSingle: true,
   });
@@ -150,8 +179,20 @@ async function loadUserCreatedAt(userId) {
 }
 
 function resolveAvatarText(name) {
-  const text = toOptionalText(name);
-  return text ? text.slice(0, 1) : "?";
+  const normalizedName = toOptionalText(name).replace(/\s+/g, "");
+  if (!normalizedName) {
+    return DEFAULT_PROFILE_AVATAR_TEXT;
+  }
+  const firstCharacter = Array.from(normalizedName)[0];
+  return firstCharacter || DEFAULT_PROFILE_AVATAR_TEXT;
+}
+
+function resolveProfileAvatarUrl() {
+  return "";
+}
+
+function shouldBootstrapWechatProfile() {
+  return false;
 }
 
 function parseRegisterDate(value) {
@@ -255,22 +296,33 @@ function buildManagedProfileMenuItems(state, runtimeConfig) {
   });
 }
 
-function buildManagedGuestProfileMenuItems(state) {
+function buildManagedGuestProfileMenuItems(state, runtimeConfig) {
   const currentState = state && typeof state === "object" ? state : {};
+  const normalizedRuntimeConfig = normalizeRuntimeConfig(runtimeConfig);
   return GUEST_MENU_SPECS.reduce((list, spec) => {
-    if (!Boolean(currentState.wechatLoginEnabled)) {
+    const access = spec.pageKey ? getManagedPageAccess(normalizedRuntimeConfig, spec.pageKey) : null;
+    if (spec.pageKey && (!access || String(access.publishState || "").trim() !== "online")) {
+      return list;
+    }
+    if (spec.requiresPhoneAuth && !Boolean(currentState.phoneLoginEnabled)) {
+      return list;
+    }
+    if (spec.requiresWechatAuth && !Boolean(currentState.wechatLoginEnabled)) {
       return list;
     }
     const title = String(spec.defaultTitle || "").trim();
     if (!title) {
       return list;
     }
+    const promoteWechatLogin =
+      spec.action === "goWechatLogin" &&
+      !Boolean(currentState.phoneLoginEnabled);
     list.push({
       key: spec.action,
       action: spec.action,
       title,
-      buttonClass: String(spec.buttonClass || "").trim(),
-      hoverClass: String(spec.hoverClass || "").trim(),
+      buttonClass: promoteWechatLogin ? "btn-primary" : String(spec.buttonClass || "").trim(),
+      hoverClass: promoteWechatLogin ? "btn-primary--active" : String(spec.hoverClass || "").trim(),
     });
     return list;
   }, []);
@@ -293,19 +345,23 @@ Page({
     wechatActiveLegalFooter: [],
 
     loading: true,
+    authMode: "wechat_only",
+    phoneLoginEnabled: false,
     pageLoadingTitle: "拾光中...",
     pageLoadingDescription: "正在加载页面",
     isLoggedIn: false,
+    userId: "",
     isWechatLogin: false,
     isAdmin: false,
     userRole: "",
     userName: "",
-    userAvatarText: "?",
+    userAvatarText: DEFAULT_PROFILE_AVATAR_TEXT,
+    userAvatarUrl: "",
     userPhone: "",
     userRegisterDateText: "",
     canChangePassword: false,
     profileMenuItems: [],
-    guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+    guestMenuItems: [],
     pagePresentationMode: "tabbar",
     pageFallbackRoute: "",
     pageFallbackTab: "pages/index/index",
@@ -334,34 +390,53 @@ Page({
   buildGuestState(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
     const loadingData = this.buildPageLoadingData(normalized, { isLoggedIn: false });
+    const authMode = String(normalized.authMode || "wechat_only");
+    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
     return {
       loading: false,
+      authMode,
+      phoneLoginEnabled,
       isLoggedIn: false,
+      userId: "",
       isWechatLogin: false,
       isAdmin: false,
       userRole: "",
       userName: "",
-      userAvatarText: "?",
+      userAvatarText: DEFAULT_PROFILE_AVATAR_TEXT,
+      userAvatarUrl: "",
       userPhone: "",
       userRegisterDateText: "",
       canChangePassword: false,
+      wechatLoginEnabled,
       wechatLoginSubmitting: false,
       showWechatLegalModal: false,
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
       profileMenuItems: [],
-      guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+      guestMenuItems: buildManagedGuestProfileMenuItems(
+        { phoneLoginEnabled, wechatLoginEnabled },
+        normalized
+      ),
     };
   },
 
   applyRuntimeConfig(runtimeConfig) {
     const normalized = normalizeRuntimeConfig(runtimeConfig);
     const loadingData = this.buildPageLoadingData(normalized);
+    const authMode = String(normalized.authMode || "wechat_only");
+    const phoneLoginEnabled = authMode === "phone_password" || authMode === "mixed";
+    const wechatLoginEnabled = authMode === "wechat_only" || authMode === "mixed";
     const nextState = {
-      wechatLoginEnabled: true,
+      authMode,
+      phoneLoginEnabled,
+      wechatLoginEnabled,
       pageLoadingTitle: loadingData.pageLoadingTitle,
       pageLoadingDescription: loadingData.pageLoadingDescription,
-      guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+      guestMenuItems: buildManagedGuestProfileMenuItems(
+        { phoneLoginEnabled, wechatLoginEnabled },
+        normalized
+      ),
     };
 
     if (this.data.isLoggedIn) {
@@ -637,7 +712,7 @@ Page({
 
   async submitWechatLogin() {
     if (this.data.serviceMissing) {
-      wx.showToast({ title: "当前服务配置不完整", icon: "none" });
+      wx.showToast({ title: "请先完成云托管配置", icon: "none" });
       return;
     }
     if (this._wechatSubmitting || this.data.wechatLoginSubmitting) return;
@@ -645,89 +720,30 @@ Page({
     this._wechatSubmitting = true;
     this.setData({ wechatLoginSubmitting: true });
     try {
-      const [loginRes, wechatProfile] = await Promise.all([
-        wxLogin(),
-        requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
-      ]);
-      const wechatNickName = String((wechatProfile && wechatProfile.nickName) || "").trim();
-      if (!wechatNickName) {
-        wx.showToast({ title: "请先允许获取微信昵称", icon: "none" });
-        return;
-      }
+      const profile = await requestWechatUserProfile({
+        desc: WECHAT_NICKNAME_AUTH_DESC,
+      });
+      const nickName = String((profile && profile.nickName) || "").trim();
+
+      const loginRes = await wxLogin();
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
-        wx.showToast({ title: "未获取到微信登录凭证，请重试", icon: "none" });
+        wx.showToast({ title: "微信授权已失效，请重新登录", icon: "none" });
         return;
       }
 
-      const result = await loginWithMiniProgram(code, wechatProfile || undefined);
+      const result = await loginWithMiniProgram(code, nickName ? { nickName } : null);
       const user = extractAuthUserFromPayload(result);
       if (!user) {
         wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
         return;
       }
 
-      const runtimeConfig =
-        typeof getApp === "function" && getApp() && getApp().globalData
-          ? getApp().globalData.runtimeConfig
-          : null;
-      const normalized = normalizeRuntimeConfig(runtimeConfig);
-      const canChangePassword = !isWechatMiniProgramAccount(user);
-      let profileRecord = null;
-      let userName = resolveDisplayUserName(user);
-
-      try {
-        profileRecord = await loadProfileRecord(user.id);
-        if (profileRecord && profileRecord.name) {
-          userName = normalizeWechatMiniDefaultName(profileRecord.name, user) || userName;
-        }
-      } catch (error) {
-        // ignore
-      }
-
-      const isAdmin = hasAdminAccess(user, profileRecord);
-
-      this.setData({
-        loading: false,
-        isLoggedIn: true,
-        isWechatLogin: true,
-        isAdmin,
-        userRole: isAdmin ? "admin" : "user",
-        userName,
-        userAvatarText: resolveAvatarText(userName),
-        userPhone: "",
-        userRegisterDateText:
-          formatRegisterDateText(user && (user.created_at || user.createdAt)) || this.data.userRegisterDateText,
-        canChangePassword,
-        pageLoadingTitle: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingTitle,
-        pageLoadingDescription: this.buildPageLoadingData(normalized, { isLoggedIn: true }).pageLoadingDescription,
-        profileMenuItems: buildManagedProfileMenuItems(
-          Object.assign({}, this.data, {
-            isLoggedIn: true,
-            isWechatLogin: true,
-            isAdmin,
-            userRole: isAdmin ? "admin" : "user",
-            canChangePassword,
-          }),
-          normalized
-        ),
-      });
-      this.refreshTabBarLoginState();
+      await this.loadUser({ silent: true });
       this.scheduleWechatLoginStateRefresh();
       wx.showToast({ title: "登录成功", icon: "none" });
     } catch (error) {
-      const message = String((error && error.message) || "");
-      if (message.includes("凭证无效") || message.includes("已过期")) {
-        wx.showToast({ title: "微信登录凭证已失效，请重试", icon: "none" });
-      } else if (message.includes("接口不存在") || message.includes("/api/auth/wechat/miniprogram/login")) {
-        wx.showToast({ title: "后端未部署微信登录接口", icon: "none" });
-      } else if (message.includes("云托管服务名称未配置")) {
-        wx.showToast({ title: "请先配置云托管服务", icon: "none" });
-      } else if (message.includes("未配置")) {
-        wx.showToast({ title: "服务端暂未开启微信登录", icon: "none" });
-      } else {
-        wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
-      }
+      wx.showToast({ title: resolveWechatLoginErrorMessage(error), icon: "none" });
     } finally {
       this._wechatSubmitting = false;
       this.setData({ wechatLoginSubmitting: false });
@@ -764,6 +780,7 @@ Page({
       let userRegisterDateText = formatRegisterDateText(user && (user.created_at || user.createdAt));
       const isWechatLogin = isWechatMiniProgramAccount(user);
       let profile = null;
+      const userAvatarUrl = resolveProfileAvatarUrl();
 
       try {
         profile = await loadProfileRecord(user.id);
@@ -787,11 +804,13 @@ Page({
       const nextState = {
         loading: false,
         isLoggedIn: true,
+        userId: user.id,
         isWechatLogin,
         isAdmin,
         userRole: isAdmin ? "admin" : "user",
         userName,
         userAvatarText: resolveAvatarText(userName),
+        userAvatarUrl,
         userPhone: "",
         userRegisterDateText,
         canChangePassword,
@@ -805,7 +824,7 @@ Page({
             Object.assign({}, this.data, nextState),
             normalized
           ),
-          guestMenuItems: buildManagedGuestProfileMenuItems({ wechatLoginEnabled: true }),
+          guestMenuItems: buildManagedGuestProfileMenuItems(nextState, normalized),
         })
       );
       this.refreshTabBarLoginState();
@@ -820,6 +839,14 @@ Page({
   goWechatLogin() {
     if (this.data.serviceMissing || this.data.wechatLoginSubmitting) return;
     this.openWechatLegalModal();
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: "/pages/login/index" });
+  },
+
+  goRegister() {
+    wx.navigateTo({ url: "/pages/register/index" });
   },
 
   goEditProfile() {
@@ -863,6 +890,17 @@ Page({
     if (typeof this[action] === "function") {
       this[action]();
     }
+  },
+
+  onAvatarLoadError() {
+    this.setData({
+      userAvatarUrl: "",
+      userAvatarText: resolveAvatarText(this.data.userName),
+    });
+  },
+
+  goChangePassword() {
+    wx.navigateTo({ url: "/pages/profile/change-password/index" });
   },
 
   async logout() {

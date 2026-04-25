@@ -1,35 +1,14 @@
 <page-meta page-style="{{(switchingFolderLoading || pendingFolderPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
-<view wx:if="{{!pageScaffoldReady}}" class="page">
-  <view class="page-loading-shell page-loading-shell--full">
-    <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2">
-      <view class="admin-loading-card__orb">
-        <view class="admin-loading-card__spinner"></view>
-      </view>
-      <text class="admin-loading-card__title">拾光中...</text>
-      <text class="admin-loading-card__desc">正在加载页面</text>
-    </view>
-  </view>
-</view>
-
-<view wx:if="{{pageScaffoldReady}}" class="page">
-  <!-- legacy app-header removed
+<view class="page">
+  <app-header
     id="albumHeader"
     class="album-header-host"
     title="{{headerTitle}}"
-    subtitle="✨ 趁魔法消失前，把美好定格 ✨"
     safeTop="{{safeTop}}"
     showBack="{{true}}"
     fallbackTab="pages/album/index"
     preferFallback="{{false}}"
-  -->
-
-  <secondary-page-shell
-    title="{{headerTitle}}"
-    fallbackTab="pages/album/index"
-    content-class="content"
-    useScrollView="{{false}}"
-    enableFlex="{{false}}"
-  >
+  />
 
   <view class="content">
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
@@ -37,13 +16,17 @@
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
     </view>
 
-    <view class="page-loading-shell page-loading-shell--with-header" wx:if="{{loading && !album}}">
-      <view class="admin-loading-card admin-loading-card--page motion-fade-up motion-delay-2">
-        <view class="admin-loading-card__orb">
-          <view class="admin-loading-card__spinner"></view>
+    <view class="loading motion-fade-up motion-delay-2" wx:if="{{loading && !album}}">
+      <view class="loading-ring">
+        <view class="ring ring--outer"></view>
+        <view class="ring ring--inner"></view>
+        <view class="ring-center">
+          <image class="center-icon" src="/images/icons/sparkles-yellow.svg" mode="aspectFit" />
         </view>
-        <text class="admin-loading-card__title">拾光中...</text>
-        <text class="admin-loading-card__desc">正在加载页面</text>
+      </view>
+      <view class="loading-text">
+        <text class="loading-title">{{backendReconnecting ? '重连中...' : '加载中...'}}</text>
+        <text class="loading-desc">{{backendReconnecting ? '重连服务器中，请等待' : '正在为你打开相册'}}</text>
       </view>
     </view>
 
@@ -484,5 +467,5 @@
     </view>
   </view>
 
-  </secondary-page-shell>
 </view>
+

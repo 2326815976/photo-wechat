@@ -74,6 +74,10 @@ function parseBooleanLike(value, fallback) {
   return fallback;
 }
 
+function resolveHideAudit(value) {
+  return parseBooleanLike(value, false);
+}
+
 function parseJsonObject(input) {
   if (!input) return null;
   if (input && typeof input === 'object' && !Array.isArray(input)) {
@@ -405,6 +409,15 @@ function normalizeRuntimeConfig(input) {
   const authMode = ['phone_password', 'wechat_only', 'mixed'].includes(toText(current.authMode))
     ? toText(current.authMode)
     : 'wechat_only';
+  const hideAudit = resolveHideAudit(
+    Object.prototype.hasOwnProperty.call(current, 'hideAudit')
+      ? current.hideAudit
+      : Object.prototype.hasOwnProperty.call(current, 'hide_audit')
+        ? current.hide_audit
+        : Object.prototype.hasOwnProperty.call(current, 'legacyHideAudit')
+          ? current.legacyHideAudit
+          : current.legacy_hide_audit
+  );
 
   const tabBarItems = normalizeTabBarItems(current.tabBarItems);
   const featureFlags = normalizeFeatureFlags(current.featureFlags);
@@ -434,6 +447,7 @@ function normalizeRuntimeConfig(input) {
     homeEntryPagePath,
     guestProfileMode,
     authMode,
+    hideAudit,
     tabBarItems,
     featureFlags,
     managedPageMetaMap,

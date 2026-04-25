@@ -29,18 +29,17 @@ function shouldRetryWithNextPath(error) {
 
   const message = String((error && error.message) || "").toLowerCase();
   if (statusCode === 400) {
-    // 仅在明显的“路由不匹配/路径不存在”场景下才回退，
-    // 避免把业务校验类 400（如验证码错误）误判为路径兼容问题。
     if (
       message.includes("not found") ||
       message.includes("no route") ||
       message.includes("route not found") ||
-      message.includes("cannot") && message.includes("path")
+      (message.includes("cannot") && message.includes("path"))
     ) {
       return true;
     }
     return false;
   }
+
   return message.includes("404") || message.includes("not found");
 }
 
@@ -406,12 +405,8 @@ async function loginWithMiniProgram(code, profile) {
 
   if (profile && typeof profile === "object") {
     const nickName = String(profile.nickName || "").trim();
-    const avatarUrl = String(profile.avatarUrl || "").trim();
     if (nickName) {
       payload.nickName = nickName;
-    }
-    if (avatarUrl) {
-      payload.avatarUrl = avatarUrl;
     }
   }
 
@@ -422,6 +417,23 @@ async function loginWithMiniProgram(code, profile) {
   const successPayload = ensureSuccessPayload(response, "微信登录失败");
   primeSessionCache(successPayload);
   return successPayload;
+}
+
+function getFileExtension(filePath) {
+  const matched = String(filePath || "").trim().match(/\.([A-Za-z0-9]+)(?:\?|#|$)/);
+  const ext = matched ? matched[1].toLowerCase() : "jpg";
+  if (ext === "jpeg" || ext === "jpg" || ext === "png" || ext === "webp" || ext === "gif") {
+    return ext === "jpeg" ? "jpg" : ext;
+  }
+  return "jpg";
+}
+
+function getImageContentType(filePath) {
+  const ext = getFileExtension(filePath);
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/jpeg";
 }
 
 async function issueCaptcha() {

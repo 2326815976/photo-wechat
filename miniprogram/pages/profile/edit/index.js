@@ -12,13 +12,6 @@ const {
 } = require("../../../utils/phone");
 const { guardMiniProgramPageAccess } = require("../../../utils/page-access");
 
-const WECHAT_MINIPROGRAM_EMAIL_SUFFIX = "@wechat.miniprogram.local";
-const WECHAT_MINIPROGRAM_DEFAULT_NAME = "拾光者";
-const WECHAT_MINIPROGRAM_LEGACY_DEFAULT_NAMES = new Set([
-  "微信用户",
-  WECHAT_MINIPROGRAM_DEFAULT_NAME,
-]);
-
 function trimText(value) {
   return String(value || "").trim();
 }
@@ -35,30 +28,23 @@ function trimOptionalText(value) {
   return text;
 }
 
-function normalizeWechatMiniDefaultName(name, user) {
-  const normalizedName = trimText(name);
-  if (!isWechatMiniProgramAccount(user)) {
-    return normalizedName;
-  }
-  if (!normalizedName || WECHAT_MINIPROGRAM_LEGACY_DEFAULT_NAMES.has(normalizedName)) {
-    return WECHAT_MINIPROGRAM_DEFAULT_NAME;
-  }
-  return normalizedName;
+function canUseWechatNicknameInput() {
+  return typeof wx !== "undefined" && typeof wx.canIUse === "function" && wx.canIUse("input.type.nickname");
 }
 
-function buildFormData(profile, user) {
-  return {
-    name:
-      normalizeWechatMiniDefaultName(profile && profile.name, user) ||
-      normalizeWechatMiniDefaultName(user && user.name, user),
-    phone: trimOptionalText(profile && profile.phone) || trimOptionalText(user && user.phone),
-    wechat: trimOptionalText(profile && profile.wechat),
-  };
+function isGenericWechatNickname(value) {
+  const text = trimText(value);
+  const normalized = text.toLowerCase();
+  return text === "微信用户" || normalized === "wechat user";
 }
 
-function isWechatMiniProgramAccount(user) {
-  const email = trimText(user && user.email).toLowerCase();
-  return email.endsWith(WECHAT_MINIPROGRAM_EMAIL_SUFFIX);
+function readInputField(event) {
+  const dataset = event && event.currentTarget ? event.currentTarget.dataset : null;
+  return trimText(dataset && dataset.field);
+}
+
+function normalizeFormValue(field, rawValue) {
+  return field === "phone" ? clampChinaMobileInput(rawValue) : String(rawValue == null ? "" : rawValue);
 }
 
 function readErrorMessage(error, fallback) {
@@ -68,7 +54,7 @@ function readErrorMessage(error, fallback) {
       return message;
     }
   }
-  return String(fallback || "请稍后重试");
+  return String(fallback || "请求失败");
 }
 
 function isTransientBackendError(error) {
@@ -77,25 +63,37 @@ function isTransientBackendError(error) {
   return (
     code === "TRANSIENT_BACKEND" ||
     message.includes("服务暂时不可用") ||
-    message.includes("服务正在恢复") ||
+    message.includes("服务异常") ||
     message.includes("temporarily unavailable") ||
     message.includes("database connection failed")
   );
 }
 
-function canFallbackToProfileTable(user, nextPhone) {
-  const currentPhone = normalizeChinaMobile(trimText(user && user.phone));
-  return currentPhone === String(nextPhone || "");
+async function loadProfileRecord(userId) {
+  const result = await dbQuery({
+    table: "profiles",
+    action: "select",
+    columns: "name,phone,wechat",
+    filters: [{ column: "id", operator: "eq", value: userId }],
+    maybeSingle: true,
+  });
+  return result ? result.data : null;
 }
 
 Page({
   data: {
+    safeTop: 0,
     serviceMissing: false,
+    hideAudit: false,
     loading: true,
     saving: false,
+    supportsWechatNicknameInput: true,
+    nameInputFocus: false,
     success: false,
     error: "",
     focusField: "",
+    pageTitle: "编辑个人资料",
+    pageSubtitle: "仅支持修改用户名、手机号和微信号",
     formData: {
       name: "",
       phone: "",
@@ -106,9 +104,22 @@ Page({
   async onLoad() {
     const app = typeof getApp === "function" ? getApp() : null;
     const globalData = app && app.globalData ? app.globalData : {};
+    const safeTop = Number(globalData.statusBarHeight || 0);
     const serviceMissing = !trimText(globalData.cloudRunService);
+    const hideAudit = Boolean(globalData.runtimeConfig && globalData.runtimeConfig.hideAudit);
 
-    this.setData({ serviceMissing });
+    this.setData({
+      safeTop,
+      serviceMissing,
+      hideAudit,
+      supportsWechatNicknameInput: canUseWechatNicknameInput(),
+    });
+
+    if (app && typeof app.subscribeMiniProgramRuntimeConfig === "function") {
+      this._unsubscribeAuditConfig = app.subscribeMiniProgramRuntimeConfig((nextRuntimeConfig) => {
+        this.setData({ hideAudit: Boolean(nextRuntimeConfig && nextRuntimeConfig.hideAudit) });
+      });
+    }
 
     const blocked = await this.guardManagedAccess();
     if (blocked) {
@@ -127,6 +138,13 @@ Page({
     await this.guardManagedAccess();
   },
 
+  onUnload() {
+    if (typeof this._unsubscribeAuditConfig === "function") {
+      this._unsubscribeAuditConfig();
+    }
+    this._unsubscribeAuditConfig = null;
+  },
+
   async guardManagedAccess() {
     const result = await guardMiniProgramPageAccess({
       pageKey: "profile-edit",
@@ -135,33 +153,8 @@ Page({
     return !result.allowed;
   },
 
-  onInput(event) {
-    const dataset = event && event.currentTarget ? event.currentTarget.dataset : null;
-    const field = trimText(dataset && dataset.field);
-    if (!field) {
-      return;
-    }
-
-    const rawValue = event && event.detail ? event.detail.value : "";
-    const value = field === "phone" ? clampChinaMobileInput(rawValue) : rawValue;
-    this.setData({ [`formData.${field}`]: value });
-  },
-
-  onFieldFocus(event) {
-    const dataset = event && event.currentTarget ? event.currentTarget.dataset : null;
-    this.setData({ focusField: trimText(dataset && dataset.field) });
-  },
-
-  onFieldBlur() {
-    this.setData({ focusField: "" });
-  },
-
   async loadProfile() {
-    this.setData({
-      loading: true,
-      success: false,
-      error: "",
-    });
+    this.setData({ loading: true, error: "" });
 
     try {
       const session = await getSession();
@@ -174,61 +167,113 @@ Page({
         return;
       }
 
-      const response = await dbQuery({
-        table: "profiles",
-        action: "select",
-        columns: "name,phone,wechat",
-        filters: [{ column: "id", operator: "eq", value: user.id }],
-        maybeSingle: true,
-      });
-
-      if (response && response.error) {
-        this.setData({
-          loading: false,
-          error: `加载失败：${String(response.error.message || "请稍后重试")}`,
-        });
-        return;
+      let profile = null;
+      try {
+        profile = await loadProfileRecord(user.id);
+      } catch (error) {
+        profile = null;
       }
 
       this.setData({
         loading: false,
-        formData: buildFormData(response && response.data, user),
+        formData: {
+          name: trimOptionalText(profile && profile.name) || trimOptionalText(user && user.name),
+          phone: trimOptionalText(profile && profile.phone) || trimOptionalText(user && user.phone),
+          wechat: trimOptionalText(profile && profile.wechat),
+        },
       });
     } catch (error) {
       this.setData({
         loading: false,
-        error: "加载失败，请稍后重试",
+        error: "加载个人资料失败",
       });
     }
   },
 
-  async saveProfileByTable(userId, payload) {
-    const response = await dbQuery({
-      table: "profiles",
-      action: "update",
-      values: {
-        name: payload.name,
-        phone: payload.phone,
-        wechat: payload.wechat,
-      },
-      filters: [{ column: "id", operator: "eq", value: userId }],
-    });
-
-    if (response && response.error) {
-      throw new Error(readErrorMessage(response.error, "请稍后重试"));
+  onInput(event) {
+    const field = readInputField(event);
+    if (!field) {
+      return;
     }
 
-    return response;
+    const rawValue = event && event.detail ? event.detail.value : "";
+    const value = normalizeFormValue(field, rawValue);
+    this.setData({
+      [`formData.${field}`]: value,
+      error: "",
+      success: false,
+    });
   },
 
-  async saveProfileByAuthApi(payload) {
-    return requestJson("/api/auth/update-user", {
-      method: "POST",
-      data: {
-        name: payload.name,
-        phone: payload.phone,
-        wechat: payload.wechat,
-      },
+  onInputChange(event) {
+    const field = readInputField(event);
+    if (!field) {
+      return;
+    }
+
+    const rawValue = event && event.detail ? event.detail.value : "";
+    const value = normalizeFormValue(field, rawValue);
+    this.setData({
+      [`formData.${field}`]: value,
+      error: "",
+      success: false,
+    });
+  },
+
+  onFieldFocus(event) {
+    const field = readInputField(event);
+    if (!field) {
+      return;
+    }
+    this.setData({ focusField: field }, () => {
+      if (field === "name") {
+        this.onUseWechatNickname({
+          refocus: false,
+          silentUnsupported: true,
+        });
+      }
+    });
+  },
+
+  onFieldBlur() {
+    this.setData({
+      focusField: "",
+      nameInputFocus: false,
+    });
+  },
+
+  onUseWechatNickname(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const shouldRefocus = config.refocus !== false;
+    const silentUnsupported = Boolean(config.silentUnsupported);
+    if (!this.data.supportsWechatNicknameInput) {
+      if (silentUnsupported) {
+        return;
+      }
+      wx.showToast({ title: "当前微信版本不支持自动填写昵称", icon: "none" });
+      return;
+    }
+
+    const currentName = trimText(this.data.formData.name);
+    const nextName = isGenericWechatNickname(currentName) ? "" : currentName;
+    const nextData = {
+      error: "",
+      success: false,
+    };
+    if (nextName !== this.data.formData.name) {
+      nextData["formData.name"] = nextName;
+    }
+
+    if (!shouldRefocus) {
+      this.setData(nextData);
+      return;
+    }
+
+    nextData.nameInputFocus = false;
+    this.setData(nextData, () => {
+      setTimeout(() => {
+        this.setData({ nameInputFocus: true });
+      }, 30);
     });
   },
 
@@ -242,12 +287,12 @@ Page({
     const wechat = trimOptionalText(this.data.formData.wechat);
 
     if (!name) {
-      this.setData({ error: "用户名不能为空" });
+      this.setData({ error: "请输入用户名" });
       return;
     }
 
     if (rawPhone && !isValidChinaMobile(rawPhone)) {
-      this.setData({ error: "请输入有效的手机号" });
+      this.setData({ error: "请输入正确的手机号" });
       return;
     }
 
@@ -257,33 +302,29 @@ Page({
     try {
       const session = await getSession();
       const user = extractSessionUser(session);
-
       if (!user || !user.id) {
         this.setData({ error: "请先登录" });
         return;
       }
 
-      const payload = {
-        name,
-        phone: phone || null,
-        wechat: wechat || null,
-      };
+      const response = await requestJson("/api/auth/update-user", {
+        method: "POST",
+        data: {
+          name,
+          phone: phone || null,
+          wechat: wechat || null,
+        },
+      });
 
-      try {
-        await this.saveProfileByAuthApi(payload);
-      } catch (error) {
-        if (!isTransientBackendError(error) || !canFallbackToProfileTable(user, phone)) {
-          throw error;
-        }
-        await this.saveProfileByTable(user.id, payload);
+      if (response && response.error) {
+        throw new Error(readErrorMessage(response.error, "保存失败"));
       }
 
       clearSessionCache();
       await getSession({ force: true }).catch(() => null);
 
-      this.setData({
-        success: true,
-      });
+      this.setData({ success: true });
+      wx.showToast({ title: "保存成功", icon: "none" });
 
       setTimeout(() => {
         wx.navigateBack({
@@ -294,7 +335,9 @@ Page({
     } catch (error) {
       const message = trimText(error && error.message);
       this.setData({
-        error: message ? `保存失败：${message}` : "保存失败，请重试",
+        error: isTransientBackendError(error)
+          ? "服务暂时不可用，请稍后重试"
+          : message || "保存失败，请稍后重试",
       });
     } finally {
       this.setData({ saving: false });

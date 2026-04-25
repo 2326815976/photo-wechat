@@ -1,7 +1,6 @@
 {
   "onReachBottomDistance": 240,
   "usingComponents": {
-    "app-header": "/components/app-header/index",
-    "secondary-page-shell": "/components/secondary-page-shell/index"
+    "app-header": "/components/app-header/index"
   }
 }

@@ -30,6 +30,42 @@ function getTodayUTC8() {
   return getDateAfterDaysUTC8(0);
 }
 
+function buildDateRangeUTC8(startDate, endDate) {
+  const start = String(startDate || "").trim();
+  const end = String(endDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+    return [];
+  }
+
+  const startAt = new Date(`${start}T00:00:00+08:00`).getTime();
+  const endAt = new Date(`${end}T00:00:00+08:00`).getTime();
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || startAt > endAt) {
+    return [];
+  }
+
+  const dates = [];
+  for (let cursor = startAt; cursor <= endAt; cursor += 24 * 60 * 60 * 1000) {
+    const current = new Date(cursor + 8 * 60 * 60 * 1000);
+    const year = current.getUTCFullYear();
+    const month = String(current.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(current.getUTCDate()).padStart(2, "0");
+    dates.push(`${year}-${month}-${day}`);
+  }
+  return dates;
+}
+
+function trimOptionalText(value) {
+  const text = String(value == null ? "" : value).trim();
+  if (!text) return "";
+
+  const normalized = text.toLowerCase();
+  if (normalized === "null" || normalized === "undefined" || normalized === "nil" || normalized === "none") {
+    return "";
+  }
+
+  return text;
+}
+
 function formatBookingDateCN(dateStr) {
   const raw = String(dateStr || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
@@ -601,7 +637,10 @@ Page({
         blockedDates: dates,
       });
     } catch (e) {
-      // ignore
+      this.setData({
+        blockedDates: buildDateRangeUTC8(this.data.minDate, this.data.maxDate),
+      });
+      wx.showToast({ title: "档期加载失败，请稍后重试", icon: "none" });
     }
   },
 
@@ -622,9 +661,11 @@ Page({
 
       const profile = result ? result.data : null;
       if (profile) {
+        const phone = trimOptionalText(profile.phone);
+        const wechat = trimOptionalText(profile.wechat);
         this.setData({
-          "formData.phone": profile.phone || "",
-          "formData.wechat": profile.wechat || "",
+          "formData.phone": phone,
+          "formData.wechat": wechat,
         });
       }
     } catch (e) {
@@ -709,13 +750,15 @@ Page({
               : "已确认";
 
       const normalized = Object.assign({}, booking, {
+        phone: trimOptionalText(booking.phone),
+        wechat: trimOptionalText(booking.wechat),
         type: typeName,
         date,
         date_text: formatBookingDateCN(date),
         status,
         status_text: statusText,
         can_cancel: canCancel,
-        contact_text: String(booking.wechat || booking.phone || "").trim(),
+        contact_text: trimOptionalText(booking.wechat) || trimOptionalText(booking.phone),
       });
 
       this.setData({ activeBooking: normalized });
@@ -891,18 +934,21 @@ Page({
       this.setData({ error: "请选择约拍地点" });
       return;
     }
-    if (!formData.phone) {
+    const rawPhone = trimOptionalText(formData.phone);
+    const rawWechat = trimOptionalText(formData.wechat);
+
+    if (!rawPhone) {
       this.setData({ error: "请填写手机号" });
       return;
     }
 
-    const normalizedPhone = normalizeChinaMobile(formData.phone);
+    const normalizedPhone = normalizeChinaMobile(rawPhone);
     if (!isValidChinaMobile(normalizedPhone)) {
       this.setData({ error: "请输入有效的手机号" });
       return;
     }
 
-    if (!formData.wechat) {
+    if (!rawWechat) {
       this.setData({ error: "请填写微信号" });
       return;
     }
@@ -961,7 +1007,12 @@ Page({
       return;
     }
 
-    this.setData({ isSubmitting: true, error: "" });
+    this.setData({
+      isSubmitting: true,
+      error: "",
+      "formData.phone": normalizedPhone,
+      "formData.wechat": rawWechat,
+    });
     try {
       const availability = await dbRpc("check_date_availability", { target_date: selectedDate });
       const availabilityError = String(
@@ -1032,7 +1083,7 @@ Page({
           longitude: formData.longitude,
           city_name: resolvedCityName,
           phone: normalizedPhone,
-          wechat: formData.wechat,
+          wechat: rawWechat,
           notes: formData.notes,
           status: "pending",
         },

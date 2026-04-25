@@ -60,7 +60,7 @@
           data-folder-id="{{item.id}}"
         >
           <image class="folder-tab__icon" src="/images/icons/square-brown.svg" mode="aspectFit" />
-          <text class="folder-tab__text">{{item.name}} ({{item.photoCount}})</text>
+          <text class="folder-tab__text">{{item.name}}{{item.is_hidden ? ' · 已隐藏' : ''}} ({{item.photoCount}})</text>
         </view>
       </view>
     </scroll-view>
@@ -108,6 +108,13 @@
           disabled="{{actionLoading || !selectedFolderCanMoveDown}}"
         >
           下移文件夹
+        </button>
+        <button
+          class="folder-current-action-btn folder-current-action-btn--edit"
+          bindtap="onToggleFolderVisibility"
+          disabled="{{actionLoading}}"
+        >
+          {{selectedFolderHidden ? '显示文件夹' : '隐藏文件夹'}}
         </button>
         <button
           class="folder-current-action-btn folder-current-action-btn--danger"
@@ -351,7 +358,7 @@
           </view>
 
           <view class="single-date-row">
-            <text class="single-date-row__label">拍摄日期（单图可选）</text>
+            <text class="single-date-row__label">拍摄日期（自动识别，可手动修改）</text>
             <picker mode="date" value="{{singleShotDate}}" bindchange="onSingleShotDateChange">
               <view class="single-date-row__value">{{singleShotDate}}</view>
             </picker>
@@ -408,7 +415,7 @@
         </view>
 
         <view class="single-date-row" wx:if="{{uploadMode === 'batch'}}">
-          <text class="single-date-row__label">拍摄日期（批量统一）</text>
+          <text class="single-date-row__label">拍摄日期（批量统一，自动识别同日照片）</text>
           <picker mode="date" value="{{batchShotDate}}" bindchange="onBatchShotDateChange">
             <view class="single-date-row__value">{{batchShotDate}}</view>
           </picker>
@@ -461,12 +468,14 @@
       </view>
       <view class="modal-body">
         <textarea
-          class="booking-modal__textarea"
+          class="booking-modal__textarea booking-modal__textarea--story"
           placeholder="写下这张照片的故事（可留空）"
           maxlength="800"
           value="{{editingStoryText}}"
           bindinput="onEditingStoryInput"
-          auto-height="{{true}}"
+          bindlinechange="onEditingStoryLineChange"
+          auto-height="{{false}}"
+          style="height: {{editingStoryTextareaHeight}}rpx; overflow-y: {{editingStoryTextareaScrollable ? 'scroll' : 'hidden'}};"
         />
         <view class="single-highlight-row">
           <text class="single-highlight-row__label">高亮该照片（可独立于文案）</text>
@@ -490,7 +499,7 @@
       <view class="modal-body">
         <view class="booking-modal__field">
           <text class="booking-modal__label">拍摄日期</text>
-          <picker mode="date" value="{{editingShotDateValue}}" bindchange="onEditingShotDateChange">
+          <picker class="shot-date-picker-wrap" mode="date" value="{{editingShotDateValue}}" bindchange="onEditingShotDateChange">
             <view class="shot-date-picker">{{editingShotDateValue}}</view>
           </picker>
         </view>

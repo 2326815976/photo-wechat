@@ -1,23 +1,23 @@
+const { WECHAT_NICKNAME_AUTH_DESC } = require("./wechat-login");
+
 function normalizeWechatProfile(userInfo) {
   if (!userInfo || typeof userInfo !== "object") {
     return null;
   }
 
   const nickName = String(userInfo.nickName || "").trim();
-  const avatarUrl = String(userInfo.avatarUrl || "").trim();
-  if (!nickName && !avatarUrl) {
+  if (!nickName) {
     return null;
   }
 
   return {
     nickName,
-    avatarUrl,
   };
 }
 
 function requestWechatUserProfile(options) {
   const config = options && typeof options === "object" ? options : {};
-  const desc = String(config.desc || "").trim() || "用于同步微信昵称与头像到个人资料";
+  const desc = String(config.desc || "").trim() || WECHAT_NICKNAME_AUTH_DESC;
 
   return new Promise((resolve) => {
     if (typeof wx === "undefined" || typeof wx.getUserProfile !== "function") {

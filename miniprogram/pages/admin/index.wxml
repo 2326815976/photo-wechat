@@ -3666,7 +3666,7 @@
       </view>
       <view class="booking-modal__body">
         <view class="album-qr-box" wx:if="{{albumQrImageUrl}}">
-          <image class="album-qr-box__image" src="{{albumQrImageUrl}}" mode="aspectFit" />
+          <image class="album-qr-box__image" src="{{albumQrImageUrl}}" mode="aspectFit" binderror="onAlbumQrImageError" />
         </view>
         <view class="album-qr-empty" wx:else>
           <text>二维码生成失败，请稍后重试</text>

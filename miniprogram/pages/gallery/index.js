@@ -1,4 +1,4 @@
-﻿const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
+const { dbRpc, getSession, extractSessionUser } = require("../../services/photo-api");
 const { resolvePublicUrl } = require("../../utils/storage-url");
 const { getSessionId } = require("../../utils/session");
 const { normalizeRuntimeConfig } = require("../../utils/runtime-config");
@@ -285,11 +285,17 @@ function normalizePhoto(photo, options) {
   ]);
   const cardUrlResolved = cardUrlCandidates[0] || "";
   const fullscreenUrlResolved = fullscreenUrlCandidates[0] || "";
+  const assetKey = resolveGalleryPhotoAssetKey({
+    thumbnail_url_resolved: thumbnailUrlResolved,
+    preview_url_resolved: previewUrlResolved,
+    original_url_resolved: originalUrlResolved,
+  });
 
   return Object.assign({}, photo, {
     thumbnail_url_resolved: thumbnailUrlResolved,
     preview_url_resolved: previewUrlResolved,
     original_url_resolved: originalUrlResolved,
+    __assetKey: assetKey,
     card_url_resolved: cardUrlResolved,
     fullscreen_url_resolved: fullscreenUrlResolved,
     created_at_text: formatDateDisplayUTC8((photo && photo.shot_date) || (photo && photo.created_at)),
@@ -360,6 +366,34 @@ function resolveGalleryPhotoAssetKey(photo) {
   return `${thumbnailUrl}|${previewUrl}|${originalUrl}`;
 }
 
+function readGalleryPhotoRuntimeAssetKey(photo) {
+  const explicitAssetKey = String((photo && photo.__assetKey) || "").trim();
+  return explicitAssetKey || resolveGalleryPhotoAssetKey(photo);
+}
+
+function createGalleryPhotoRuntimeState(photo) {
+  if (!photo) return null;
+  const id =
+    photo && photo.id !== undefined && photo.id !== null
+      ? String(photo.id)
+      : "";
+  const assetKey = readGalleryPhotoRuntimeAssetKey(photo);
+  if (!id || !assetKey) {
+    return null;
+  }
+
+  return {
+    id,
+    __assetKey: assetKey,
+    _imageLoaded: Boolean(photo._imageLoaded),
+    _imageLoadFailed: Boolean(photo._imageLoadFailed) && !Boolean(photo._imageLoaded),
+    card_url_resolved: String((photo && photo.card_url_resolved) || "").trim(),
+    fullscreen_url_resolved: String((photo && photo.fullscreen_url_resolved) || "").trim(),
+    __ratio: Number((photo && photo.__ratio) || 0),
+    __media_padding_top: String((photo && photo.__media_padding_top) || "").trim(),
+  };
+}
+
 function inheritGalleryPhotoRuntimeState(photo, previousPhoto) {
   if (!photo || !previousPhoto) return photo;
 
@@ -375,8 +409,8 @@ function inheritGalleryPhotoRuntimeState(photo, previousPhoto) {
     return photo;
   }
 
-  const nextAssetKey = resolveGalleryPhotoAssetKey(photo);
-  const previousAssetKey = resolveGalleryPhotoAssetKey(previousPhoto);
+  const nextAssetKey = readGalleryPhotoRuntimeAssetKey(photo);
+  const previousAssetKey = readGalleryPhotoRuntimeAssetKey(previousPhoto);
   if (!nextAssetKey || nextAssetKey !== previousAssetKey) {
     return photo;
   }
@@ -406,7 +440,7 @@ function inheritGalleryPhotoRuntimeState(photo, previousPhoto) {
   });
 }
 
-function mergeGalleryPhotoRuntimeStateList(nextRows, previousRows) {
+function mergeGalleryPhotoRuntimeStateList(nextRows, previousRows, rememberedRuntimeStateMap) {
   const previousMap = Object.create(null);
   (Array.isArray(previousRows) ? previousRows : []).forEach((photo) => {
     const id =
@@ -417,12 +451,21 @@ function mergeGalleryPhotoRuntimeStateList(nextRows, previousRows) {
     previousMap[id] = photo;
   });
 
+  const activeRuntimeStateMap =
+    rememberedRuntimeStateMap && typeof rememberedRuntimeStateMap === "object"
+      ? rememberedRuntimeStateMap
+      : null;
+
   return (Array.isArray(nextRows) ? nextRows : []).map((photo) => {
     const id =
       photo && photo.id !== undefined && photo.id !== null
         ? String(photo.id)
         : "";
-    return inheritGalleryPhotoRuntimeState(photo, previousMap[id]);
+    const withPreviousState = inheritGalleryPhotoRuntimeState(photo, previousMap[id]);
+    if (!activeRuntimeStateMap || !id) {
+      return withPreviousState;
+    }
+    return inheritGalleryPhotoRuntimeState(withPreviousState, activeRuntimeStateMap[id]);
   });
 }
 
@@ -791,6 +834,7 @@ Page({
   leftHeight: 0,
   rightHeight: 0,
   photoRatioMap: null,
+  photoRuntimeStateMap: null,
   photoColumnMap: null,
   relayoutTimer: null,
   scrollMetricsTimer: null,
@@ -843,6 +887,7 @@ Page({
     const backendReconnecting = !backendReady && Boolean(globalData.backendReconnecting);
 
     this.photoRatioMap = Object.create(null);
+    this.photoRuntimeStateMap = Object.create(null);
     this.photoColumnMap = Object.create(null);
     this.relayoutTimer = null;
     this.scrollMetricsTimer = null;
@@ -1532,7 +1577,10 @@ Page({
     const cached = memory || storage;
     if (!cached || !Array.isArray(cached.photos) || cached.photos.length === 0) return;
 
-    const photos = cached.photos.map((row) => normalizePhoto(row));
+    const photos = this.applyRememberedPhotoRuntimeStates(
+      cached.photos.map((row) => normalizePhoto(row))
+    );
+    this.rememberPhotoRuntimeStates(photos);
     this.clearPageLoadingStarted();
     this.setData({
       loading: false,
@@ -1565,9 +1613,10 @@ Page({
   },
 
   applyGalleryViewFromSource(sourceRows, opts) {
-    const source = Array.isArray(sourceRows)
+    const sourceBase = Array.isArray(sourceRows)
       ? sourceRows.slice()
       : (Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos.slice() : []);
+    const source = this.applyRememberedPhotoRuntimeStates(sourceBase);
 
     const sortMode = String(this.data.sortMode || "time_desc");
     const filterMode = String(this.data.filterMode || "all");
@@ -1614,6 +1663,37 @@ Page({
 
   clearPhotoColumnMap() {
     this.photoColumnMap = Object.create(null);
+  },
+
+  ensurePhotoRuntimeStateMap() {
+    if (!this.photoRuntimeStateMap || typeof this.photoRuntimeStateMap !== "object") {
+      this.photoRuntimeStateMap = Object.create(null);
+    }
+    return this.photoRuntimeStateMap;
+  },
+
+  rememberPhotoRuntimeState(photo) {
+    const state = createGalleryPhotoRuntimeState(photo);
+    if (!state) return;
+    const runtimeStateMap = this.ensurePhotoRuntimeStateMap();
+    runtimeStateMap[state.id] = state;
+  },
+
+  rememberPhotoRuntimeStates(list) {
+    (Array.isArray(list) ? list : []).forEach((photo) => {
+      this.rememberPhotoRuntimeState(photo);
+    });
+  },
+
+  applyRememberedPhotoRuntimeStates(list) {
+    if (!Array.isArray(list) || list.length === 0) {
+      return [];
+    }
+    return mergeGalleryPhotoRuntimeStateList(
+      list,
+      [],
+      this.ensurePhotoRuntimeStateMap()
+    );
   },
 
   shouldResetPhotoColumnMap(nextList) {
@@ -1904,7 +1984,8 @@ Page({
     const currentVisible = Array.isArray(this.data.photos) ? this.data.photos : [];
     const photos = mergeGalleryPhotoRuntimeStateList(
       Array.isArray(pageData && pageData.rows) ? pageData.rows : [],
-      currentSource.length > 0 ? currentSource : currentVisible
+      currentSource.length > 0 ? currentSource : currentVisible,
+      this.ensurePhotoRuntimeStateMap()
     );
 
     let mergedSource = currentSource;
@@ -1916,6 +1997,7 @@ Page({
       mergedSource = incremental.length > 0 ? currentSource.concat(incremental) : currentSource;
     }
 
+    this.rememberPhotoRuntimeStates(mergedSource);
     this.applyGalleryViewFromSource(mergedSource, { preferAppend: pageNo > 1 });
 
     const loadedCount = mergedSource.length;
@@ -2432,9 +2514,10 @@ Page({
   },
 
   resolveGalleryViewRowsFromSource(sourceRows) {
-    const source = Array.isArray(sourceRows)
+    const sourceBase = Array.isArray(sourceRows)
       ? sourceRows.slice()
       : (Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos.slice() : []);
+    const source = this.applyRememberedPhotoRuntimeStates(sourceBase);
 
     const sortMode = String(this.data.sortMode || "time_desc");
     const filterMode = String(this.data.filterMode || "all");
@@ -2534,7 +2617,12 @@ Page({
     }
 
     const previousRows = loadedRows.length > 0 ? loadedRows : (Array.isArray(this.data.photos) ? this.data.photos : []);
-    const mergedRows = mergeGalleryPhotoRuntimeStateList(rows, previousRows);
+    const mergedRows = mergeGalleryPhotoRuntimeStateList(
+      rows,
+      previousRows,
+      this.ensurePhotoRuntimeStateMap()
+    );
+    this.rememberPhotoRuntimeStates(mergedRows);
     return this.cacheFullPhotosForFolder(targetFolderId, mergedRows);
   },
 
@@ -2656,39 +2744,41 @@ Page({
     const targetId = String(id || "");
     if (!targetId || typeof updater !== "function") return;
 
-    const patchList = (list) => {
+    const nextData = {};
+    let changed = false;
+    let rememberedPhoto = null;
+    const patchListByPath = (fieldName, list) => {
       if (!Array.isArray(list) || list.length === 0) {
-        return { nextList: list, changed: false };
+        return;
       }
 
-      let changed = false;
-      const nextList = list.map((photo) => {
+      list.forEach((photo, index) => {
         if (String((photo && photo.id) || "") !== targetId) {
-          return photo;
+          return;
         }
         const nextPhoto = updater(photo);
-        if (nextPhoto !== photo) {
-          changed = true;
+        if (nextPhoto === photo) {
+          return;
         }
-        return nextPhoto;
+        nextData[`${fieldName}[${index}]`] = nextPhoto;
+        changed = true;
+        if (!rememberedPhoto) {
+          rememberedPhoto = nextPhoto;
+        }
       });
-
-      return { nextList, changed };
     };
 
-    const sourceResult = patchList(this.data.sourcePhotos || []);
-    const photosResult = patchList(this.data.photos || []);
-    const leftResult = patchList(this.data.left || []);
-    const rightResult = patchList(this.data.right || []);
-    if (!sourceResult.changed && !photosResult.changed && !leftResult.changed && !rightResult.changed) {
+    patchListByPath("sourcePhotos", this.data.sourcePhotos || []);
+    patchListByPath("photos", this.data.photos || []);
+    patchListByPath("left", this.data.left || []);
+    patchListByPath("right", this.data.right || []);
+    if (!changed) {
       return;
     }
 
-    const nextData = {};
-    if (sourceResult.changed) nextData.sourcePhotos = sourceResult.nextList;
-    if (photosResult.changed) nextData.photos = photosResult.nextList;
-    if (leftResult.changed) nextData.left = leftResult.nextList;
-    if (rightResult.changed) nextData.right = rightResult.nextList;
+    if (rememberedPhoto) {
+      this.rememberPhotoRuntimeState(rememberedPhoto);
+    }
     this.setData(nextData);
   },
 
@@ -2772,11 +2862,13 @@ Page({
     const updateOne = (p) => (String(p.id) === String(id) ? updater(p) : p);
     const shouldPersist = !Boolean(options && options.skipPersist);
 
-    const sourceBase =
+    const sourceBaseRaw =
       Array.isArray(this.data.sourcePhotos) && this.data.sourcePhotos.length > 0
         ? this.data.sourcePhotos
         : (this.data.photos || []);
+    const sourceBase = this.applyRememberedPhotoRuntimeStates(sourceBaseRaw);
     const sourcePhotos = sourceBase.map(updateOne);
+    this.rememberPhotoRuntimeStates(sourcePhotos);
 
     this.setData(
       {

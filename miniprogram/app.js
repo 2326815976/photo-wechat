@@ -1,4 +1,4 @@
-﻿// app.js
+// app.js
 const config = require("./config");
 const { requestJson } = require("./utils/cloudrun");
 const {
@@ -594,6 +594,7 @@ App({
         ? true
         : Boolean(options.markReady);
     this.globalData.runtimeConfig = normalized;
+    this.globalData.hideAudit = Boolean(normalized && normalized.hideAudit);
     this.globalData.auditConfigReady = markReady;
     if (markReady && (!options || options.markFetchedAt !== false)) {
       this.auditConfigFetchedAt = Date.now();

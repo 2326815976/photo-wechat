@@ -6,8 +6,9 @@ const {
 } = require("../../utils/phone");
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
-const { requestWechatUserProfile } = require("../../utils/wechat-profile");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
+const { requestWechatUserProfile } = require("../../utils/wechat-profile");
+const { WECHAT_NICKNAME_AUTH_DESC, resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -62,6 +63,8 @@ Page({
     phoneLoginEnabled: false,
     wechatLoginEnabled: true,
     pageTitle: "登录",
+    registerEntryVisible: false,
+    registerEntryLabel: "注册",
   },
 
   applyRuntimeConfig(runtimeConfig, options) {
@@ -77,13 +80,22 @@ Page({
       ? authMode === "wechat_only" || authMode === "mixed"
       : true;
     const loginAccess = auditConfigReady ? getManagedPageAccess(normalized, "login") : null;
+    const registerAccess = auditConfigReady ? getManagedPageAccess(normalized, "register") : null;
     const pageTitle =
       String((loginAccess && (loginAccess.headerTitle || loginAccess.navText)) || "").trim() || "登录";
+    const registerEntryVisible =
+      phoneLoginEnabled &&
+      Boolean(registerAccess) &&
+      String((registerAccess && registerAccess.publishState) || "").trim() === "online";
+    const registerEntryLabel =
+      String((registerAccess && (registerAccess.navText || registerAccess.headerTitle)) || "").trim() || "注册";
     this.setData({
       authMode,
       phoneLoginEnabled,
       wechatLoginEnabled,
       pageTitle,
+      registerEntryVisible,
+      registerEntryLabel,
     });
     this.initLegalDocuments();
     return normalized;
@@ -258,6 +270,14 @@ Page({
     this.setData({ focusField: "" });
   },
 
+  goRegister() {
+    if (!this.data.registerEntryVisible) {
+      wx.showToast({ title: "当前未开放注册入口", icon: "none" });
+      return;
+    }
+    wx.navigateTo({ url: "/pages/register/index" });
+  },
+
   togglePassword() {
     this.setData({ showPassword: !this.data.showPassword });
   },
@@ -324,7 +344,7 @@ Page({
   async submitWechatLogin() {
     if (this.data.serviceMissing) return;
     if (!this.data.wechatLoginEnabled) {
-      this.setData({ error: "当前未开放微信登录" });
+      this.setData({ error: "当前未开启微信登录" });
       return;
     }
     if (this.data.submitting || this.data.wechatSubmitting) return;
@@ -337,17 +357,19 @@ Page({
 
     this.setData({ wechatSubmitting: true, error: "" });
     try {
-      const [loginRes, profile] = await Promise.all([
-        wxLogin(),
-        requestWechatUserProfile({ desc: "用于同步微信昵称与头像到个人资料" }),
-      ]);
+      const profile = await requestWechatUserProfile({
+        desc: WECHAT_NICKNAME_AUTH_DESC,
+      });
+      const nickName = String((profile && profile.nickName) || "").trim();
+
+      const loginRes = await wxLogin();
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
-        this.setData({ error: "未获取到微信登录凭证，请重试" });
+        this.setData({ error: "微信授权已失效，请重新登录" });
         return;
       }
 
-      const r = await loginWithMiniProgram(code, profile || undefined);
+      const r = await loginWithMiniProgram(code, nickName ? { nickName } : null);
       const user = extractAuthUserFromPayload(r);
       if (!user) {
         this.setData({ error: "微信登录失败，请稍后重试" });
@@ -357,21 +379,8 @@ Page({
       wx.showToast({ title: "登录成功", icon: "none" });
       wx.switchTab({ url: "/pages/profile/index" });
     } catch (e) {
-      const msg = String((e && e.message) || "");
       console.error("[login] submitWechatLogin failed:", e);
-      if (msg.includes("凭证无效") || msg.includes("已过期")) {
-        this.setData({ error: "微信登录凭证已失效，请重试" });
-      } else if (msg.includes("接口不存在") || msg.includes("/api/auth/wechat/miniprogram/login")) {
-        this.setData({ error: "后端未部署微信登录接口，请先发布 photo 服务最新版本" });
-      } else if (msg.includes("云托管服务名称未配置")) {
-        this.setData({ error: "小程序未配置 cloudRunService，请检查 miniprogram/config.js" });
-      } else if (msg.includes("服务：") && msg.includes("环境：")) {
-        this.setData({ error: "云托管调用失败，请检查服务名和环境是否一致" });
-      } else if (msg.includes("未配置")) {
-        this.setData({ error: "服务端暂未开启微信登录，请联系管理员" });
-      } else {
-        this.setData({ error: "微信登录失败，请稍后重试" });
-      }
+      this.setData({ error: resolveWechatLoginErrorMessage(e) });
     } finally {
       this.setData({ wechatSubmitting: false });
     }

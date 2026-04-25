@@ -1,4 +1,4 @@
-﻿const { requestJson } = require('../services/photo-api');
+const { requestJson } = require('../services/photo-api');
 const {
   getHomeRedirectPath,
   getManagedPageAccess,
