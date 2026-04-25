@@ -1166,6 +1166,22 @@ function normalizeMiniProgramRoutePath(value) {
   return text.startsWith("/") ? text : `/${text}`;
 }
 
+function extractNavigationErrorText(error) {
+  if (typeof error === "string" && error.trim()) return error.trim();
+  if (!error || typeof error !== "object") return "";
+  return String(error.errMsg || error.message || "").trim();
+}
+
+function shouldRetryRouteWithRedirect(error) {
+  const lowerMessage = extractNavigationErrorText(error).toLowerCase();
+  return (
+    lowerMessage.includes("webview count limit exceed") ||
+    lowerMessage.includes("page stack depth exceed") ||
+    (lowerMessage.includes("page stack") && lowerMessage.includes("exceed")) ||
+    lowerMessage.includes("limit exceed")
+  );
+}
+
 function prepareMiniProgramAdminPreview(pageKey, routePath, channel) {
   const app = typeof getApp === "function" ? getApp() : null;
   if (!app || typeof app.setPagePresentation !== "function") return;
@@ -1194,7 +1210,30 @@ function openMiniProgramAdminRoute(url) {
     });
   }
   return new Promise((resolve, reject) => {
-    wx.navigateTo({ url: target, success: resolve, fail: reject });
+    wx.navigateTo({
+      url: target,
+      success: resolve,
+      fail: (error) => {
+        const message = extractNavigationErrorText(error).toLowerCase();
+        if (message.includes("tabbar page") && path) {
+          wx.switchTab({
+            url: path,
+            success: resolve,
+            fail: reject,
+          });
+          return;
+        }
+        if (shouldRetryRouteWithRedirect(error)) {
+          wx.redirectTo({
+            url: target,
+            success: resolve,
+            fail: reject,
+          });
+          return;
+        }
+        reject(error);
+      },
+    });
   });
 }
 

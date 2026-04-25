@@ -1,4 +1,4 @@
-const WECHAT_NICKNAME_AUTH_DESC = "用于同步微信昵称到个人资料";
+const WECHAT_NICKNAME_AUTH_DESC = "用于辅助填写微信昵称";
 
 function trimText(value) {
   return String(value == null ? "" : value).trim();
@@ -14,7 +14,7 @@ function resolveWechatLoginErrorMessage(error, fallback) {
   }
 
   if (message.includes("微信昵称") || normalized.includes("nickname")) {
-    return "需要先授权微信昵称后才能登录";
+    return defaultMessage;
   }
 
   if (message.includes("微信登录凭证") || message.includes("重新授权") || normalized.includes("invalid_code") || normalized.includes("wx_mini_openid_missing") || normalized.includes("wx_mini_code_exchange_failed")) {

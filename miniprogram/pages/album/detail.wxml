@@ -337,9 +337,30 @@
         定格后，这张照片会展示在 <text class="confirm-highlight">【照片墙】</text> 中，与更多人分享这份美好；同时不再受 {{expiryDays}} 天时效限制。
       </view>
 
+      <view class="more" wx:if="{{pinConfirmPending}}">
+        <view class="small-spinner"></view>
+        <text class="more-text">正在同步到照片墙，请勿重复点击…</text>
+      </view>
+
       <view class="confirm-actions">
-        <button class="confirm-btn confirm-btn--ghost" hover-class="confirm-btn--ghost-active" bindtap="closePinConfirm">再想想</button>
-        <button class="confirm-btn confirm-btn--primary" hover-class="confirm-btn--primary-active" bindtap="confirmPin">✨ 确认定格</button>
+        <button
+          class="confirm-btn confirm-btn--ghost {{pinConfirmPending ? 'confirm-btn--disabled' : ''}}"
+          hover-class="confirm-btn--ghost-active"
+          bindtap="closePinConfirm"
+          disabled="{{pinConfirmPending}}"
+        >
+          再想想
+        </button>
+        <button
+          class="confirm-btn confirm-btn--primary {{pinConfirmPending ? 'confirm-btn--disabled' : ''}}"
+          hover-class="confirm-btn--primary-active"
+          bindtap="confirmPin"
+          loading="{{pinConfirmPending}}"
+          disabled="{{pinConfirmPending}}"
+        >
+          <text wx:if="{{pinConfirmPending}}">正在定格...</text>
+          <text wx:else>✨ 确认定格</text>
+        </button>
       </view>
     </view>
   </view>

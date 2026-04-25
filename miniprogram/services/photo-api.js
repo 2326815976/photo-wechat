@@ -416,6 +416,21 @@ async function loginWithMiniProgram(code, profile) {
   });
   const successPayload = ensureSuccessPayload(response, "微信登录失败");
   primeSessionCache(successPayload);
+
+  if (!hasStoredSessionCookie()) {
+    return successPayload;
+  }
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const sessionPayload = await getSession({ force: true }).catch(() => null);
+    if (extractSessionUser(sessionPayload)) {
+      return sessionPayload;
+    }
+    if (attempt < 1) {
+      await wait(80);
+    }
+  }
+
   return successPayload;
 }
 

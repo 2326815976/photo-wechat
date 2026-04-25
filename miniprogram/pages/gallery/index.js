@@ -52,11 +52,20 @@ const ROOT_FOLDER_ID = "__ROOT__";
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光谣｜定格美好瞬间";
 
-let galleryMemoryCache = {
-  photos: [],
-  total: 0,
-  cachedAt: 0,
-};
+function createEmptyGalleryCache() {
+  return {
+    photos: [],
+    total: 0,
+    folders: [{ id: ROOT_FOLDER_ID, name: "根目录" }],
+    rootFolderName: "根目录",
+    hideRootFolder: false,
+    folderSnapshotReady: false,
+    targetFolderId: ROOT_FOLDER_ID,
+    cachedAt: 0,
+  };
+}
+
+let galleryMemoryCache = createEmptyGalleryCache();
 
 function parseDateTimeUTC8(value) {
   const raw = String(value || "").trim();
@@ -169,6 +178,39 @@ function normalizeGalleryFolderId(folderId) {
   return rawFolderId;
 }
 
+function normalizeGalleryBoolean(value, fallback) {
+  if (value === undefined || value === null || value === "") {
+    return Boolean(fallback);
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "n", "off"].includes(normalized)) {
+    return false;
+  }
+  const numericValue = Number(value);
+  if (Number.isFinite(numericValue)) {
+    return numericValue !== 0;
+  }
+  return Boolean(fallback);
+}
+
+function resolveDefaultGalleryFolderId(folders, hideRootFolder) {
+  if (!hideRootFolder) {
+    return ROOT_FOLDER_ID;
+  }
+  const list = Array.isArray(folders) ? folders : [];
+  const firstFolder = list.find((folder) => {
+    const id = String(folder && folder.id ? folder.id : "").trim();
+    return Boolean(id);
+  });
+  return firstFolder ? normalizeGalleryFolderId(firstFolder.id) : ROOT_FOLDER_ID;
+}
+
 function doesPhotoBelongToGalleryFolder(photo, folderId) {
   return normalizeGalleryFolderId(photo && photo.folder_id) === normalizeGalleryFolderId(folderId);
 }
@@ -182,44 +224,108 @@ function resolvePhotoLocationText(photo) {
   return "未知";
 }
 
+function hasGalleryCacheContent(cache) {
+  const safeCache = cache && typeof cache === "object" ? cache : {};
+  const photos = Array.isArray(safeCache.photos) ? safeCache.photos : [];
+  const folders = Array.isArray(safeCache.folders) ? safeCache.folders : [];
+  const hideRootFolder = normalizeGalleryBoolean(safeCache.hideRootFolder || safeCache.hide_root_folder, false);
+  return photos.length > 0 || folders.length > (hideRootFolder ? 0 : 1);
+}
+
+function buildCachedGalleryFolders(folders, rootFolderName, hideRootFolder) {
+  const normalizedRootFolderName = String(rootFolderName || "").trim() || "根目录";
+  const normalizedHideRootFolder = normalizeGalleryBoolean(hideRootFolder, false);
+  const rpcFolders = Array.isArray(folders)
+    ? folders
+      .map((folder) => {
+        const id = String(folder && folder.id ? folder.id : "").trim();
+        const name = String(folder && folder.name ? folder.name : "").trim();
+        if (!id || !name) return null;
+        if (normalizeGalleryFolderId(id) === ROOT_FOLDER_ID) {
+          return normalizedHideRootFolder ? null : { id: ROOT_FOLDER_ID, name: normalizedRootFolderName };
+        }
+        return { id, name };
+      })
+      .filter(Boolean)
+    : [];
+  return normalizedHideRootFolder
+    ? rpcFolders
+    : [{ id: ROOT_FOLDER_ID, name: normalizedRootFolderName }].concat(
+      rpcFolders.filter((folder) => normalizeGalleryFolderId(folder && folder.id) !== ROOT_FOLDER_ID)
+    );
+}
+
 function readGalleryMemoryCache() {
-  if (!Array.isArray(galleryMemoryCache.photos) || galleryMemoryCache.photos.length === 0) {
+  if (!hasGalleryCacheContent(galleryMemoryCache)) {
     return null;
   }
 
   const expired = Date.now() - Number(galleryMemoryCache.cachedAt || 0) > GALLERY_CACHE_TTL;
   if (expired) {
-    galleryMemoryCache = { photos: [], total: 0, cachedAt: 0 };
+    galleryMemoryCache = createEmptyGalleryCache();
     return null;
   }
 
   if (photoListHasMissingDimensions(galleryMemoryCache.photos)) {
-    galleryMemoryCache = { photos: [], total: 0, cachedAt: 0 };
+    galleryMemoryCache = createEmptyGalleryCache();
     return null;
   }
+
+  if (!normalizeGalleryBoolean(galleryMemoryCache.folderSnapshotReady, false)) {
+    return null;
+  }
+
+  const hideRootFolder = normalizeGalleryBoolean(galleryMemoryCache.hideRootFolder, false);
+  const rootFolderName = String(galleryMemoryCache.rootFolderName || "").trim() || "根目录";
+  const folders = buildCachedGalleryFolders(galleryMemoryCache.folders, rootFolderName, hideRootFolder);
 
   return {
     photos: galleryMemoryCache.photos.map((x) => Object.assign({}, x)),
     total: Number(galleryMemoryCache.total || 0),
+    folders,
+    rootFolderName,
+    hideRootFolder,
+    folderSnapshotReady: true,
+    targetFolderId: normalizeGalleryFolderId(
+      galleryMemoryCache.targetFolderId || resolveDefaultGalleryFolderId(folders, hideRootFolder)
+    ),
   };
 }
 
-function writeGalleryMemoryCache(photos, total) {
+function writeGalleryMemoryCache(photos, total, folders, rootFolderName, hideRootFolder, targetFolderId, folderSnapshotReady) {
   const rows = Array.isArray(photos) ? photos : [];
-  if (!rows.length) {
-    galleryMemoryCache = { photos: [], total: 0, cachedAt: 0 };
+  const normalizedHideRootFolder = normalizeGalleryBoolean(hideRootFolder, false);
+  const normalizedFolderSnapshotReady = normalizeGalleryBoolean(folderSnapshotReady, false);
+  const normalizedRootFolderName = String(rootFolderName || "").trim() || "根目录";
+  const normalizedFolders = buildCachedGalleryFolders(
+    folders,
+    normalizedRootFolderName,
+    normalizedHideRootFolder
+  );
+  if (
+    !normalizedFolderSnapshotReady ||
+    (!rows.length && normalizedFolders.length <= (normalizedHideRootFolder ? 0 : 1))
+  ) {
+    galleryMemoryCache = createEmptyGalleryCache();
     return;
   }
 
   galleryMemoryCache = {
     photos: rows.map((x) => Object.assign({}, x)),
     total: Number(total || rows.length),
+    folders: normalizedFolders.map((folder) => Object.assign({}, folder)),
+    rootFolderName: normalizedRootFolderName,
+    hideRootFolder: normalizedHideRootFolder,
+    folderSnapshotReady: normalizedFolderSnapshotReady,
+    targetFolderId: normalizeGalleryFolderId(
+      targetFolderId || resolveDefaultGalleryFolderId(normalizedFolders, normalizedHideRootFolder)
+    ),
     cachedAt: Date.now(),
   };
 }
 
 function clearGalleryMemoryCache() {
-  galleryMemoryCache = { photos: [], total: 0, cachedAt: 0 };
+  galleryMemoryCache = createEmptyGalleryCache();
 }
 
 function readGalleryStorageCache() {
@@ -228,25 +334,56 @@ function readGalleryStorageCache() {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
+    if (!hasGalleryCacheContent(parsed)) return null;
+    if (
+      !normalizeGalleryBoolean(
+        parsed && (parsed.folder_snapshot_ready || parsed.folderSnapshotReady),
+        false
+      )
+    ) {
+      return null;
+    }
     const photos = parsed && Array.isArray(parsed.photos) ? parsed.photos : [];
     const cachedAt = Number((parsed && parsed.cachedAt) || 0);
-    if (!photos.length || !cachedAt) return null;
+    if (!cachedAt) return null;
 
     const expired = Date.now() - cachedAt > GALLERY_CACHE_TTL;
     if (expired || photoListHasMissingDimensions(photos)) return null;
 
+    const hideRootFolder = normalizeGalleryBoolean(parsed && parsed.hide_root_folder, false);
+    const rootFolderName = String((parsed && parsed.root_folder_name) || "").trim() || "根目录";
+    const folders = buildCachedGalleryFolders(parsed && parsed.folders, rootFolderName, hideRootFolder);
+
     return {
       photos,
       total: Number((parsed && parsed.total) || photos.length),
+      folders,
+      rootFolderName,
+      hideRootFolder,
+      folderSnapshotReady: true,
+      targetFolderId: normalizeGalleryFolderId(
+        (parsed && parsed.folder_id) || resolveDefaultGalleryFolderId(folders, hideRootFolder)
+      ),
     };
   } catch (e) {
     return null;
   }
 }
 
-function writeGalleryStorageCache(photos, total) {
+function writeGalleryStorageCache(photos, total, folders, rootFolderName, hideRootFolder, targetFolderId, folderSnapshotReady) {
   const rows = Array.isArray(photos) ? photos : [];
-  if (!rows.length) return;
+  const normalizedHideRootFolder = normalizeGalleryBoolean(hideRootFolder, false);
+  const normalizedFolderSnapshotReady = normalizeGalleryBoolean(folderSnapshotReady, false);
+  const normalizedRootFolderName = String(rootFolderName || "").trim() || "根目录";
+  const normalizedFolders = buildCachedGalleryFolders(
+    folders,
+    normalizedRootFolderName,
+    normalizedHideRootFolder
+  );
+  if (
+    !normalizedFolderSnapshotReady ||
+    (!rows.length && normalizedFolders.length <= (normalizedHideRootFolder ? 0 : 1))
+  ) return;
 
   try {
     wx.setStorageSync(
@@ -254,6 +391,13 @@ function writeGalleryStorageCache(photos, total) {
       JSON.stringify({
         photos: rows,
         total: Number(total || rows.length),
+        folders: normalizedFolders,
+        folder_id: normalizeGalleryFolderId(
+          targetFolderId || resolveDefaultGalleryFolderId(normalizedFolders, normalizedHideRootFolder)
+        ),
+        folder_snapshot_ready: 1,
+        hide_root_folder: normalizedHideRootFolder ? 1 : 0,
+        root_folder_name: normalizedRootFolderName,
         cachedAt: Date.now(),
       })
     );
@@ -663,11 +807,24 @@ function readGalleryFolders(payload) {
     .filter(Boolean);
 }
 
+function readGalleryFolderId(payload) {
+  return normalizeGalleryFolderId(
+    readFieldFromPayloadChain(payload, ["folder_id", "folderId"])
+  );
+}
+
 function readRootFolderName(payload) {
   const direct = String(
     readFieldFromPayloadChain(payload, ["root_folder_name", "rootFolderName"]) || ""
   ).trim();
   return direct || "根目录";
+}
+
+function readHideRootFolder(payload) {
+  return normalizeGalleryBoolean(
+    readFieldFromPayloadChain(payload, ["hide_root_folder", "hideRootFolder"]),
+    false
+  );
 }
 
 function readFieldFromPayloadChain(payload, fields) {
@@ -800,6 +957,7 @@ Page({
     selectedFolder: ROOT_FOLDER_ID,
     rootFolderName: "根目录",
     folders: [{ id: ROOT_FOLDER_ID, name: "根目录" }],
+    hideRootFolder: false,
     showTagGuide: false,
     tagWaveActiveIndex: -1,
     tagWaveTick: 0,
@@ -903,6 +1061,7 @@ Page({
     this.prefetchingGalleryFolderId = "";
     this.prefetchedGalleryPage = null;
     this.fullPhotosByFolder = Object.create(null);
+    this.galleryFolderSnapshotReady = false;
     this._galleryBootstrapped = false;
     this.pageLoadingStartedAt = Date.now();
     const currentAppEnterSeq = Math.max(0, Number(globalData.appEnterSeq || 0));
@@ -1575,10 +1734,16 @@ Page({
     const memory = readGalleryMemoryCache();
     const storage = memory ? null : readGalleryStorageCache();
     const cached = memory || storage;
-    if (!cached || !Array.isArray(cached.photos) || cached.photos.length === 0) return;
+    if (!cached || !Array.isArray(cached.photos)) return;
 
     const photos = this.applyRememberedPhotoRuntimeStates(
       cached.photos.map((row) => normalizePhoto(row))
+    );
+    const cachedFolders = Array.isArray(cached.folders) ? cached.folders : this.data.folders;
+    const cachedHideRootFolder = normalizeGalleryBoolean(cached.hideRootFolder, false);
+    this.galleryFolderSnapshotReady = normalizeGalleryBoolean(cached.folderSnapshotReady, true);
+    const cachedTargetFolderId = normalizeGalleryFolderId(
+      cached.targetFolderId || resolveDefaultGalleryFolderId(cachedFolders, cachedHideRootFolder)
     );
     this.rememberPhotoRuntimeStates(photos);
     this.clearPageLoadingStarted();
@@ -1586,17 +1751,27 @@ Page({
       loading: false,
       initialContentReady: true,
       pageNo: 1,
+      selectedFolder: cachedTargetFolderId,
       total: Number(cached.total || photos.length),
       hasMore: photos.length < Number(cached.total || photos.length),
+      rootFolderName: String(cached.rootFolderName || this.data.rootFolderName || "根目录"),
+      hideRootFolder: cachedHideRootFolder,
+      folders: cachedFolders,
+      tempFolderId: cachedTargetFolderId,
       sourcePhotos: photos,
+    }, () => {
+      this.applyGalleryViewFromSource(photos);
+      this.persistGalleryCache(
+        { writeStorage: Boolean(storage) },
+        photos,
+        Number(cached.total || photos.length),
+        cachedFolders,
+        String(cached.rootFolderName || this.data.rootFolderName || "根目录"),
+        cachedHideRootFolder,
+        cachedTargetFolderId,
+        this.galleryFolderSnapshotReady
+      );
     });
-    this.applyGalleryViewFromSource(photos);
-
-    this.persistGalleryCache(
-      { writeStorage: Boolean(storage) },
-      photos,
-      Number(cached.total || photos.length)
-    );
   },
 
   getPhotoTimeValue(photo) {
@@ -1622,7 +1797,11 @@ Page({
     const filterMode = String(this.data.filterMode || "all");
     const filterDateStart = normalizeDateOnlyText(this.data.filterDateStart);
     const filterDateEnd = normalizeDateOnlyText(this.data.filterDateEnd);
-    const selectedFolderId = String(this.data.selectedFolder || ROOT_FOLDER_ID);
+    const selectedFolderId = normalizeGalleryFolderId(
+      opts && Object.prototype.hasOwnProperty.call(opts, "selectedFolderId")
+        ? opts.selectedFolderId
+        : (this.data.selectedFolder || ROOT_FOLDER_ID)
+    );
 
     let viewRows = source.filter((photo) => doesPhotoBelongToGalleryFolder(photo, selectedFolderId));
     if (filterDateStart || filterDateEnd) {
@@ -1787,7 +1966,7 @@ Page({
 
   onResetFilterSelector() {
     this.setData({
-      tempFolderId: ROOT_FOLDER_ID,
+      tempFolderId: resolveDefaultGalleryFolderId(this.data.folders, this.data.hideRootFolder),
       tempFilterPreset: "default_desc",
       tempFilterDateStart: "",
       tempFilterDateEnd: "",
@@ -1958,10 +2137,13 @@ Page({
 
     const rows = extractGalleryRows(payload);
     const rootFolderName = readRootFolderName(payload);
+    const hideRootFolder = readHideRootFolder(payload);
     const rpcFolders = readGalleryFolders(payload);
-    const folders = [{ id: ROOT_FOLDER_ID, name: rootFolderName }].concat(
-      rpcFolders.filter((item) => String(item.id) !== ROOT_FOLDER_ID)
-    );
+    const folders = hideRootFolder
+      ? rpcFolders.slice()
+      : [{ id: ROOT_FOLDER_ID, name: rootFolderName }].concat(
+        rpcFolders.filter((item) => String(item.id) !== ROOT_FOLDER_ID)
+      );
     const normalizedRows = rows.map((row) => normalizePhoto(row));
     const hydratedRows = normalizedRows.length > 0
       ? await hydratePhotoDimensions(normalizedRows)
@@ -1970,15 +2152,19 @@ Page({
     return {
       errorMessage: "",
       pageNo,
-      targetFolderId,
+      targetFolderId: readGalleryFolderId(payload) || normalizeGalleryFolderId(targetFolderId),
       rows: hydratedRows,
       total: readGalleryTotal(payload, hydratedRows.length),
       rootFolderName,
       folders,
+      hideRootFolder,
     };
   },
 
   commitGalleryPageData(pageNo, targetFolderId, pageData, options) {
+    const resolvedTargetFolderId = normalizeGalleryFolderId(
+      (pageData && pageData.targetFolderId) || targetFolderId
+    );
     const keepCurrentContent = Boolean(options && options.keepCurrentContent);
     const currentSource = Array.isArray(this.data.sourcePhotos) ? this.data.sourcePhotos : [];
     const currentVisible = Array.isArray(this.data.photos) ? this.data.photos : [];
@@ -1998,7 +2184,10 @@ Page({
     }
 
     this.rememberPhotoRuntimeStates(mergedSource);
-    this.applyGalleryViewFromSource(mergedSource, { preferAppend: pageNo > 1 });
+    this.applyGalleryViewFromSource(mergedSource, {
+      preferAppend: pageNo > 1,
+      selectedFolderId: resolvedTargetFolderId,
+    });
 
     const loadedCount = mergedSource.length;
     const total = Math.max(0, Number(pageData && pageData.total) || 0);
@@ -2026,27 +2215,40 @@ Page({
       pageNo,
       total,
       hasMore,
+      selectedFolder: resolvedTargetFolderId,
       rootFolderName: String((pageData && pageData.rootFolderName) || "根目录"),
+      hideRootFolder: normalizeGalleryBoolean(pageData && pageData.hideRootFolder, false),
       folders: Array.isArray(pageData && pageData.folders)
         ? pageData.folders
         : [{ id: ROOT_FOLDER_ID, name: "根目录" }],
+      tempFolderId: resolvedTargetFolderId,
       sourcePhotos: mergedSource,
     };
     if (pageNo === 1) {
       nextData.pendingSwitchPhotoIds = nextPendingSwitchPhotoIds;
     }
 
+    this.galleryFolderSnapshotReady = true;
     this.setData(nextData);
     if (!hasMore && mergedSource.length > 0) {
-      this.cacheFullPhotosForFolder(targetFolderId, mergedSource);
+      this.cacheFullPhotosForFolder(resolvedTargetFolderId, mergedSource);
     }
     if (this._pendingTagGuideOnAppEntry) {
       this.scheduleTagGuideTrigger();
     }
-    this.persistGalleryCache({ writeStorage: pageNo === 1 }, mergedSource, total);
+    this.persistGalleryCache(
+      { writeStorage: pageNo === 1 },
+      mergedSource,
+      total,
+      nextData.folders,
+      nextData.rootFolderName,
+      nextData.hideRootFolder,
+      resolvedTargetFolderId,
+      true
+    );
 
     if (hasMore) {
-      void this.prefetchGalleryPage(pageNo + 1, targetFolderId);
+      void this.prefetchGalleryPage(pageNo + 1, resolvedTargetFolderId);
     } else {
       this.invalidateGalleryPrefetch();
     }
@@ -2468,8 +2670,21 @@ Page({
     });
   },
 
-  persistGalleryCache(opts, sourceRows, totalOverride) {
-    if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== ROOT_FOLDER_ID) return;
+  persistGalleryCache(opts, sourceRows, totalOverride, foldersOverride, rootFolderNameOverride, hideRootFolderOverride, targetFolderIdOverride) {
+    const folders = Array.isArray(foldersOverride) ? foldersOverride : this.data.folders;
+    const hideRootFolder = normalizeGalleryBoolean(
+      hideRootFolderOverride === undefined ? this.data.hideRootFolder : hideRootFolderOverride,
+      false
+    );
+    const folderSnapshotReady = normalizeGalleryBoolean(
+      arguments.length > 7 ? arguments[7] : this.galleryFolderSnapshotReady,
+      false
+    );
+    const targetFolderId = normalizeGalleryFolderId(
+      targetFolderIdOverride || this.data.selectedFolder || ROOT_FOLDER_ID
+    );
+    const defaultFolderId = resolveDefaultGalleryFolderId(folders, hideRootFolder);
+    if (!folderSnapshotReady || targetFolderId !== defaultFolderId) return;
     const photos = Array.isArray(sourceRows)
       ? sourceRows
       : (
@@ -2477,13 +2692,31 @@ Page({
           ? this.data.sourcePhotos
           : (this.data.photos || [])
       );
-    if (!photos.length) return;
 
     const total = Math.max(Number(totalOverride || this.data.total || 0), photos.length);
-    writeGalleryMemoryCache(photos, total);
+    const rootFolderName = String(
+      rootFolderNameOverride || this.data.rootFolderName || "根目录"
+    ).trim() || "根目录";
+    writeGalleryMemoryCache(
+      photos,
+      total,
+      folders,
+      rootFolderName,
+      hideRootFolder,
+      targetFolderId,
+      folderSnapshotReady
+    );
 
     if (opts && opts.writeStorage) {
-      writeGalleryStorageCache(photos, total);
+      writeGalleryStorageCache(
+        photos,
+        total,
+        folders,
+        rootFolderName,
+        hideRootFolder,
+        targetFolderId,
+        folderSnapshotReady
+      );
     }
   },
 
@@ -2634,6 +2867,7 @@ Page({
     const targetFolderId = String(
       (opts && opts.folderId) || this.data.selectedFolder || ROOT_FOLDER_ID
     ).trim() || ROOT_FOLDER_ID;
+    let activeFolderId = targetFolderId;
     if (pageNo === 1) {
       this.invalidateGalleryPrefetch();
     }
@@ -2650,6 +2884,9 @@ Page({
       if (this.canUsePrefetchedGalleryPage(pageNo, targetFolderId)) {
         const prefetched = this.prefetchedGalleryPage;
         this.prefetchedGalleryPage = null;
+        activeFolderId = normalizeGalleryFolderId(
+          prefetched && prefetched.targetFolderId ? prefetched.targetFolderId : targetFolderId
+        );
         const committed = this.commitGalleryPageData(pageNo, targetFolderId, prefetched, {
           keepCurrentContent: false,
         });
@@ -2681,6 +2918,9 @@ Page({
       if (this.canUsePrefetchedGalleryPage(pageNo, targetFolderId)) {
         this.prefetchedGalleryPage = null;
       }
+      activeFolderId = normalizeGalleryFolderId(
+        pageData && pageData.targetFolderId ? pageData.targetFolderId : targetFolderId
+      );
       const committed = this.commitGalleryPageData(pageNo, targetFolderId, pageData, {
         keepCurrentContent: shouldTrackSwitchOverlay,
       });
@@ -2705,7 +2945,7 @@ Page({
       if (ticket !== this.galleryLoadTicket) {
         return false;
       }
-      if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== targetFolderId) {
+      if (String(this.data.selectedFolder || ROOT_FOLDER_ID) !== activeFolderId) {
         return false;
       }
       const shouldKeepSwitchOverlay = shouldTrackSwitchOverlay

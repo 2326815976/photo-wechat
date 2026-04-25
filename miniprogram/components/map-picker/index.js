@@ -122,6 +122,7 @@ function pickBestReverseAddress(source) {
       : data.addressReference && typeof data.addressReference === "object"
         ? data.addressReference
         : {};
+  const pois = readArrayFromPayloadChain(data, ["pois", "poi_list", "poiList"]);
 
   const recommend = normalizeText(formattedAddresses.recommend);
   const rough = normalizeText(formattedAddresses.rough);
@@ -140,6 +141,17 @@ function pickBestReverseAddress(source) {
     (addressReference.landmark_l2 && addressReference.landmark_l2.title) ||
       (addressReference.landmark_l1 && addressReference.landmark_l1.title)
   );
+  const poiAddress = pois
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const title = normalizeText(item.title || item.name);
+      const addressText = normalizeText(item.address || item.addr);
+      if (title && addressText && !addressText.includes(title)) {
+        return `${title}（${addressText}）`;
+      }
+      return title || addressText;
+    })
+    .find(Boolean);
 
   const regionParts = [];
   [province, city, district, town].forEach((part) => {
@@ -150,7 +162,7 @@ function pickBestReverseAddress(source) {
   const componentAddress = `${regionParts.join("")}${street}${streetNumber}`.trim();
 
   let detailAddress =
-    formattedAddress || address || rawAddress || rough || componentAddress || recommend;
+    recommend || poiAddress || formattedAddress || address || rawAddress || rough || componentAddress;
   const streetDetail = `${street}${streetNumber}`.trim();
 
   if (!detailAddress) {
@@ -196,13 +208,6 @@ function normalizeMeta(input) {
     district,
     adcode,
   };
-}
-
-function formatCoordinateAddress(latitude, longitude) {
-  const lat = Number(latitude || 0);
-  const lng = Number(longitude || 0);
-  if (!isValidCoordinate(lat, lng)) return "";
-  return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 }
 
 function buildMarker(latitude, longitude) {
@@ -273,6 +278,8 @@ Component({
 
     loading: false,
     selectedAddress: "",
+    resolvingAddress: false,
+    addressResolveFailed: false,
     selectedCity: "",
     selectedProvince: "",
     selectedDistrict: "",
@@ -475,35 +482,41 @@ Component({
       const lat = Number(latitude || 0);
       const lng = Number(longitude || 0);
       if (!isValidCoordinate(lat, lng)) return;
-      const fallbackAddress = formatCoordinateAddress(lat, lng);
       const preserveAddress = Boolean(opts && opts.preserveAddress);
+      const skipReverse = Boolean(opts && opts.skipReverse);
+      const shouldResolveAddress = !skipReverse && !preserveAddress;
 
       this.setData({
         latitude: lat,
         longitude: lng,
         markers: [buildMarker(lat, lng)],
-        selectedAddress: preserveAddress
-          ? this.data.selectedAddress
-          : fallbackAddress || this.data.selectedAddress,
+        selectedAddress: preserveAddress ? this.data.selectedAddress : "",
+        resolvingAddress: shouldResolveAddress,
+        addressResolveFailed: false,
       });
 
-      if (opts && opts.skipReverse) return;
-      this.scheduleReverseGeocode(lat, lng, Boolean(opts && opts.reverseImmediate));
+      if (skipReverse) return;
+      this.scheduleReverseGeocode(
+        lat,
+        lng,
+        Boolean(opts && opts.reverseImmediate),
+        preserveAddress
+      );
     },
 
-    scheduleReverseGeocode(latitude, longitude, immediate) {
+    scheduleReverseGeocode(latitude, longitude, immediate, preserveAddress) {
       if (this.reverseTimer) {
         clearTimeout(this.reverseTimer);
         this.reverseTimer = null;
       }
 
       if (immediate) {
-        this.reverseGeocode(latitude, longitude);
+        this.reverseGeocode(latitude, longitude, preserveAddress);
         return;
       }
 
       this.reverseTimer = setTimeout(() => {
-        this.reverseGeocode(latitude, longitude);
+        this.reverseGeocode(latitude, longitude, preserveAddress);
       }, 350);
     },
 
@@ -542,20 +555,36 @@ Component({
         .filter(Boolean);
     },
 
-    applyAddressResult(latitude, longitude, addressText, meta) {
+    isCurrentSelectedPoint(latitude, longitude) {
       const currentLat = Number(this.data.latitude || 0);
       const currentLng = Number(this.data.longitude || 0);
-      if (Math.abs(currentLat - Number(latitude || 0)) > 1e-7) return;
-      if (Math.abs(currentLng - Number(longitude || 0)) > 1e-7) return;
+      if (Math.abs(currentLat - Number(latitude || 0)) > 1e-7) return false;
+      if (Math.abs(currentLng - Number(longitude || 0)) > 1e-7) return false;
+      return true;
+    },
+
+    applyAddressResult(latitude, longitude, addressText, meta) {
+      if (!this.isCurrentSelectedPoint(latitude, longitude)) return;
 
       const details = normalizeMeta(meta);
       this.setData({
         selectedAddress: String(addressText || "").trim() || this.data.selectedAddress,
+        resolvingAddress: false,
+        addressResolveFailed: false,
         selectedCity:
           details.cityName || this.data.selectedCity || String(this.properties.cityName || "").trim(),
         selectedProvince: details.province || this.data.selectedProvince,
         selectedDistrict: details.district || this.data.selectedDistrict,
         selectedAdcode: details.adcode || this.data.selectedAdcode,
+      });
+    },
+
+    applyAddressResolveFailure(latitude, longitude, preserveAddress) {
+      if (!this.isCurrentSelectedPoint(latitude, longitude)) return;
+      this.setData({
+        resolvingAddress: false,
+        addressResolveFailed: !preserveAddress,
+        selectedAddress: preserveAddress ? this.data.selectedAddress : "",
       });
     },
 
@@ -601,16 +630,8 @@ Component({
 
     reverseGeocodeByTencentApi(latitude, longitude) {
       const key = String(config.tencentMapKey || "").trim();
-      const fallbackAddress = formatCoordinateAddress(latitude, longitude);
       if (!key) {
-        return Promise.resolve(
-          fallbackAddress
-            ? {
-                address: fallbackAddress,
-                meta: {},
-              }
-            : null
-        );
+        return Promise.resolve(null);
       }
 
       return new Promise((resolve) => {
@@ -633,14 +654,7 @@ Component({
               } catch (_) {
                 // ignore
               }
-              resolve(
-                fallbackAddress
-                  ? {
-                      address: fallbackAddress,
-                      meta: {},
-                    }
-                  : null
-              );
+              resolve(null);
               return;
             }
 
@@ -651,7 +665,7 @@ Component({
             const city = pickCity(addressComponent) || pickCity(adInfo);
 
             resolve({
-              address: address || fallbackAddress,
+              address,
               meta: {
                 cityName: city,
                 province: String(addressComponent.province || adInfo.province || "").trim(),
@@ -663,47 +677,37 @@ Component({
             });
           },
           fail: () => {
-            resolve(
-              fallbackAddress
-                ? {
-                    address: fallbackAddress,
-                    meta: {},
-                  }
-                : null
-            );
+            resolve(null);
           },
         });
       });
     },
 
-    async reverseGeocode(latitude, longitude) {
-      const fallbackAddress = formatCoordinateAddress(latitude, longitude);
+    async reverseGeocode(latitude, longitude, preserveAddress) {
       // 优先走云托管后端（callContainer 链路）；直连腾讯地图仅作兜底。
       const cloudResult = await this.reverseGeocodeByCloud(latitude, longitude);
-      if (cloudResult) {
+      if (cloudResult && cloudResult.address) {
         this.applyAddressResult(
           latitude,
           longitude,
-          cloudResult.address || fallbackAddress,
+          cloudResult.address,
           cloudResult.meta
         );
         return;
       }
 
       const tencentResult = await this.reverseGeocodeByTencentApi(latitude, longitude);
-      if (tencentResult) {
+      if (tencentResult && tencentResult.address) {
         this.applyAddressResult(
           latitude,
           longitude,
-          tencentResult.address || fallbackAddress,
+          tencentResult.address,
           tencentResult.meta
         );
         return;
       }
 
-      if (fallbackAddress) {
-        this.applyAddressResult(latitude, longitude, fallbackAddress, {});
-      }
+      this.applyAddressResolveFailure(latitude, longitude, preserveAddress);
     },
 
     onKeywordInput(e) {
@@ -1042,9 +1046,13 @@ Component({
     },
 
     onConfirm() {
+      if (this.data.resolvingAddress) {
+        wx.showToast({ title: "正在解析位置，请稍候", icon: "none" });
+        return;
+      }
       const address = String(this.data.selectedAddress || "").trim();
       if (!address) {
-        wx.showToast({ title: "请选择地点", icon: "none" });
+        wx.showToast({ title: "未解析到具体位置，请重试或搜索地点", icon: "none" });
         return;
       }
 

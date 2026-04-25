@@ -23,6 +23,8 @@ const ALBUM_PHOTO_STORY_SORT_MIGRATION_HINT = "数据库缺少 story_text / is_h
 const ALBUM_PHOTO_SHOT_DATE_MIGRATION_HINT = "数据库缺少 shot_date 字段，请先执行 SQL 迁移：photo/sql/migrations/07_album_photo_shot_date.sql";
 const ALBUM_PHOTO_SHOT_LOCATION_MIGRATION_HINT = "数据库缺少 shot_location 字段，请先执行 SQL 迁移：photo/sql/migrations/08_album_photo_shot_location.sql";
 
+const ALBUM_ROOT_FOLDER_VISIBILITY_MIGRATION_HINT = "数据库缺少 albums.hide_root_folder 字段，请先执行 SQL 迁移：photo/sql/migrations/33_album_root_folder_visibility.sql";
+
 function shouldInvalidatePublicGalleryCache(pageData) {
   if (!pageData || typeof pageData !== "object") return false;
   if (Boolean(pageData.isSystemAlbum)) return true;
@@ -774,6 +776,7 @@ const pageDefinition = {
     selectedFolderCanMoveDown: false,
     folderSortOrderAvailable: true,
     rootFolderName: "根目录",
+    rootFolderHidden: false,
     rootPhotoCount: 0,
 
     // 分页
@@ -904,13 +907,27 @@ const pageDefinition = {
 
     try {
       // 加载相册信息
-      const albumResult = await dbQuery({
+      let albumIncludeRootHidden = true;
+      let albumResult = await dbQuery({
         table: "albums",
         action: "select",
-        columns: "id,title,access_key,root_folder_name",
+        columns: "id,title,access_key,root_folder_name,hide_root_folder",
         filters: [{ column: "id", operator: "eq", value: this.data.albumId }],
         maybeSingle: true,
       });
+      if (hasRpcError(albumResult)) {
+        const albumErrorMessage = readRpcError(albumResult, "获取空间信息失败");
+        if (isColumnUnavailableError(albumErrorMessage, "hide_root_folder", "albums")) {
+          albumIncludeRootHidden = false;
+          albumResult = await dbQuery({
+            table: "albums",
+            action: "select",
+            columns: "id,title,access_key,root_folder_name",
+            filters: [{ column: "id", operator: "eq", value: this.data.albumId }],
+            maybeSingle: true,
+          });
+        }
+      }
       if (!hasRpcError(albumResult)) {
         const albumPayload = readRpcData(albumResult, null);
         const albumFromChain = readValueFromPayloadChain(
@@ -933,6 +950,9 @@ const pageDefinition = {
           this.setData({
             album: normalizedAlbum,
             isSystemAlbum,
+            rootFolderHidden: albumIncludeRootHidden
+              ? normalizeDbBoolean(album.hide_root_folder, false)
+              : false,
             rootFolderName: album.root_folder_name || "根目录"
           });
         }
@@ -1500,7 +1520,7 @@ const pageDefinition = {
     if (!normalizedFolderId) {
       return {
         selectedFolderName: String(this.data.rootFolderName || "根目录"),
-        selectedFolderHidden: false,
+        selectedFolderHidden: normalizeDbBoolean(this.data.rootFolderHidden, false),
       };
     }
     const matched = (Array.isArray(folders) ? folders : []).find(
@@ -2053,6 +2073,65 @@ const pageDefinition = {
     }
   },
 
+  async onToggleRootFolderVisibility() {
+    if (this.data.actionLoading) return;
+
+    const nextHidden = !normalizeDbBoolean(this.data.rootFolderHidden, false);
+    this.setData({ actionLoading: true });
+
+    try {
+      const result = await dbQuery({
+        table: "albums",
+        action: "update",
+        values: { hide_root_folder: nextHidden ? 1 : 0 },
+        filters: [{ column: "id", operator: "eq", value: this.data.albumId }],
+        selectAfterWrite: true,
+        maybeSingle: true,
+        columns: "id,hide_root_folder",
+      });
+
+      if (hasRpcError(result)) {
+        const message = readRpcError(result, "更新根目录显示状态失败");
+        if (isColumnUnavailableError(message, "hide_root_folder", "albums")) {
+          this.showToastMessage(ALBUM_ROOT_FOLDER_VISIBILITY_MIGRATION_HINT, "warning");
+        } else {
+          this.showToastMessage(message, "error");
+        }
+        return;
+      }
+
+      const updatedAlbum = readRpcData(result, null);
+      if (!updatedAlbum) {
+        this.showToastMessage("目标空间不存在或已删除", "warning");
+        return;
+      }
+
+      const resolvedHidden = normalizeDbBoolean(updatedAlbum.hide_root_folder, nextHidden);
+      this.setData({
+        rootFolderHidden: resolvedHidden,
+        selectedFolderHidden:
+          this.data.selectedFolder === null ||
+          this.data.selectedFolder === undefined ||
+          String(this.data.selectedFolder).trim() === ""
+            ? resolvedHidden
+            : this.data.selectedFolderHidden,
+        album: Object.assign({}, this.data.album || {}, {
+          hide_root_folder: resolvedHidden,
+        }),
+      });
+
+      if (shouldInvalidatePublicGalleryCache(this.data)) {
+        markGalleryCacheDirty();
+      }
+      this.showToastMessage(resolvedHidden ? "根目录已隐藏" : "根目录已显示", "success");
+    } catch (error) {
+      console.error("更新根目录显示状态失败", error);
+      this.showToastMessage(`更新失败：${readErrorMessage(error, "请稍后重试")}`, "error");
+    } finally {
+      this.setData({ actionLoading: false });
+    }
+  },
+
   // 删除文件夹
   async onDeleteFolder(e) {
     const folderId = String(e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.folderId : "").trim();
@@ -2554,7 +2633,7 @@ const pageDefinition = {
       this.setData({
         selectedFolder: null,
         selectedFolderName: this.data.rootFolderName || "根目录",
-        selectedFolderHidden: false,
+        selectedFolderHidden: normalizeDbBoolean(this.data.rootFolderHidden, false),
       });
     }
 

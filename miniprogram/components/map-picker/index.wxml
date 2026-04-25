@@ -122,12 +122,14 @@
 
     <view class="address-wrap">
       <text class="address-label">选中位置：</text>
-      <text class="address-value">{{selectedAddress || '拖动标记或点击地图选择位置'}}</text>
+      <text class="address-value {{resolvingAddress || addressResolveFailed ? 'address-value--pending' : ''}}">
+        {{resolvingAddress ? '正在解析具体位置...' : (selectedAddress || (addressResolveFailed ? '未解析到具体位置，请重试或搜索地点' : '拖动标记或点击地图选择位置'))}}
+      </text>
     </view>
 
     <view class="actions">
       <view class="btn-cancel" bindtap="onCancel" hover-class="btn-cancel--hover" hover-stay-time="80">取消</view>
-      <view class="btn-confirm {{!selectedAddress ? 'btn-confirm--disabled' : ''}}" bindtap="onConfirm" hover-class="btn-confirm--hover" hover-stay-time="80">确认选择</view>
+      <view class="btn-confirm {{(!selectedAddress || resolvingAddress) ? 'btn-confirm--disabled' : ''}}" bindtap="onConfirm" hover-class="btn-confirm--hover" hover-stay-time="80">确认选择</view>
     </view>
   </view>
 </view>

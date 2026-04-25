@@ -7,8 +7,7 @@ const {
 const { getLegalDocuments, getLegalDocumentByKey } = require("../../utils/legal-docs");
 const { getManagedPageAccess, normalizeRuntimeConfig } = require("../../utils/runtime-config");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
-const { requestWechatUserProfile } = require("../../utils/wechat-profile");
-const { WECHAT_NICKNAME_AUTH_DESC, resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
+const { resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
 
 function wxLogin() {
   return new Promise((resolve, reject) => {
@@ -357,11 +356,6 @@ Page({
 
     this.setData({ wechatSubmitting: true, error: "" });
     try {
-      const profile = await requestWechatUserProfile({
-        desc: WECHAT_NICKNAME_AUTH_DESC,
-      });
-      const nickName = String((profile && profile.nickName) || "").trim();
-
       const loginRes = await wxLogin();
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
@@ -369,7 +363,7 @@ Page({
         return;
       }
 
-      const r = await loginWithMiniProgram(code, nickName ? { nickName } : null);
+      const r = await loginWithMiniProgram(code);
       const user = extractAuthUserFromPayload(r);
       if (!user) {
         this.setData({ error: "微信登录失败，请稍后重试" });

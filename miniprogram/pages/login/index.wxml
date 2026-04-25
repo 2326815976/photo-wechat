@@ -2,7 +2,7 @@
   <secondary-page-shell
     shell-class="page"
     title="{{pageTitle}}"
-    subtitle="授权微信昵称后继续你的拾光之旅"
+    subtitle="同意协议后继续你的拾光之旅"
     fallbackTab="pages/profile/index"
     content-class="content"
   >
@@ -92,7 +92,7 @@
         bindtap="submitWechatLogin"
         disabled="{{submitting || wechatSubmitting || serviceMissing}}"
       >
-        <text wx:if="{{wechatSubmitting}}">授权中...</text>
+        <text wx:if="{{wechatSubmitting}}">登录中...</text>
         <text wx:else>微信登录</text>
       </button>
 

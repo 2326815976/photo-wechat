@@ -3383,6 +3383,9 @@ Page({
   },
 
   closePinConfirm() {
+    if (this.data.pinConfirmPending) {
+      return;
+    }
     this.setData({ confirmPhotoId: "" });
   },
 

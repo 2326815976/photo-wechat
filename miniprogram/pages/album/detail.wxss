@@ -1273,6 +1273,10 @@ button::after {
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
+.confirm-btn--disabled {
+  opacity: 0.72;
+}
+
 .confirm-btn--ghost {
   background: rgba(93, 64, 55, 0.1);
   color: #5d4037;

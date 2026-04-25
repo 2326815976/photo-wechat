@@ -362,6 +362,10 @@
   line-height: 1.45;
 }
 
+.address-value--pending {
+  color: rgba(93, 64, 55, 0.65);
+}
+
 .actions {
   flex: none;
   display: flex;

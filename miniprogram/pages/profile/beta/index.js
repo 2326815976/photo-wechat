@@ -522,7 +522,7 @@ Page({
     if (this._redirectingToProfile) return;
     this._redirectingToProfile = true;
     wx.showToast({
-      title: "请先在关于页完成微信登录",
+      title: "请先在我的页完成微信登录",
       icon: "none",
     });
     wx.switchTab({

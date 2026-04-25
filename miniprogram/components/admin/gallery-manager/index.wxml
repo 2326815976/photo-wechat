@@ -49,7 +49,7 @@
           bindtap="onSelectFolder"
           data-folder-id="__ROOT__"
         >
-          <text class="folder-tab__text">{{rootFolderName}} ({{rootPhotoCount}})</text>
+          <text class="folder-tab__text">{{rootFolderName}}{{rootFolderHidden ? ' · 已隐藏' : ''}} ({{rootPhotoCount}})</text>
         </view>
       </view>
 
@@ -72,6 +72,14 @@
         bindtap="onShowEditRootModal"
       >
         编辑根目录
+      </button>
+      <button
+        wx:if="{{selectedFolder === null}}"
+        class="folder-current-action-btn folder-current-action-btn--edit folder-current-action-btn--single"
+        bindtap="onToggleRootFolderVisibility"
+        disabled="{{actionLoading}}"
+      >
+        {{rootFolderHidden ? '显示根目录' : '隐藏根目录'}}
       </button>
       <block wx:elif="{{selectedFolderName}}">
         <button

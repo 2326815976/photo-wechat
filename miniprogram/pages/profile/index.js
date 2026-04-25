@@ -18,8 +18,7 @@ const {
 } = require("../../utils/page-presentation");
 const { guardMiniProgramPageAccess } = require("../../utils/page-access");
 const { hasAdminAccess } = require("../../utils/admin-access");
-const { requestWechatUserProfile } = require("../../utils/wechat-profile");
-const { WECHAT_NICKNAME_AUTH_DESC, resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
+const { resolveWechatLoginErrorMessage } = require("../../utils/wechat-login");
 
 const SHARE_IMAGE_URL = "/images/share/shiguangyao-share.jpg";
 const SHARE_TITLE = "拾光，做我的小天地";
@@ -720,11 +719,6 @@ Page({
     this._wechatSubmitting = true;
     this.setData({ wechatLoginSubmitting: true });
     try {
-      const profile = await requestWechatUserProfile({
-        desc: WECHAT_NICKNAME_AUTH_DESC,
-      });
-      const nickName = String((profile && profile.nickName) || "").trim();
-
       const loginRes = await wxLogin();
       const code = String((loginRes && loginRes.code) || "").trim();
       if (!code) {
@@ -732,7 +726,7 @@ Page({
         return;
       }
 
-      const result = await loginWithMiniProgram(code, nickName ? { nickName } : null);
+      const result = await loginWithMiniProgram(code);
       const user = extractAuthUserFromPayload(result);
       if (!user) {
         wx.showToast({ title: "微信登录失败，请稍后重试", icon: "none" });
