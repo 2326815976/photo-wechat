@@ -41,7 +41,7 @@ const GALLERY_FULLSCREEN_MAX_PAGES = 200;
 const GALLERY_LOAD_AHEAD_PX = 720;
 const GALLERY_VIEWPORT_FILL_BUFFER_PX = 48;
 const GALLERY_INITIAL_AUTOFILL_MAX_BATCHES = 2;
-const GALLERY_SWITCH_OVERLAY_TRACK_COUNT = 6;
+const GALLERY_SWITCH_OVERLAY_TRACK_COUNT = 2;
 const GALLERY_PAGING_SKELETON_COUNT = 8;
 const GALLERY_PAGE_READY_DELAY_MS = 120;
 const GALLERY_TAG_GUIDE_TRIGGER_DELAY_MS = 120;
@@ -808,9 +808,9 @@ function readGalleryFolders(payload) {
 }
 
 function readGalleryFolderId(payload) {
-  return normalizeGalleryFolderId(
-    readFieldFromPayloadChain(payload, ["folder_id", "folderId"])
-  );
+  const value = readFieldFromPayloadChain(payload, ["folder_id", "folderId"]);
+  if (value === undefined || value === null) return "";
+  return normalizeGalleryFolderId(value);
 }
 
 function readRootFolderName(payload) {
@@ -847,7 +847,7 @@ function readFieldFromPayloadChain(payload, fields) {
   return undefined;
 }
 
-function computeTagbarStickyTop(safeTop) {
+function computeTagbarStickyTop(safeTop, isStandalone) {
   let windowWidth = 375;
   try {
     if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
@@ -862,7 +862,7 @@ function computeTagbarStickyTop(safeTop) {
   }
 
   const unit = Math.max(windowWidth, 320) / 750;
-  const headerInnerHeight = 88 * unit; // app-header 默认内层高度（无返回按钮）
+  const headerInnerHeight = (Boolean(isStandalone) ? 112 : 88) * unit;
   const top = Number(safeTop || 0) + headerInnerHeight;
   return Math.max(0, Math.round(top));
 }
@@ -900,8 +900,8 @@ function convertRpxToPx(value) {
   return Math.round((Number(value || 0) * windowWidth) / 750);
 }
 
-function computeGallerySwitchOverlayTop(safeTop) {
-  return computeTagbarStickyTop(safeTop) + convertRpxToPx(92);
+function computeGallerySwitchOverlayTop(safeTop, isStandalone) {
+  return computeTagbarStickyTop(safeTop, isStandalone) + convertRpxToPx(92);
 }
 
 function readWindowHeight() {
@@ -1031,7 +1031,26 @@ Page({
 
   applyPagePresentation() {
     const app = typeof getApp === "function" ? getApp() : null;
-    return applyPagePresentationToPage(this, app, "pages/gallery/index");
+    const presentationState = applyPagePresentationToPage(this, app, "pages/gallery/index");
+    const safeTop = Number(this.data.safeTop || 0);
+    const isStandalone = Boolean(presentationState && presentationState.isStandalone);
+    const nextTagbarStickyTop = computeTagbarStickyTop(safeTop, isStandalone);
+    const nextTagSwitchOverlayTopPx = computeGallerySwitchOverlayTop(safeTop, isStandalone);
+    const nextData = {};
+
+    if (Math.abs(nextTagbarStickyTop - Number(this.data.tagbarStickyTop || 0)) >= 1) {
+      nextData.tagbarStickyTop = nextTagbarStickyTop;
+    }
+
+    if (Math.abs(nextTagSwitchOverlayTopPx - Number(this.data.tagSwitchOverlayTopPx || 0)) >= 1) {
+      nextData.tagSwitchOverlayTopPx = nextTagSwitchOverlayTopPx;
+    }
+
+    if (Object.keys(nextData).length > 0) {
+      this.setData(nextData);
+    }
+
+    return presentationState;
   },
 
   onLoad() {
@@ -1833,11 +1852,10 @@ Page({
 
     const resolvedViewRows = resolveGalleryPhotoListRatios(viewRows, this.photoRatioMap);
     if (Boolean(opts && opts.preferAppend) && this.canAppendResolvedPhotoList(resolvedViewRows)) {
-      this.appendResolvedPhotoList(resolvedViewRows);
-      return;
+      return this.appendResolvedPhotoList(resolvedViewRows);
     }
 
-    this.applyPhotoList(resolvedViewRows, { resolved: true });
+    return this.applyPhotoList(resolvedViewRows, { resolved: true });
   },
 
   clearPhotoColumnMap() {
@@ -2184,7 +2202,7 @@ Page({
     }
 
     this.rememberPhotoRuntimeStates(mergedSource);
-    this.applyGalleryViewFromSource(mergedSource, {
+    const appliedView = this.applyGalleryViewFromSource(mergedSource, {
       preferAppend: pageNo > 1,
       selectedFolderId: resolvedTargetFolderId,
     });
@@ -2199,15 +2217,7 @@ Page({
     let nextPendingSwitchPhotoIds = null;
     if (pageNo === 1) {
       nextPendingSwitchPhotoIds = keepCurrentContent
-        ? Array.from(
-          new Set(
-            mergedSource
-              .slice(0, GALLERY_SWITCH_OVERLAY_TRACK_COUNT)
-              .filter((photo) => photo && !photo._imageLoaded && !photo._imageLoadFailed)
-              .map((photo) => String((photo && photo.id) || "").trim())
-              .filter(Boolean)
-          )
-        )
+        ? this.collectPendingSwitchPhotoIds(appliedView)
         : [];
     }
 
@@ -2229,7 +2239,11 @@ Page({
     }
 
     this.galleryFolderSnapshotReady = true;
-    this.setData(nextData);
+    this.setData(nextData, () => {
+      if (pageNo === 1) {
+        this.syncPendingSwitchPhotos();
+      }
+    });
     if (!hasMore && mergedSource.length > 0) {
       this.cacheFullPhotosForFolder(resolvedTargetFolderId, mergedSource);
     }
@@ -2328,8 +2342,7 @@ Page({
   appendResolvedPhotoList(nextList) {
     const resolvedNextList = Array.isArray(nextList) ? nextList : [];
     if (!this.canAppendResolvedPhotoList(resolvedNextList)) {
-      this.applyPhotoList(resolvedNextList, { resolved: true });
-      return;
+      return this.applyPhotoList(resolvedNextList, { resolved: true });
     }
 
     const preservedScrollTop = Math.max(0, Number(this.currentScrollTop || 0));
@@ -2364,6 +2377,11 @@ Page({
         this.scheduleScrollMetricsRefresh();
       }
     );
+    return {
+      list: resolvedNextList,
+      left: columns.left,
+      right: columns.right,
+    };
   },
 
   clearRelayoutTimer() {
@@ -2553,6 +2571,79 @@ Page({
       right: columns.right,
     });
     this.scheduleScrollMetricsRefresh();
+    return {
+      list,
+      left: columns.left,
+      right: columns.right,
+    };
+  },
+
+  isPendingSwitchPhotoCandidate(photo) {
+    const id = String((photo && photo.id) || "").trim();
+    if (!id) return false;
+    if (photo && (photo._imageLoaded || photo._imageLoadFailed)) return false;
+    return Boolean(String((photo && photo.card_url_resolved) || "").trim());
+  },
+
+  collectPendingSwitchPhotoIds(appliedView) {
+    const view = appliedView && typeof appliedView === "object" ? appliedView : {};
+    const left = Array.isArray(view.left) ? view.left : [];
+    const right = Array.isArray(view.right) ? view.right : [];
+    const fallback = Array.isArray(view.list) ? view.list : [];
+    const candidates = [];
+    const maxCount = Math.max(1, Number(GALLERY_SWITCH_OVERLAY_TRACK_COUNT || 0));
+
+    if (left[0]) candidates.push(left[0]);
+    if (right[0] && candidates.length < maxCount) candidates.push(right[0]);
+    for (let index = 0; candidates.length === 0 && index < fallback.length && index < maxCount; index += 1) {
+      candidates.push(fallback[index]);
+    }
+
+    const seen = Object.create(null);
+    return candidates
+      .filter((photo) => this.isPendingSwitchPhotoCandidate(photo))
+      .map((photo) => String((photo && photo.id) || "").trim())
+      .filter((id) => {
+        if (!id || seen[id]) return false;
+        seen[id] = true;
+        return true;
+      });
+  },
+
+  syncPendingSwitchPhotos() {
+    const pendingSwitchPhotoIds = Array.isArray(this.data.pendingSwitchPhotoIds)
+      ? this.data.pendingSwitchPhotoIds
+      : [];
+    if (!pendingSwitchPhotoIds.length) {
+      if (this.data.switchingFolderLoading) {
+        this.setData({ switchingFolderLoading: false });
+      }
+      return;
+    }
+
+    const visiblePhotoMap = Object.create(null);
+    (Array.isArray(this.data.photos) ? this.data.photos : []).forEach((photo) => {
+      const id = String((photo && photo.id) || "").trim();
+      if (id && !visiblePhotoMap[id]) {
+        visiblePhotoMap[id] = photo;
+      }
+    });
+
+    const nextPendingSwitchPhotoIds = pendingSwitchPhotoIds.filter((id) =>
+      this.isPendingSwitchPhotoCandidate(visiblePhotoMap[String(id || "").trim()])
+    );
+    const shouldShowSwitchLoading = nextPendingSwitchPhotoIds.length > 0;
+    if (
+      nextPendingSwitchPhotoIds.length === pendingSwitchPhotoIds.length &&
+      shouldShowSwitchLoading === Boolean(this.data.switchingFolderLoading)
+    ) {
+      return;
+    }
+
+    this.setData({
+      pendingSwitchPhotoIds: nextPendingSwitchPhotoIds,
+      switchingFolderLoading: shouldShowSwitchLoading,
+    });
   },
 
   onPhotoLoad(e) {
@@ -2964,10 +3055,14 @@ Page({
       if (pageNo === 1) {
         nextState.initialContentReady = true;
       }
-      this.setData(nextState);
-      if (this._pendingTagGuideOnAppEntry) {
-        this.scheduleTagGuideTrigger();
-      }
+      this.setData(nextState, () => {
+        if (pageNo === 1) {
+          this.syncPendingSwitchPhotos();
+        }
+        if (this._pendingTagGuideOnAppEntry) {
+          this.scheduleTagGuideTrigger();
+        }
+      });
     }
   },
 

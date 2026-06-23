@@ -1,12 +1,14 @@
 <view class="page">
-  <app-header
-    title="编辑个人资料"
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
+  <secondary-page-shell
+    shell-class="page"
+    managedPageKey="profile-edit"
+    title="{{pageTitle}}"
+    subtitle=""
     fallbackTab="pages/profile/index"
-  />
-
-  <view class="content">
+    content-class="content"
+    useScrollView="{{true}}"
+    enableFlex="{{true}}"
+  >
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要先配置云托管服务名</text>
       <text class="config-tip__desc">请在 `miniprogram/config.js` 中填写 `cloudRunService`，用于透传 `X-WX-SERVICE`。</text>
@@ -106,5 +108,5 @@
         </view>
       </view>
     </view>
-  </view>
+  </secondary-page-shell>
 </view>

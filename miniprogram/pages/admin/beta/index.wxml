@@ -1,12 +1,12 @@
 <secondary-page-shell
   shell-class="page"
-  title="Web 页面管理"
-  fallbackRoute="/pages/admin/page-center/index?channel=web"
+  title="小程序页面管理"
+  fallbackRoute="/pages/admin/page-center/index?channel=miniprogram"
   preferFallback="{{true}}"
   content-class="content"
   useScrollView="{{false}}"
 >
   <view class="beta-legacy-redirect">
-    <text>正在跳转到 Web 页面管理...</text>
+    <text>正在跳转到小程序页面管理...</text>
   </view>
 </secondary-page-shell>

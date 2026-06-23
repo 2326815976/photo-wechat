@@ -20,7 +20,7 @@ Page({
     url: "",
     loading: true,
     errorMessage: "",
-    fallbackRoute: "/pages/admin/page-center/index?channel=web",
+    fallbackRoute: "/pages/admin/page-center/index?channel=miniprogram",
   },
 
   onLoad(options) {
@@ -30,7 +30,7 @@ Page({
   async bootstrap(options) {
     const fallbackRoute =
       decodeOptionText(options && options.fallback_route) ||
-      "/pages/admin/page-center/index?channel=web";
+      "/pages/admin/page-center/index?channel=miniprogram";
 
     this.setData({
       url: "",

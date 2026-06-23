@@ -9,7 +9,7 @@ module.exports = {
   cloudRunServiceSource: "runtime",
   appUrl: "https://slogan-225462-8-1403937484.sh.run.tcloudbase.com",
   cloudRunBaseUrl: "https://slogan-225462-8-1403937484.sh.run.tcloudbase.com",
-  debugRequests: true,
+  debugRequests: false,
   storageDomain: "https://736c-slogan-3gf3tz4nf12fa5ef-1403937484.tcb.qcloud.la",
   shareImageUrl: "",
   tencentMapKey: "YZABZ-X7PK3-XUO3E-OHTW4-KV4L3-LGBZU",

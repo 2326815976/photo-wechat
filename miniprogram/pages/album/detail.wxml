@@ -1,16 +1,13 @@
 <page-meta page-style="{{(switchingFolderLoading || pendingFolderPhotoIds.length > 0) ? 'overflow: hidden;' : ''}}" />
 <view class="page">
-  <app-header
-    id="albumHeader"
-    class="album-header-host"
+  <secondary-page-shell
+    shell-class="page"
     title="{{headerTitle}}"
-    safeTop="{{safeTop}}"
-    showBack="{{true}}"
+    subtitle=""
     fallbackTab="pages/album/index"
-    preferFallback="{{false}}"
-  />
-
-  <view class="content">
+    content-class="content"
+    useScrollView="{{false}}"
+  >
     <view class="config-tip motion-fade-up motion-delay-1" wx:if="{{serviceMissing}}">
       <text class="config-tip__title">需要配置云托管服务名</text>
       <text class="config-tip__desc">请在 miniprogram/config.js 中填写 cloudRunService（用于 X-WX-SERVICE）</text>
@@ -323,7 +320,6 @@
       <view class="end" wx:if="{{!hasMore && photos.length > 0}}">
         <text class="end-text">✨ 已经到底啦 ✨</text>
       </view>
-      </view>
     </view>
   </view>
   <view class="modal-mask motion-fade-in" wx:if="{{freezeEnabled && confirmPhotoId}}" bindtap="closePinConfirm"></view>
@@ -487,6 +483,6 @@
       </button>
     </view>
   </view>
-
+  </secondary-page-shell>
 </view>
 

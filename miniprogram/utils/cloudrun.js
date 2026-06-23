@@ -107,6 +107,11 @@ function normalizeStatusCode(value) {
   return code;
 }
 
+function isMissingHealthEndpointStatus(statusCode) {
+  const code = normalizeStatusCode(statusCode);
+  return code === 404 || code === 405;
+}
+
 function sleep(ms) {
   const delay = toPositiveNumber(ms, 0);
   if (!delay) {
@@ -594,6 +599,9 @@ async function probeBackendHealthOnce() {
       timeout: BACKEND_HEALTH_CHECK_TIMEOUT_MS,
     });
     const statusCode = normalizeStatusCode(response && response.statusCode);
+    if (isMissingHealthEndpointStatus(statusCode)) {
+      return true;
+    }
     if (!statusCode || statusCode < 200 || statusCode >= 300) {
       return false;
     }

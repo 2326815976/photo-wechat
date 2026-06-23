@@ -1675,10 +1675,6 @@
           <gallery-manager id="galleryManager" class="motion-fade-up" />
         </block>
 
-        <block wx:if="{{activeSection === 'webPages'}}">
-          <page-center-panel channel="web" embedded="{{true}}" />
-        </block>
-
         <block wx:if="{{activeSection === 'miniprogramPages'}}">
           <page-center-panel channel="miniprogram" embedded="{{true}}" />
         </block>

@@ -75,9 +75,21 @@ const TAB_OPTION_MAP = new Map(
 );
 const BETA_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const BETA_CODE_LENGTH = 8;
+const PAGE_MANAGEMENT_CLIENT_HEADER = "x-page-management-client";
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function buildPageManagementRequestOptions(channel, options) {
+  const currentChannel = normalizeText(channel) === "miniprogram" ? "miniprogram" : "web";
+  const currentOptions = options && typeof options === "object" ? options : {};
+  const currentHeader = currentOptions.header && typeof currentOptions.header === "object" ? currentOptions.header : {};
+  return Object.assign({}, currentOptions, {
+    header: Object.assign({}, currentHeader, {
+      "x-page-management-client": currentChannel,
+    }),
+  });
 }
 
 function isSecondaryPageKey(pageKey) {
@@ -320,8 +332,8 @@ function getDateDiffFromToday(dateText) {
 function buildBetaScopeMeta(codeChannel, channel) {
   if (normalizeBetaCodeChannel(codeChannel) === "shared") {
     return {
-      scopeLabel: "双端通用",
-      scopeHint: "Web 与小程序登录用户都可绑定这条内测码进入当前页面。",
+      scopeLabel: "旧体系兼容",
+      scopeHint: "这是旧数据，仅保留查看；新建与保存不会再生成共享内测码。",
     };
   }
   return {
@@ -334,7 +346,7 @@ function buildBetaScopeMeta(codeChannel, channel) {
 }
 
 function applyReadOnlyBetaMeta(code, payload) {
-  if (!normalizeBoolean(code && code.readOnly, false)) {
+  if (!normalizeBoolean(code && code.readOnly, false) && normalizeBetaCodeChannel(code && code.channel) !== "shared") {
     return payload;
   }
   return Object.assign({}, payload, {
@@ -1409,7 +1421,10 @@ Component({
   },
 
   async loadOverview() {
-    const payload = await requestJson("/api/admin/page-center/overview", { method: "GET", timeout: 10000 });
+    const payload = await requestJson(
+      "/api/admin/page-center/overview",
+      buildPageManagementRequestOptions(this.data.channel, { method: "GET", timeout: 10000 })
+    );
     if (payload && payload.error) {
       throw new Error(String(payload.error || "读取页面管理数据失败"));
     }    this.setData(buildChannelPanelCopy(this.data.channel));
@@ -1446,10 +1461,13 @@ Component({
     if (!codeId) return;
     this.setData({ savingKey: `destroy:${codeId}` });
     try {
-      const response = await requestJson(`/api/admin/page-center/beta-codes/${encodeURIComponent(codeId)}`, {
-        method: "DELETE",
-        timeout: 10000,
-      });
+      const response = await requestJson(
+        `/api/admin/page-center/beta-codes/${encodeURIComponent(codeId)}`,
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "DELETE",
+          timeout: 10000,
+        })
+      );
       if (response && response.error) {
         throw new Error(String(response.error || "删除内测码失败"));
       }
@@ -1547,7 +1565,14 @@ Component({
     }
     this.setData({ savingKey: "create:registry" });
     try {
-      const response = await requestJson("/api/admin/page-center/registry", { method: "POST", data: Object.assign({}, payload, { scopeChannel: this.data.channel }), timeout: 10000 });
+      const response = await requestJson(
+        "/api/admin/page-center/registry",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: Object.assign({}, payload, { scopeChannel: this.data.channel }),
+          timeout: 10000,
+        })
+      );
       if (response && response.error) {
         throw new Error(String(response.error || "创建页面失败"));
       }
@@ -1622,7 +1647,14 @@ Component({
     }
     this.setData({ savingKey: `${pageKey}:registry` });
     try {
-      const response = await requestJson("/api/admin/page-center/registry", { method: "POST", data: Object.assign({}, payload, { scopeChannel: this.data.channel }), timeout: 10000 });
+      const response = await requestJson(
+        "/api/admin/page-center/registry",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: Object.assign({}, payload, { scopeChannel: this.data.channel }),
+          timeout: 10000,
+        })
+      );
       if (response && response.error) {
         throw new Error(String(response.error || "保存页面注册信息失败"));
       }
@@ -1710,11 +1742,14 @@ Component({
     }
     this.setData({ savingKey: saveKey || `${pageKey}:rule` });
     try {
-      const response = await requestJson("/api/admin/page-center/pages", {
-        method: "POST",
-        data: Object.assign({ pageKey, channel: this.data.channel }, nextRule),
-        timeout: 10000,
-      });
+      const response = await requestJson(
+        "/api/admin/page-center/pages",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: Object.assign({ pageKey, channel: this.data.channel }, nextRule),
+          timeout: 10000,
+        })
+      );
       if (response && response.error) {
         throw new Error(String(response.error || "保存页面规则失败"));
       }
@@ -1925,16 +1960,26 @@ Component({
     this.setData({ savingKey: `${pageKey}:${isSecondaryOrder ? "secondary-move" : "move"}` });
     let swapPersisted = false;
     try {
-      await requestJson("/api/admin/page-center/pages", {
-        method: "POST",
-        data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule, { navOrder: targetRule.navOrder }),
-        timeout: 10000,
-      });
-      await requestJson("/api/admin/page-center/pages", {
-        method: "POST",
-        data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule, { navOrder: currentRule.navOrder }),
-        timeout: 10000,
-      });
+      await requestJson(
+        "/api/admin/page-center/pages",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule, {
+            navOrder: targetRule.navOrder,
+          }),
+          timeout: 10000,
+        })
+      );
+      await requestJson(
+        "/api/admin/page-center/pages",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule, {
+            navOrder: currentRule.navOrder,
+          }),
+          timeout: 10000,
+        })
+      );
       swapPersisted = true;
       await this.loadOverview();
       this.showNotice(
@@ -1945,16 +1990,22 @@ Component({
       if (!swapPersisted) {
         try {
           await Promise.all([
-            requestJson("/api/admin/page-center/pages", {
-              method: "POST",
-              data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule),
-              timeout: 10000,
-            }),
-            requestJson("/api/admin/page-center/pages", {
-              method: "POST",
-              data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule),
-              timeout: 10000,
-            }),
+            requestJson(
+              "/api/admin/page-center/pages",
+              buildPageManagementRequestOptions(this.data.channel, {
+                method: "POST",
+                data: Object.assign({ pageKey: currentRow.pageKey, channel: this.data.channel }, currentRule),
+                timeout: 10000,
+              })
+            ),
+            requestJson(
+              "/api/admin/page-center/pages",
+              buildPageManagementRequestOptions(this.data.channel, {
+                method: "POST",
+                data: Object.assign({ pageKey: targetRow.pageKey, channel: this.data.channel }, targetRule),
+                timeout: 10000,
+              })
+            ),
           ]);
         } catch (_) {
           // ignore rollback errors
@@ -1984,10 +2035,9 @@ Component({
   onBetaChannelTap(e) {
     const dataset = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset : {};
     const pageKey = normalizeText(dataset.pageKey);
-    const channelValue = normalizeText(dataset.channelValue);
-    if (!pageKey || !channelValue) return;
+    if (!pageKey) return;
     this.updateRow(pageKey, (row) => {
-      row.betaDraft.channel = channelValue;
+      row.betaDraft.channel = this.data.channel;
       return row;
     });
   },
@@ -2076,18 +2126,21 @@ Component({
     }
     this.setData({ savingKey: `${pageKey}:beta` });
     try {
-      const response = await requestJson("/api/admin/page-center/beta-codes", {
-        method: "POST",
-        data: {
-          pageKey,
-          codeId: normalizeText(draft.codeId),
-          betaName: normalizeText(draft.betaName),
-          betaCode: normalizeText(draft.betaCode),
-          expiresAt: normalizeText(draft.expiresAt),
-          channel: normalizeText(draft.channel) || this.data.channel,
-        },
-        timeout: 10000,
-      });
+      const response = await requestJson(
+        "/api/admin/page-center/beta-codes",
+        buildPageManagementRequestOptions(this.data.channel, {
+          method: "POST",
+          data: {
+            pageKey,
+            codeId: normalizeText(draft.codeId),
+            betaName: normalizeText(draft.betaName),
+            betaCode: normalizeText(draft.betaCode),
+            expiresAt: normalizeText(draft.expiresAt),
+            channel: this.data.channel,
+          },
+          timeout: 10000,
+        })
+      );
       if (response && response.error) {
         throw new Error(String(response.error || "保存内测码失败"));
       }

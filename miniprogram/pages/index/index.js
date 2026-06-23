@@ -73,7 +73,7 @@ function extractPoseRows(payload) {
   return [];
 }
 
-function computeTagbarStickyTop(safeTop) {
+function computeTagbarStickyTop(safeTop, isStandalone) {
   let windowWidth = 375;
   try {
     if (typeof wx !== "undefined" && typeof wx.getWindowInfo === "function") {
@@ -88,7 +88,7 @@ function computeTagbarStickyTop(safeTop) {
   }
 
   const unit = Math.max(windowWidth, 320) / 750;
-  const headerInnerHeight = 88 * unit; // 与照片墙保持一致
+  const headerInnerHeight = (Boolean(isStandalone) ? 112 : 88) * unit;
   const top = Number(safeTop || 0) + headerInnerHeight;
   return Math.max(0, Math.round(top));
 }
@@ -195,7 +195,18 @@ Page({
 
   applyPagePresentation() {
     const app = typeof getApp === "function" ? getApp() : null;
-    return applyPagePresentationToPage(this, app, "pages/index/index");
+    const presentationState = applyPagePresentationToPage(this, app, "pages/index/index");
+    const safeTop = Number(this.data.safeTop || 0);
+    const nextTagbarStickyTop = computeTagbarStickyTop(
+      safeTop,
+      Boolean(presentationState && presentationState.isStandalone)
+    );
+
+    if (Math.abs(nextTagbarStickyTop - Number(this.data.tagbarStickyTop || 0)) >= 1) {
+      this.setData({ tagbarStickyTop: nextTagbarStickyTop });
+    }
+
+    return presentationState;
   },
 
   isHomePageActive() {

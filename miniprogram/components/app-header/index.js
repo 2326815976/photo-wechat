@@ -115,9 +115,12 @@ Component({
 
     applyManagedMeta() {
       const managedMeta = this.resolveManagedMeta();
+      const shouldHideSubtitle = Boolean(this.properties.showBack) && Boolean(this.properties.preferFallback);
       this.setData({
         displayedTitle: managedMeta.title || String(this.properties.title || "").trim(),
-        displayedSubtitle: managedMeta.subtitle || String(this.properties.subtitle || "").trim(),
+        displayedSubtitle: shouldHideSubtitle
+          ? ""
+          : managedMeta.subtitle || String(this.properties.subtitle || "").trim(),
       });
     },
 

@@ -140,10 +140,6 @@ const ADMIN_SECTION_META = {
     title: "发布版本 📦",
     desc: "管理应用安装包发布",
   },
-  webPages: {
-    title: "Web 页面管理",
-    desc: "管理 Web 端页面发布与入口",
-  },
   miniprogramPages: {
     title: "小程序页面管理",
     desc: "管理小程序页面发布与入口",
@@ -164,7 +160,6 @@ const ADMIN_NAV_ITEMS = [
   { key: "albums", label: "专属空间管理", desc: "返图空间", icon: "💝" },
   { key: "about", label: "关于设置", desc: "作者信息", icon: "ℹ️" },
   { key: "releases", label: "发布版本", desc: "安装包发布", icon: "📦" },
-  { key: "webPages", label: "Web 页面管理", desc: "Web 端页面发布与入口", icon: "🌐" },
   { key: "miniprogramPages", label: "小程序页面管理", desc: "小程序页面发布与入口", icon: "📱" },
 ];
 

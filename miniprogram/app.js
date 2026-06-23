@@ -166,6 +166,11 @@ function hasConfiguredCloudRunService(globalData) {
   return Boolean(String((globalData && globalData.cloudRunService) || "").trim());
 }
 
+function isMissingHealthEndpointError(error) {
+  const statusCode = Number((error && error.statusCode) || 0);
+  return statusCode === 404 || statusCode === 405;
+}
+
 function resolveMiniProgramAppId() {
   try {
     if (wx && typeof wx.getAccountInfoSync === "function") {
@@ -570,6 +575,15 @@ App({
           });
           return true;
         } catch (error) {
+          if (isMissingHealthEndpointError(error)) {
+            this.setBackendStatus({
+              backendReady: true,
+              backendReconnecting: false,
+              backendRetryCount: attempts,
+              backendLastError: "",
+            });
+            return true;
+          }
           this.setBackendStatus({
             backendReady: false,
             backendReconnecting: true,

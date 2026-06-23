@@ -5,19 +5,14 @@ const CHANNEL_TITLE_MAP = {
 
 Page({
   data: {
-    channel: "web",
-    channelTitle: CHANNEL_TITLE_MAP.web,
+    channel: "miniprogram",
+    channelTitle: CHANNEL_TITLE_MAP.miniprogram,
   },
 
-  onLoad(options) {
-    const channel =
-      String((options && options.channel) || "").trim() === "miniprogram"
-        ? "miniprogram"
-        : "web";
-
+  onLoad() {
     this.setData({
-      channel,
-      channelTitle: CHANNEL_TITLE_MAP[channel],
+      channel: "miniprogram",
+      channelTitle: CHANNEL_TITLE_MAP.miniprogram,
     });
   },
 
